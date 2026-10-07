@@ -127,7 +127,8 @@ jobs:
       # checkout removes it when the job ends. The repository has no branch
       # protection (GitHub Free), so the publisher writes fast-forward only: before
       # each save it fetches main and refuses if main moved since this checkout,
-      # and it pushes HEAD:refs/heads/main without '+' or --force; nothing deletes.
+      # then pushes HEAD:refs/heads/main with an exact lease on the tip it checked
+      # (compare-and-swap), no '+', no tags; nothing deletes (PUBLISHING §20f).
       - name: Checkout publication data
         uses: actions/checkout@v4
         with:

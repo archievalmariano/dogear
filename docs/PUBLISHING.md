@@ -1508,23 +1508,43 @@ collaborative, or if the private state repositories become more critical.
 
 **Safeguards that stand in for branch protection:**
 
-- **Fast-forward writes only.** The publisher is the only code that pushes
-  (`git_committer` in `dogear/publish/pubdata.py`). Before each save it
-  fetches `main` and refuses (`RemoteMoved`), committing nothing, unless the
-  remote is still the commit this run last saw there, or one of this run's
-  own commits whose push was never acknowledged. That covers a remote that
-  moved, was rewritten, or was deleted, and a checkout that isn't on `main`.
-- **No force, no deletion.** The publisher pushes one explicit refspec,
-  `HEAD:refs/heads/main`, never with `+` or `--force`, so a write that races
-  in is rejected rather than overwritten. The workflow sets
-  `push.default nothing`, drops any configured push refspec, and checks out
-  the publication data at `ref: main`.
-- **Tests.** `tests/test_pubdata_git.py` covers each refusal path against a
-  remote that, like these repositories, would accept a forced update. It
-  includes a writer racing between the check and the push, with a forcing
-  refspec configured locally. `tests/test_key_check.py` checks that no
-  workflow or shell tool forces, deletes or mirrors, that shell pushes are
-  dry runs, and that the code's only push is the fast-forward one.
+- **Each write is a compare-and-swap on the exact remote tip.** The publisher
+  is the only code that pushes (`git_committer` in
+  `dogear/publish/pubdata.py`). A pre-write check alone is not enough: the
+  remote could be rewound or deleted after the check, and a normal push would
+  then "fast-forward" from the older or recreated tip. So:
+  1. **Check.** Before each save, the publisher fetches `main` and refuses
+     (`RemoteMoved`), committing nothing, unless the remote is still the
+     commit this run last saw there, or one of this run's own commits whose
+     push was never acknowledged. It also refuses if that tip isn't an
+     ancestor of what it is about to push, or the checkout isn't on `main`.
+  2. **Push.** The push carries an exact lease on that tip:
+     `--force-with-lease=refs/heads/main:<tip>`. Git sends the update only if
+     the remote `main` is still exactly that commit, and the server applies
+     it only if it still is. If the remote advanced, rewound, or was deleted
+     or recreated after the check, the push is rejected (`RemoteMoved`).
+- **No forced divergence, no deletion, no tags.** The lease only ever names
+  the tip just verified as an ancestor of `HEAD`, so a write that passes is
+  always a fast-forward; nothing forces past divergence. The push names one
+  explicit target, `HEAD:refs/heads/main`, never with `+`, a plain `--force`
+  or `--delete`. With `--no-follow-tags`, no setting such as
+  `push.followTags` can send tags. The workflow also:
+  - sets `push.default nothing`;
+  - drops any configured push refspec;
+  - checks out the publication data at `ref: main`.
+- **Tests.** `tests/test_pubdata_git.py` runs against a remote that, like
+  these repositories, would accept a forced update. It covers:
+  - the remote advancing, rewinding, being deleted, or being deleted and
+    recreated at another tip, between the check and the push;
+  - a normal expected-tip push succeeding;
+  - forcing configuration (`+` refspecs, `push.default matching`) failing to
+    get past the lease;
+  - `push.followTags` sending no tags.
+
+  `tests/test_key_check.py` also checks that:
+  - no workflow or shell tool forces, deletes or mirrors;
+  - shell pushes are dry runs;
+  - the code's only push is exactly the leased one.
 - **Separate keys.** Production and staging have separate keys, each a deploy
   key on exactly one repository. The editorial key is read-only, so
   `dogear-editorial` stays read-only to automation.
@@ -1547,14 +1567,39 @@ Each repository gets its own ed25519 keypair. Staging holds no editorial key,
 and `editorial-gate` holds no data key.
 
 **Installing the keys.** The owner runs `tools/install_deploy_keys.sh` in
-their own terminal, and it refuses to run unattended. For each repository it
-generates the keypair and opens GitHub's "Add deploy key" page with the
-public key on the clipboard. The web page is used rather than
-`gh repo deploy-key add`, because keys added by `gh` vanish if its token is
-revoked. The script then waits until GitHub lists that key with the right
-access, stores the private key as the Environment secret(s) through
-`gh secret set` from the file, and deletes it. No private key is printed,
-copied or kept.
+their own terminal, and it refuses to run unattended. For each repository it:
+
+1. generates the keypair in `$TMPDIR/dogear-deploy-keys.XXXXXX` (mode 700);
+2. opens GitHub's "Add deploy key" page with the public key on the
+   clipboard. The web page is used rather than `gh repo deploy-key add`,
+   because keys added by `gh` vanish if its token is revoked;
+3. waits until GitHub lists that key with the right access;
+4. stores the private key as the Environment secret(s) through
+   `gh secret set`, reading it from the file;
+5. deletes the private key.
+
+No private key is printed, copied or kept.
+
+**Cleanup when the installer stops early.** Every way out runs one cleanup,
+exactly once, which deletes the temporary folder:
+
+- **Normal exits:** success, a failure, or typing `q`.
+- **Ctrl-C, `SIGTERM`, or the terminal closing (`SIGHUP`):** the script exits
+  with status 130, 143 or 129.
+
+Some endings can't be trapped: `SIGKILL` (`kill -9`), a crash, or a power
+loss. Then the private key may be left in that folder. The next run finds the
+leftover, prints its path, and refuses to continue. To clean up by hand:
+
+1. **Find it.** List `ls -d "$TMPDIR"/dogear-deploy-keys.*`.
+2. **Delete it.** Run `rm -rf` on each folder found.
+3. **Remove the half-installed key.** If that run had already added the key's
+   deploy key on GitHub, delete that deploy key under the repository's
+   **Settings → Deploy keys**, because its private key was exposed on disk.
+   If the run had stored that key's Environment secret too, delete the secret
+   as well.
+4. **Rerun.** Start the installer again. It refuses while any of these deploy
+   keys or secrets still exist.
 
 To rotate a key, delete its deploy key and secret(s) on GitHub, then run the
 script again.

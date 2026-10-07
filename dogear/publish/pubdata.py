@@ -290,12 +290,24 @@ def git_committer(root: Path, push: bool = True, branch: str = "main") -> Callab
     """Commit everything in ``root`` and push it, fast-forward only (production).
 
     The private publication-data repositories have no branch protection (GitHub
-    Free), so this client is the protection. Before each write it fetches the
-    remote branch and refuses (``RemoteMoved``, nothing committed) unless the
-    remote is still the commit this run last saw there, or one of this run's own
-    commits whose push was not acknowledged. It pushes one explicit refspec, never
-    with ``+``, ``--force`` or ``--delete``, so the remote also rejects any write
-    that raced in between; history is only ever added to, and a bad write is
+    Free), so this client is the protection, in two parts:
+
+    * Before each write it fetches the remote branch and refuses (``RemoteMoved``,
+      nothing committed) unless the remote is still the commit this run last saw
+      there, or one of this run's own commits whose push was not acknowledged; and
+      unless that tip is an ancestor of what it is about to push.
+    * The push itself is a compare-and-swap on exactly that tip: an explicit
+      ``--force-with-lease=refs/heads/<branch>:<tip>``. Git sends the update only if
+      the remote branch is still that exact commit, and the server applies it only
+      if it still is; so a remote that advanced, rewound, or was deleted (and
+      perhaps recreated) after the check is refused, not fast-forwarded from
+      wherever it now is. The lease is the only thing that flag permits: the tip
+      was just checked to be an ancestor of HEAD, so the update is always a fast
+      forward and divergence is never forced through.
+
+    It pushes one explicit refspec, ``HEAD:refs/heads/<branch>``, never with ``+``,
+    ``--force`` or ``--delete``, and ``--no-follow-tags`` so no configuration can
+    widen it beyond that branch. History is only ever added to; a bad write is
     undone by a new commit, never by rewriting.
     """
 
@@ -330,9 +342,16 @@ def git_committer(root: Path, push: bool = True, branch: str = "main") -> Callab
         if status.strip():
             git("commit", "-q", "-m", message)
         if push:
-            if not is_ancestor(remote, "HEAD"):
+            if not (remote and is_ancestor(remote, "HEAD")):
                 raise RemoteMoved(f"the write would not fast-forward the remote {branch}; nothing pushed")
-            git("push", "-q", "--porcelain", "origin", f"HEAD:refs/heads/{branch}")
+            result = git("push", "-q", "--porcelain", "--no-follow-tags",
+                         f"--force-with-lease=refs/heads/{branch}:{remote}", "origin", f"HEAD:refs/heads/{branch}",
+                         check=False)
+            if result.returncode != 0:
+                if any(line.startswith("!") for line in result.stdout.splitlines()):
+                    # Rejected: the remote branch was no longer exactly the checked tip.
+                    raise RemoteMoved(f"the remote {branch} changed during the write; nothing pushed")
+                raise subprocess.CalledProcessError(result.returncode, "git push", result.stdout, result.stderr)
             state["seen"] = rev("HEAD")
 
     return commit

@@ -170,13 +170,11 @@ class GitRemoteTests(unittest.TestCase):
         pd.save("abort t1")
         self.assertEqual(self.remote_log(), ["abort t1", "pending x", "init"])
 
-    def test_a_write_racing_the_push_is_rejected_not_forced(self):
-        """Another writer lands after the check but before the push (a hook on the
-        local commit makes it happen there). The push names no '+' and no --force,
-        so it is refused instead of overwriting, even with a forcing push refspec
-        configured locally."""
-        work = self.clone("run")
-        racer = self.clone("racer")
+    # Races between the pre-push check and the push. A reference-transaction hook on
+    # the publisher's own local commit (after the check, before the push) changes
+    # the remote; the push must still land only on the exact tip the check saw.
+
+    def race(self, work: Path, script: str) -> None:
         hook = work / ".git" / "hooks" / "reference-transaction"
         hook.write_text("#!/bin/sh\n"
                         "[ \"$1\" = committed ] || exit 0\n"
@@ -184,16 +182,77 @@ class GitRemoteTests(unittest.TestCase):
                         f"[ -e '{self.tmp}/raced' ] && exit 0\n"
                         f"touch '{self.tmp}/raced'\n"
                         "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX\n"
-                        f"cd '{racer}' && git commit -q --allow-empty -m race && git push -q origin main\n")
+                        + script + "\n")
         hook.chmod(0o755)
+
+    def saved_twice(self, name: str = "run"):
+        """A run whose first save landed (so the remote has an older tip to rewind to)."""
+        work = self.clone(name)
+        pd = PubData(work, git_committer(work))
+        pd.append_history_once({"txn": "t1", "status": "aborted"})
+        pd.save("abort t1")
+        init = git("--git-dir", str(self.remote), "rev-parse", "main~1").strip()
+        return work, pd, init
+
+    def assert_race_refused(self, work: Path, pd: PubData) -> None:
+        (work / "pending.json").write_text("{}\n")
+        with self.assertRaises(RemoteMoved):
+            pd.save("pending x")
+        self.assertTrue((self.tmp / "raced").exists(), "the race did not happen")
+
+    def test_race_remote_advances_between_check_and_push(self):
+        work, pd, _ = self.saved_twice()
+        racer = self.clone("racer")
+        self.race(work, f"cd '{racer}' && git commit -q --allow-empty -m race && git push -q origin main")
+        self.assert_race_refused(work, pd)
+        self.assertEqual(self.remote_log(), ["race", "abort t1", "init"])  # the racer's write survives
+
+    def test_race_remote_rewinds_between_check_and_push(self):
+        work, pd, init = self.saved_twice()
+        self.race(work, f"git --git-dir '{self.remote}' update-ref refs/heads/main {init}")
+        self.assert_race_refused(work, pd)
+        self.assertEqual(self.remote_head(), init)  # not fast-forwarded from the older tip
+
+    def test_race_remote_main_deleted_between_check_and_push(self):
+        work, pd, _ = self.saved_twice()
+        self.race(work, f"git --git-dir '{self.remote}' update-ref -d refs/heads/main")
+        self.assert_race_refused(work, pd)
+        self.assertEqual(git("--git-dir", str(self.remote), "for-each-ref", "refs/heads").strip(), "")  # not recreated
+
+    def test_race_remote_main_deleted_and_recreated_at_another_tip(self):
+        work, pd, init = self.saved_twice()
+        self.race(work, f"git --git-dir '{self.remote}' update-ref -d refs/heads/main && "
+                        f"git --git-dir '{self.remote}' update-ref refs/heads/main {init}")
+        self.assert_race_refused(work, pd)
+        self.assertEqual(self.remote_head(), init)
+
+    def test_forcing_push_config_cannot_bypass_the_lease(self):
+        work, pd, init = self.saved_twice()
         git("config", "remote.origin.push", "+refs/heads/*:refs/heads/*", cwd=work)
         git("config", "push.default", "matching", cwd=work)
+        git("config", "push.followTags", "true", cwd=work)
+        self.race(work, f"git --git-dir '{self.remote}' update-ref refs/heads/main {init}")
+        self.assert_race_refused(work, pd)
+        self.assertEqual(self.remote_head(), init)
+
+    def test_the_expected_tip_push_succeeds(self):
+        work, pd, _ = self.saved_twice()
+        git("config", "remote.origin.push", "+refs/heads/*:refs/heads/*", cwd=work)
+        (work / "pending.json").write_text("{}\n")
+        pd.save("pending x")
+        self.assertEqual(self.remote_log(), ["pending x", "abort t1", "init"])
+        self.assertEqual(self.remote_head(), git("rev-parse", "HEAD", cwd=work).strip())
+
+    def test_follow_tags_config_pushes_no_tags(self):
+        work = self.clone("run")
+        git("config", "push.followTags", "true", cwd=work)
+        git("tag", "-a", "-m", "an annotated tag", "local-only", cwd=work)  # reachable from what is pushed
         pd = PubData(work, git_committer(work))
         (work / "pending.json").write_text("{}\n")
-        with self.assertRaises(SaveFailed):
-            pd.save("pending x")
-        self.assertTrue((self.tmp / "raced").exists())
-        self.assertEqual(self.remote_log(), ["race", "init"])  # the racer's write survives; ours never landed
+        git("tag", "-a", "-m", "another", "local-only-2", cwd=work)
+        pd.save("pending x")
+        self.assertEqual(self.remote_log(), ["pending x", "init"])
+        self.assertEqual(git("--git-dir", str(self.remote), "tag", "--list").strip(), "")  # main only
 
     def test_the_next_save_after_a_refusal_still_refuses(self):
         work = self.clone("run")
