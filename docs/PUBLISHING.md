@@ -1498,3 +1498,77 @@ credentials. `dogear-editorial`'s CI reads the public code anonymously.
   retired and refuse writes. Future staging writes come only through the CI
   path, once that's intentionally enabled.
 
+
+### 20f. Deploy keys, and the accepted risk of unprotected private repositories
+
+**Decision (owner, 8 October 2026):** stay on GitHub Free. The three private
+repositories cannot have branch protection or rulesets on this plan, and this
+is accepted as an operational risk. Revisit GitHub Pro if DOGEAR becomes
+collaborative, or if the private state repositories become more critical.
+
+**Safeguards that stand in for branch protection:**
+
+- **Fast-forward writes only.** The publisher is the only code that pushes
+  (`git_committer` in `dogear/publish/pubdata.py`). Before each save it
+  fetches `main` and refuses (`RemoteMoved`), committing nothing, unless the
+  remote is still the commit this run last saw there, or one of this run's
+  own commits whose push was never acknowledged. That covers a remote that
+  moved, was rewritten, or was deleted, and a checkout that isn't on `main`.
+- **No force, no deletion.** The publisher pushes one explicit refspec,
+  `HEAD:refs/heads/main`, never with `+` or `--force`, so a write that races
+  in is rejected rather than overwritten. The workflow sets
+  `push.default nothing`, drops any configured push refspec, and checks out
+  the publication data at `ref: main`.
+- **Tests.** `tests/test_pubdata_git.py` covers each refusal path against a
+  remote that, like these repositories, would accept a forced update. It
+  includes a writer racing between the check and the push, with a forcing
+  refspec configured locally. `tests/test_key_check.py` checks that no
+  workflow or shell tool forces, deletes or mirrors, that shell pushes are
+  dry runs, and that the code's only push is the fast-forward one.
+- **Separate keys.** Production and staging have separate keys, each a deploy
+  key on exactly one repository. The editorial key is read-only, so
+  `dogear-editorial` stays read-only to automation.
+- **Recovery.** Every save is a new commit and nothing rewrites history, so
+  the repository's own history is the record to recover from. A bad write is
+  undone with a new commit (`git revert`), never by resetting `main`. The
+  publisher's records (`history.jsonl`, `pending.json`, `publication.json`,
+  `published/`) are designed to rebuild from that history (§18). The owner
+  may also keep a local mirror (`git clone --mirror`) as an extra copy.
+
+**Deploy keys and Environment secrets:**
+
+| Key | Repository | Access | Environment secret(s) |
+|---|---|---|---|
+| `dogear-ci editorial (read-only)` | `dogear-editorial` | read-only | `EDITORIAL_DEPLOY_KEY` in `editorial-gate` and `production` |
+| `dogear-ci production publisher` | `dogear-publication-data` | write | `PUBLICATION_DATA_DEPLOY_KEY` in `production` |
+| `dogear-ci staging publisher` | `dogear-publication-data-staging` | write | `PUBLICATION_DATA_DEPLOY_KEY` in `staging` |
+
+Each repository gets its own ed25519 keypair. Staging holds no editorial key,
+and `editorial-gate` holds no data key.
+
+**Installing the keys.** The owner runs `tools/install_deploy_keys.sh` in
+their own terminal, and it refuses to run unattended. For each repository it
+generates the keypair and opens GitHub's "Add deploy key" page with the
+public key on the clipboard. The web page is used rather than
+`gh repo deploy-key add`, because keys added by `gh` vanish if its token is
+revoked. The script then waits until GitHub lists that key with the right
+access, stores the private key as the Environment secret(s) through
+`gh secret set` from the file, and deletes it. No private key is printed,
+copied or kept.
+
+To rotate a key, delete its deploy key and secret(s) on GitHub, then run the
+script again.
+
+**Checking the isolation.** `DOGEAR deploy-key check`
+(`.github/workflows/dogear-key-check.yml` and `tools/key_check.sh`) is manual
+only. Each run tests one Environment, from `main`. It holds no R2 credentials
+and checks out only this source. It tries each key against all three private
+repositories:
+
+- **Read:** a shallow clone without checkout, deleted afterwards.
+- **Write:** `git push --dry-run`. GitHub authorizes the write before the dry
+  run stops, and nothing is sent.
+
+The access found must match the table exactly. Only GitHub's own refusals
+count as "no access"; a network or host-key failure is an error. The
+`production` run waits for its required reviewer.

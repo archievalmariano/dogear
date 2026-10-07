@@ -282,19 +282,57 @@ def targets_problem(targets: object) -> Optional[str]:
     return None
 
 
-def git_committer(root: Path, push: bool = True) -> Callable[[str], None]:
-    """Commit everything in ``root`` and push it (production)."""
+class RemoteMoved(SaveFailed):
+    """The remote branch is not where this run last saw it: nothing was written."""
+
+
+def git_committer(root: Path, push: bool = True, branch: str = "main") -> Callable[[str], None]:
+    """Commit everything in ``root`` and push it, fast-forward only (production).
+
+    The private publication-data repositories have no branch protection (GitHub
+    Free), so this client is the protection. Before each write it fetches the
+    remote branch and refuses (``RemoteMoved``, nothing committed) unless the
+    remote is still the commit this run last saw there, or one of this run's own
+    commits whose push was not acknowledged. It pushes one explicit refspec, never
+    with ``+``, ``--force`` or ``--delete``, so the remote also rejects any write
+    that raced in between; history is only ever added to, and a bad write is
+    undone by a new commit, never by rewriting.
+    """
+
+    def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", "-C", str(root), *args], check=check, capture_output=True, text=True)
+
+    def rev(name: str) -> str:
+        return git("rev-parse", "--verify", "-q", name + "^{commit}").stdout.strip()
+
+    def is_ancestor(old: str, new: str) -> bool:
+        return git("merge-base", "--is-ancestor", old, new, check=False).returncode == 0
+
+    def remote_head() -> str:
+        if git("fetch", "-q", "--no-tags", "origin", f"refs/heads/{branch}", check=False).returncode != 0:
+            raise RemoteMoved(f"the remote {branch} could not be read (missing or deleted?); nothing written")
+        return rev("FETCH_HEAD")
+
+    state = {"seen": rev("HEAD") if push else ""}  # the remote as this run's checkout found it
 
     def commit(message: str) -> None:
-        def git(*args: str) -> None:
-            subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True)
-
+        remote = ""
+        if push:
+            on = git("symbolic-ref", "-q", "--short", "HEAD", check=False).stdout.strip()
+            if on != branch:
+                raise RemoteMoved(f"the checkout is not on {branch}; nothing written")
+            remote = remote_head()
+            seen = state["seen"]
+            if remote != seen and not (is_ancestor(seen, remote) and is_ancestor(remote, "HEAD")):
+                raise RemoteMoved(f"the remote {branch} moved unexpectedly since this run read it; nothing written")
         git("add", "-A")
-        status = subprocess.run(["git", "-C", str(root), "status", "--porcelain"], check=True,
-                                capture_output=True, text=True).stdout
+        status = git("status", "--porcelain").stdout
         if status.strip():
             git("commit", "-q", "-m", message)
         if push:
-            git("push", "-q")
+            if not is_ancestor(remote, "HEAD"):
+                raise RemoteMoved(f"the write would not fast-forward the remote {branch}; nothing pushed")
+            git("push", "-q", "--porcelain", "origin", f"HEAD:refs/heads/{branch}")
+            state["seen"] = rev("HEAD")
 
     return commit

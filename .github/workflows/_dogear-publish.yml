@@ -124,11 +124,15 @@ jobs:
 
       # The deploy key stays configured (core.sshCommand) for this checkout only,
       # so the publisher's `git push` reaches this one repository and no other;
-      # checkout removes it when the job ends.
+      # checkout removes it when the job ends. The repository has no branch
+      # protection (GitHub Free), so the publisher writes fast-forward only: before
+      # each save it fetches main and refuses if main moved since this checkout,
+      # and it pushes HEAD:refs/heads/main without '+' or --force; nothing deletes.
       - name: Checkout publication data
         uses: actions/checkout@v4
         with:
           repository: ${{ vars.PUBLICATION_DATA_REPO }}
+          ref: main
           ssh-key: ${{ secrets.PUBLICATION_DATA_DEPLOY_KEY }}
           path: publication-data
 
@@ -155,11 +159,15 @@ jobs:
           [ "$(git -C dataset rev-parse HEAD)" = "$GATE_EDITORIAL" ] || { echo "::error::editorial commit differs from the gated one"; exit 1; }
           echo "publishing with the gated pair"
 
+      # push.default=nothing: a push that names no refspec fails instead of guessing.
       - name: Publication-data identity
         working-directory: publication-data
         run: |
           git config user.name "dogear-publisher"
           git config user.email "dogear-publisher@users.noreply.github.com"
+          git config push.default nothing
+          git config --unset-all remote.origin.push || true
+          [ "$(git symbolic-ref --short HEAD)" = main ] || { echo "::error::publication data is not on main"; exit 1; }
 
       # Inputs reach the publisher only as environment variables, validated by
       # tools/run_publish.py and passed as separate arguments (no shell expansion);

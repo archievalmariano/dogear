@@ -1,0 +1,42 @@
+# Deploy-key isolation check: manual only, ONE Environment per run, from main.
+# It holds no R2 or other credentials, publishes nothing and writes nothing: each
+# key is tried read (shallow clone, deleted) and write (`git push --dry-run`)
+# against all three private repositories, and the access must match the design
+# exactly (tools/key_check.sh). The log shows only that matrix.
+# The production Environment asks its required reviewer before this job starts.
+name: DOGEAR deploy-key check
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: The one Environment whose keys to check
+        type: choice
+        options: [editorial-gate, staging, production]
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  keys:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 5
+    concurrency:
+      group: dogear-key-check
+      cancel-in-progress: false
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check deploy-key access (dry runs only)
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          OWNER: ${{ github.repository_owner }}
+          EDITORIAL_KEY: ${{ secrets.EDITORIAL_DEPLOY_KEY }}
+          DATA_KEY: ${{ secrets.PUBLICATION_DATA_DEPLOY_KEY }}
+        run: bash tools/key_check.sh
