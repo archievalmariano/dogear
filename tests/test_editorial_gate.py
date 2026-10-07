@@ -4,6 +4,7 @@ nothing the checks print reaches its output (sentinel text)."""
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import stat
@@ -18,14 +19,26 @@ SENTINEL = "SENTINEL-EDITORIAL-9b4e"
 
 
 class EditorialGateTests(unittest.TestCase):
-    def make(self, test_ok=True, samples_ok=True, fit_ok=True) -> tuple:
+    @staticmethod
+    def stand_in() -> str:
+        """A canonical stand-in: the staging fixture with every synthetic marker removed."""
+        data = json.loads((ROOT / "fixtures" / "staging-year.json").read_text(encoding="utf-8"))
+        for r in data["records"]:
+            r["id"] = r["id"].replace("staging-", "standin-")
+            r["tags"], r["approval"] = [], None
+        return json.dumps(data)
+
+    def make(self, test_ok=True, samples_ok=True, fit_ok=True, synthetic=False) -> tuple:
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, True)
         ed = tmp / "editorial"
         (ed / "data").mkdir(parents=True)
         (ed / "tests").mkdir()
         (ed / "tools").mkdir()
-        shutil.copy(ROOT / "fixtures" / "staging-s2.json", ed / "data" / "literary-dates.json")
+        if synthetic:  # the staging fixture as it is, copied over the canonical dataset
+            shutil.copy(ROOT / "fixtures" / "staging-year.json", ed / "data" / "literary-dates.json")
+        else:
+            (ed / "data" / "literary-dates.json").write_text(self.stand_in(), encoding="utf-8")
         shutil.copy(ROOT / "fixtures" / "staging-affinity.json", ed / "data" / "affinity.json")
         (ed / "tests" / "test_stand_in.py").write_text(
             "import unittest\nclass T(unittest.TestCase):\n    def test_a(self):\n"
@@ -56,11 +69,11 @@ class EditorialGateTests(unittest.TestCase):
 
     def test_failures_name_the_check_and_nothing_else(self):
         for kwargs, failed in (({"test_ok": False}, "editorial tests"), ({"samples_ok": False}, "samples"),
-                               ({"fit_ok": False}, "fit check")):
+                               ({"fit_ok": False}, "fit check"), ({"synthetic": True}, "no synthetic records")):
             code, out = self.gate(*self.make(**kwargs))
             self.assertEqual(code, 1, out)
             self.assertIn(f"{failed}: FAILED (details withheld", out)
-            self.assertIn("editorial gate: FAILED (1 of 4 checks)", out)
+            self.assertIn("editorial gate: FAILED (1 of 5 checks)", out)
             self.assertNotIn(SENTINEL, out)
 
     def test_no_editorial_checkout_fails(self):

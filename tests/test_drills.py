@@ -82,7 +82,7 @@ class DrillTests(unittest.TestCase):
 
     def pub(self, now: str, *op, drill=None, mode="test") -> int:
         work = self.clone()
-        argv = ["--dataset", str(ROOT / "fixtures" / "staging-s2.json"), "publish", "--store", "r2:dogear-issues-staging",
+        argv = ["--dataset", str(ROOT / "fixtures" / "staging-year.json"), "publish", "--store", "r2:dogear-issues-staging",
                 "--pubdata", str(work), "--git", "--mode", mode, "--policy", str(ROOT / "fixtures" / "staging-policy.json"),
                 "--base-url", self.base, "--no-network-checks"] if mode == "test" else [
                 "publish", "--store", "r2:dogear-issues-staging", "--pubdata", str(work), "--base-url", self.base]

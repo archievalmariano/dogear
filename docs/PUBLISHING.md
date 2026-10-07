@@ -1626,3 +1626,110 @@ repositories:
 The access found must match the table exactly. Only GitHub's own refusals
 count as "no access"; a network or host-key failure is an error. The
 `production` run waits for its required reviewer.
+
+### 20g. Staging on the real calendar (Option A, owner decision 8 October 2026)
+
+S2 ran on a simulated 2027 clock (`--now`), so the staging registry's current
+week is 29 March 2027. With the real clock, CI could publish nothing on
+staging: promotion refuses any week not after the current one. Staging is
+the permanent rehearsal target, so it moves to the real Monday-Sunday
+calendar that production uses. The S2 state is archived, not deleted.
+
+**The year-round synthetic fixture.**
+- **What it is.** `fixtures/staging-year.json`, written by
+  `tools/staging_fixture.py`, replaces the March-2027-only
+  `staging-s2.json`. It has one placeholder record for every month and day,
+  29 February included (it appears only in leap years). So every real week
+  offers about seven candidates, and selection still has to choose.
+- **Not an editorial rule.** That density is fixture shape only. Scores vary
+  by a fixed rotation of significance, recognition and type.
+- **Coverage.** Every week from 29 December 2025 to 30 December 2030 builds
+  an issue of 4-5 items, published in sequence so the 365-day history
+  applies. The fit check passes for all 366 records.
+- **Synthetic markers.** Every record carries all of them
+  (`dogear/synthetic.py`):
+  - id `staging-MM-DD`;
+  - tag `staging-test`;
+  - a FIXTURE approval by `synthetic-fixture-not-editorial`;
+  - only `https://example.org/` links;
+  - "Staging Writer" and "Staging Work" names.
+
+  The affinity file is empty, so it holds no real preferences.
+
+**Staging and production separation.**
+- **Production refuses synthetic data.** It refuses any dataset holding a
+  record with *any* synthetic marker. This applies when staging, when
+  re-verifying a staged week before publishing it, and in the editorial gate
+  (a new check, "no synthetic records", which prints no count). So the
+  fixture copied over the canonical dataset, or a single marked record,
+  cannot publish.
+- **Staging refuses real data.** `--target staging` refuses any record that
+  lacks *all* the markers. So neither the canonical dataset nor a real record
+  pasted into the fixture can reach the staging host.
+- **Fixed targets.** The targets stay as before: staging is
+  `dogear-issues-staging`, test mode, the fixture, and no editorial checkout.
+  Production never points at `fixtures/`.
+
+**Real clock.**
+- Nothing sets a date on the workflow path. `tools/run_publish.py` never
+  passes `--now`, `--drill`, `--no-network-checks`, `--mode`, `--dataset`,
+  `--store` or `--policy`, and no workflow mentions them. (Tests check both.)
+- The week is resolved as in production: Monday-Sunday in PHT, rolling over
+  on Monday at 06:00.
+- `--now` remains for local test-mode rehearsals only, as before.
+
+**The transition.** Run once, after Codex has reviewed this change and the
+owner approves it. Nothing in it deletes S2 history.
+
+1. **Snapshot.** Record `dogear-publication-data-staging` `main` (`128f44c`)
+   and the SHA-256 of the staging bucket's `publication.json`. It must equal
+   the publication-data mirror `publication.json`, with current 2027-03-29.
+2. **Publication data.** Make one ordinary fast-forward commit to
+   `dogear-publication-data-staging`. It moves the live S2 state
+   (`publication.json`, `history.jsonl`, `verified.jsonl`, `staged/`,
+   `published/`, and `unverified.json` or `pending.json` if present) under
+   `archive/s2-2027/`, and leaves `README.md` in place. Nothing is rewritten.
+   From here on, GitHub stays authoritative and staging writes come only
+   through CI.
+3. **R2.** This uses Wrangler with the owner's login, not a publisher token.
+   - Read `dogear-issues-staging/publication.json`, write it to
+     `archive/s2-2027/publication.json`, and read that back, checking that
+     the SHA-256 matches.
+   - Only then delete the live `publication.json`.
+   - Issue, page and font objects stay. The Worker serves only what a
+     registry names, so `archive/` is never served.
+   - Afterwards `/current.json` returns 503 ("nothing published") and devices
+     keep their cached issue.
+4. **Workflows.** Enable only `dogear publish (reusable)` and
+   `DOGEAR operate`. `DOGEAR operate` is manual-only and has no schedule.
+   `DOGEAR stage`, `DOGEAR promote`, `DOGEAR certificate chain` and
+   `DOGEAR deploy-key check` stay disabled, and so do production
+   publication and the scheduled dispatch. The `dogear-scheduler` Worker
+   has never been deployed.
+5. **Launch.** Run `DOGEAR operate` with `staging` / `launch`. Launch
+   requires an empty publication history and no registry in the store, and
+   publishes the current real Manila week from the fixture. Staging checks
+   out no editorial repository.
+6. **Verify.**
+   - The issue and page are served and hash-match.
+   - `/current.json` names the new immutable issue.
+   - `dogear-publication-data-staging` records the transaction once and
+     verifies it.
+   - The run log shows only the result, op, week and transaction.
+   - `dogear-issues` and the production Environment are untouched.
+
+**Undo, before any launch.** Put `archive/s2-2027/publication.json` back as
+`publication.json` and `git revert` the archive commit; S2's state is then
+back as it was. After a launch, staging carries on from its new history, and
+S2 stays in `archive/`.
+
+**Devices.** Both devices have the 29 March 2027 S2 issue cached, and the
+server will offer the real current week, which is earlier. The hardware test
+records whether a device:
+- accepts the server issue;
+- keeps the newer cached issue;
+- treats the server issue as stale;
+- or behaves another way.
+
+The firmware is not changed to force a result. If the behaviour blocks
+realistic staging validation, that is reported before any firmware change.

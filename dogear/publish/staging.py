@@ -19,6 +19,7 @@ from ..affinity import EMPTY, parse_affinity
 from ..dataset import DatasetError, parse_dataset
 from ..issue import build_issue, build_web, dumps
 from ..select import CTA_LABELS, History, select_issue
+from ..synthetic import synthetic_records
 from ..web import render_web
 from ..week import IssueWeek, week_starting
 from . import eligibility
@@ -243,6 +244,11 @@ def stage(week: IssueWeek, inputs: StageInputs, policy: PublicationPolicy, histo
     if policy.unset():
         raise StageRefused(week.start, [f"publication policy unset: {', '.join(policy.unset())}"])
     frozen = freeze(inputs, policy, history, now)
+    if mode == "production":
+        synthetic = synthetic_records(frozen.dataset_bytes.decode("utf-8", "replace"))
+        if synthetic:  # the staging fixture, or any record marked like it, never reaches production
+            raise StageRefused(week.start, [f"the dataset holds {len(synthetic)} synthetic record(s); "
+                                            "production publishes no synthetic data"])
     selection, issue_bytes, web_bytes, provenance = generate(week, frozen)
 
     n = len(selection.picked)
@@ -302,6 +308,9 @@ def verify_staged(staged: Staged, inputs: StageInputs, policy: PublicationPolicy
     staged beside them, and every record that regeneration renders must be
     publishable in the dataset as it is now."""
     prov, problems = staged.provenance, []
+    if mode == "production" and (synthetic_records(staged.dataset_bytes.decode("utf-8", "replace")) or
+                                 synthetic_records(current_dataset_text)):
+        return ["the dataset holds synthetic records; production publishes no synthetic data"]
     want = prov.get("inputs", {}) if isinstance(prov, dict) else {}
     if prov.get("week") != staged.week.isoformat():
         return ["staged for another week"]

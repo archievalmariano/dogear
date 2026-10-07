@@ -31,11 +31,11 @@ dataset/             (not committed) the editorial checkout: dataset/data/litera
 
 ```bash
 python3 -m unittest discover -s tests
-python3 -m dogear.cli --dataset fixtures/staging-s2.json validate
-python3 -m dogear.cli --dataset fixtures/staging-s2.json --affinity fixtures/staging-affinity.json \
+python3 -m dogear.cli --dataset fixtures/staging-year.json validate
+python3 -m dogear.cli --dataset fixtures/staging-year.json --affinity fixtures/staging-affinity.json \
   issue --week 2027-03-01 --out out --issues out
 python3 -m venv mock/.venv && mock/.venv/bin/pip install pillow==12.3.0 segno==1.6.6
-mock/.venv/bin/python mock/render_dogear.py --fitcheck fixtures/staging-s2.json
+mock/.venv/bin/python mock/render_dogear.py --fitcheck fixtures/staging-year.json
 (cd hosting/dogear-site && node --test test/*.test.js)
 ```
 

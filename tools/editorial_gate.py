@@ -5,8 +5,9 @@ start only after it passes, and only on the same pair of commits it printed.
 
     python3 tools/editorial_gate.py [--dataset DIR]
 
-Checks: the editorial tests (dataset/tests), canonical validation, the device
-fit check, and the sample regeneration (dataset/tools/check_samples.py). Their
+Checks: the editorial tests (dataset/tests), canonical validation, no synthetic
+records (dogear/synthetic.py), the device fit check, and the sample
+regeneration (dataset/tools/check_samples.py). Their
 output can quote unpublished records, so it is captured and never printed (the
 Actions log of a public repository is public); a failure says only which check
 failed. Run the editorial checks privately to see why.
@@ -54,6 +55,8 @@ def main(argv: list) -> int:
         ("canonical validation", [sys.executable, "-m", "dogear.cli", "--dataset", dataset, "--affinity",
                                   str(editorial / "data" / "affinity.json"), "validate"], ROOT,
          lambda out: "dataset valid"),  # no record count: the dataset's size stays private
+        ("no synthetic records", [sys.executable, "-m", "dogear.synthetic", "--none", dataset], ROOT,
+         lambda out: "none"),  # staging fixtures never reach production (dogear/synthetic.py)
         ("fit check", [fit_python, str(ROOT / "mock" / "render_dogear.py"), "--fitcheck", dataset], ROOT,
          lambda out: "0 overflows"),
         ("samples", [sys.executable, str(editorial / "tools" / "check_samples.py")], editorial,

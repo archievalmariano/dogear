@@ -38,7 +38,7 @@ class TargetTests(unittest.TestCase):
         staging, production = TARGETS["staging"], TARGETS["production"]
         self.assertEqual((staging["store"], staging["mode"], staging["base_url"]),
                          ("r2:dogear-issues-staging", "test", "https://dogear-staging.pages.dev"))
-        self.assertEqual(staging["dataset"].name, "staging-s2.json")
+        self.assertEqual(staging["dataset"].name, "staging-year.json")
         self.assertEqual((production["store"], production["mode"], production["base_url"]),
                          ("r2:dogear-issues", "production", "https://dogear.archievalmariano.com"))
         self.assertEqual((production["dataset"].name, production["policy"].name, production["affinity"].name),
@@ -60,7 +60,7 @@ class TargetTests(unittest.TestCase):
     def test_target_refuses_loose_settings_and_needs_credentials(self):
         self.assertEqual(self.run_cli(["--target", "staging", "--store", "/tmp/x", "status"]), 4)
         self.assertEqual(self.run_cli(["--target", "production", "--mode", "test", "status"]), 4)
-        self.assertEqual(self.run_cli("--dataset", "fixtures/staging-s2.json", ["--target", "production", "status"]), 4)
+        self.assertEqual(self.run_cli("--dataset", "fixtures/staging-year.json", ["--target", "production", "status"]), 4)
         self.assertEqual(self.run_cli(["--target", "staging", "status"]), 4)  # no R2 credentials in the environment
         self.assertEqual(self.run_cli(["status"]), 4)  # neither --store nor --target
         self.assertEqual(self.run_cli("--affinity", "fixtures/staging-affinity.json", ["--target", "staging", "status"]), 4)
@@ -88,18 +88,23 @@ class TargetTests(unittest.TestCase):
 
 
 class FixtureTests(unittest.TestCase):
-    def test_s2_fixture_is_current_synthetic_and_valid(self):
-        run = subprocess.run(["python3", str(ROOT / "tools" / "staging_s2_fixture.py"), "--check"],
+    def test_year_fixture_is_current_synthetic_and_valid(self):
+        run = subprocess.run(["python3", str(ROOT / "tools" / "staging_fixture.py"), "--check"],
                              capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stderr)
         from dogear.dataset import load_dataset
-        ds = load_dataset(ROOT / "fixtures" / "staging-s2.json")
-        self.assertEqual(len(ds.records), 15)
+        from dogear.synthetic import non_synthetic_records
+        path = ROOT / "fixtures" / "staging-year.json"
+        ds = load_dataset(path)
+        self.assertEqual(len(ds.records), 366)  # every month/day, 29 February included
+        self.assertEqual(len({(r.month, r.day) for r in ds.records}), 366)
         for r in ds.records:
-            self.assertTrue(r.id.startswith("s2-") and r.publishable, r.id)
+            self.assertTrue(r.id.startswith("staging-") and r.publishable, r.id)
             self.assertEqual(r.approval.by, "synthetic-fixture-not-editorial")
             self.assertEqual({link.url for link in r.links}, {"https://example.org/"})
+            self.assertTrue(r.person.startswith("Staging Writer ") and r.work.startswith("Staging Work "), r.id)
         self.assertTrue(all(r.notes.startswith("Synthetic") for r in ds.records))  # never an editorial record
+        self.assertEqual(non_synthetic_records(path.read_text(encoding="utf-8")), [])
 
 
 class WorkflowTests(unittest.TestCase):

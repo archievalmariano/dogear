@@ -53,7 +53,7 @@ class PublicLogTests(unittest.TestCase):
         self.runs += 1
         work = self.tmp / f"run{self.runs}"
         git("clone", "-q", str(self.remote), str(work))
-        argv = ["--dataset", str(ROOT / "fixtures" / "staging-s2.json"), "--affinity",
+        argv = ["--dataset", str(ROOT / "fixtures" / "staging-year.json"), "--affinity",
                 str(ROOT / "fixtures" / "staging-affinity.json"), "publish", "--store", str(self.tmp / "store"),
                 "--pubdata", str(work), "--git", "--mode", "test", "--policy", str(ROOT / "fixtures" / "staging-policy.json"),
                 "--base-url", "https://dogear-staging.example", "--now", now]

@@ -79,7 +79,7 @@ def load_issues(directory: Path | None) -> list[tuple[dt.date, tuple[str, ...]]]
 def _load(path: Path):
     if not Path(path).exists():
         print(f"no dataset at {path}. The canonical dataset is private: check out dogear-editorial at "
-              f"dataset/, or pass --dataset (e.g. fixtures/staging-s2.json)", file=sys.stderr)
+              f"dataset/, or pass --dataset (e.g. fixtures/staging-year.json)", file=sys.stderr)
         sys.exit(2)
     try:
         return load_dataset(path)

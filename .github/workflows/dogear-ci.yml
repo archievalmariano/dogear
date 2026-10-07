@@ -47,17 +47,17 @@ jobs:
           python-version: "3.13"
       - name: Validate the synthetic staging fixtures
         run: |
-          python -m dogear.cli --dataset fixtures/staging-s2.json validate
+          python -m dogear.cli --dataset fixtures/staging-year.json validate
           python -m dogear.cli --dataset fixtures/staging-synthetic.json validate
       - name: Fit check with the vendored device fonts
         run: |
           python -m venv mock/.venv
           mock/.venv/bin/pip install --quiet pillow==12.3.0 segno==1.6.6
-          mock/.venv/bin/python mock/render_dogear.py --fitcheck fixtures/staging-s2.json
+          mock/.venv/bin/python mock/render_dogear.py --fitcheck fixtures/staging-year.json
       - name: Generated files are current
         run: |
           python tools/route_vectors.py --check
-          python tools/staging_s2_fixture.py --check
+          python tools/staging_fixture.py --check
 
   node:
     runs-on: ubuntu-latest

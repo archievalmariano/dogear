@@ -45,18 +45,20 @@ from .registry import CorruptRegistry, Refused
 from .staging import Checks, StageInputs, StageRefused
 from .r2 import R2Store
 from .store import DirStore
+from ..synthetic import non_synthetic_records
 
 ROOT = Path(__file__).resolve().parents[2]
 FONTS = ROOT / "web-assets" / "fonts"
 PRODUCTION_HOST = "https://dogear.archievalmariano.com"
 
-# The only two hosted configurations. Staging publishes the synthetic S2 fixture in
-# test mode with a test policy; production publishes approved canonical records in
-# production mode and refuses while any editorial decision is unset.
+# The only two hosted configurations. Staging publishes the year-round synthetic fixture
+# (and nothing else: see dogear/synthetic.py) in test mode with a test policy, on the
+# real calendar; production publishes approved canonical records in production mode,
+# refuses while any editorial decision is unset, and refuses any synthetic record.
 TARGETS = {
     "staging": {"store": "r2:dogear-issues-staging", "base_url": "https://dogear-staging.pages.dev",
                 "mode": "test", "policy": ROOT / "fixtures" / "staging-policy.json",
-                "dataset": ROOT / "fixtures" / "staging-s2.json",
+                "dataset": ROOT / "fixtures" / "staging-year.json",
                 "affinity": ROOT / "fixtures" / "staging-affinity.json"},
     # The canonical dataset and affinity are private (dogear-editorial, checked out read-only at dataset/).
     "production": {"store": "r2:dogear-issues", "base_url": PRODUCTION_HOST, "mode": "production",
@@ -141,6 +143,10 @@ def _apply_target(args) -> Optional[str]:
         if missing:  # a missing affinity file would otherwise mean "no preferences", silently
             return f"--target {args.target} needs {', '.join(missing)}" + (
                 " (check out dogear-editorial at dataset/)" if args.target == "production" else "")
+        if args.target == "staging":
+            strays = non_synthetic_records(args.dataset.read_text(encoding="utf-8"))
+            if strays:  # the canonical dataset, or a real record in the fixture, never reaches staging
+                return f"--target staging publishes only synthetic records; {len(strays)} record(s) are not"
         return None
     if args.store is None:
         return "--store or --target is required"
