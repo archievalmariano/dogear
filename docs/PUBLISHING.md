@@ -1521,8 +1521,17 @@ collaborative, or if the private state repositories become more critical.
   2. **Push.** The push carries an exact lease on that tip:
      `--force-with-lease=refs/heads/main:<tip>`. Git sends the update only if
      the remote `main` is still exactly that commit, and the server applies
-     it only if it still is. If the remote advanced, rewound, or was deleted
-     or recreated after the check, the push is rejected (`RemoteMoved`).
+     it only if it still is. The push is rejected (`RemoteMoved`) if, after
+     the check, the remote:
+     - advanced;
+     - rewound;
+     - was deleted;
+     - was deleted and recreated at a different tip.
+
+     A branch deleted and recreated at the *same* commit can't be told apart
+     by an OID lease. The push then goes ahead, but the branch ends with
+     exactly the content it would have had without the deletion, so nothing
+     is lost.
 - **No forced divergence, no deletion, no tags.** The lease only ever names
   the tip just verified as an ancestor of `HEAD`, so a write that passes is
   always a fast-forward; nothing forces past divergence. The push names one
