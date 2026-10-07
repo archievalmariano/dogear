@@ -1,0 +1,76 @@
+# Tests on every push and pull request. No secrets, no Environment, no network
+# beyond package installs: the suites use loopback servers and fakes only.
+# The canonical dataset is private (dogear-editorial, whose own CI runs the
+# editorial tests, canonical validation, fit check and sample checks against
+# this code); everything here uses public synthetic fixtures only.
+name: DOGEAR tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dogear-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]  # 3.9 = the Mac's system Python; 3.13 = what the chain check needs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+
+  dataset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate the synthetic staging fixtures
+        run: |
+          python -m dogear.cli --dataset fixtures/staging-s2.json validate
+          python -m dogear.cli --dataset fixtures/staging-synthetic.json validate
+      - name: Fit check with the vendored device fonts
+        run: |
+          python -m venv mock/.venv
+          mock/.venv/bin/pip install --quiet pillow==12.3.0 segno==1.6.6
+          mock/.venv/bin/python mock/render_dogear.py --fitcheck fixtures/staging-s2.json
+      - name: Generated files are current
+        run: |
+          python tools/route_vectors.py --check
+          python tools/staging_s2_fixture.py --check
+
+  node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Site Worker (shared vectors)
+        working-directory: hosting/dogear-site
+        run: node --test test/*.test.js
+      - name: Scheduler
+        working-directory: hosting/dogear-scheduler
+        run: node --test test/*.test.js

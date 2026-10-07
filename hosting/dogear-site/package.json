@@ -1,0 +1,13 @@
+{
+  "name": "dogear-site",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DOGEAR public host: Cloudflare Pages project (advanced mode) reading the R2 registry. Not deployed.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "4.138.0"
+  }
+}

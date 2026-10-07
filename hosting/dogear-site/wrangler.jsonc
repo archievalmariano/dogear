@@ -1,0 +1,18 @@
+// dogear-site — the DOGEAR public host: a Cloudflare PAGES project (advanced mode).
+//
+// NOT CREATED, NOT DEPLOYED. Production (G7, G9) is https://dogear.archievalmariano.com
+// (a GoDaddy CNAME → dogear-site.pages.dev, which the user creates). Staging uses
+// staging/wrangler.jsonc. See README.md for the exact steps; every one needs approval.
+//
+// Advanced mode: `site/` holds only `_worker.js/` (index.js, router.js, registry.js).
+// There are no static assets: pages, issues and fonts are R2 objects named by the
+// registry, which the publisher writes (never this Worker).
+{
+  "name": "dogear-site",
+  "pages_build_output_dir": "site",
+  "compatibility_date": "2026-10-07",
+  "r2_buckets": [
+    { "binding": "ISSUES", "bucket_name": "dogear-issues" }
+  ]
+  // DOGEAR_INDEXABLE stays unset (noindex) until the indexing decision (PUBLISHING.md §14.5).
+}

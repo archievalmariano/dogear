@@ -1,0 +1,181 @@
+# The one publication job (reusable; see the callers). This repository is public,
+# so its Actions logs are too: the publisher always runs with --public-log, and
+# the editorial gate prints only pass/fail and counts.
+#
+# Environments (create them, with their protection, BEFORE any workflow runs; a
+# workflow that names a missing Environment creates it unprotected):
+#   staging         secrets: DOGEAR_R2_* (an R2 token for dogear-issues-staging only),
+#                   PUBLICATION_DATA_DEPLOY_KEY (write, dogear-publication-data-staging only)
+#                   vars: PUBLICATION_DATA_REPO = archievalmariano/dogear-publication-data-staging
+#   editorial-gate  deployment branch main only; no reviewer.
+#                   secrets: EDITORIAL_DEPLOY_KEY (READ-ONLY, dogear-editorial)
+#   production      deployment branch main only; the owner as required reviewer.
+#                   secrets: DOGEAR_R2_* (dogear-issues only), PUBLICATION_DATA_DEPLOY_KEY
+#                   (write, dogear-publication-data only), EDITORIAL_DEPLOY_KEY (read-only)
+#                   vars: PUBLICATION_DATA_REPO = archievalmariano/dogear-publication-data
+# The bucket, host, mode, dataset and policy are not variables: `--target` fixes them.
+# Scheduled runs act only once PUBLICATION_ENABLED=true (G10).
+name: dogear publish (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      target: { type: string, required: true }
+      op: { type: string, required: true }
+      week: { type: string, default: "" }
+      rev: { type: string, default: "" }
+      expect_rev: { type: string, default: "" }
+      reason: { type: string, default: "" }
+      txn: { type: string, default: "" }
+
+permissions:
+  contents: read
+
+jobs:
+  # Production only: the private editorial checks against THIS public commit and the
+  # editorial commit production will use. It finishes before production's approval
+  # is requested, and records the pair the publish job must use.
+  editorial-gate:
+    if: ${{ inputs.target == 'production' }}
+    runs-on: ubuntu-latest
+    environment: editorial-gate
+    timeout-minutes: 20
+    outputs:
+      public_sha: ${{ steps.pair.outputs.public_sha }}
+      editorial_sha: ${{ steps.pair.outputs.editorial_sha }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fit checker
+        run: |
+          python -m venv mock/.venv
+          mock/.venv/bin/pip install --quiet pillow==12.3.0 segno==1.6.6
+      - name: Checkout editorial dataset (read-only)
+        uses: actions/checkout@v4
+        with:
+          repository: archievalmariano/dogear-editorial
+          ssh-key: ${{ secrets.EDITORIAL_DEPLOY_KEY }}
+          path: dataset
+          persist-credentials: false
+      - name: Record the commit pair
+        id: pair
+        run: |
+          echo "public_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "editorial_sha=$(git -C dataset rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Editorial gate (pass/fail and counts only)
+        run: python tools/editorial_gate.py
+
+  publish:
+    needs: editorial-gate
+    # Staging skips the gate; production runs only after it passed, on its pair.
+    if: ${{ !cancelled() && (inputs.target != 'production' || needs.editorial-gate.result == 'success') }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+    timeout-minutes: 20
+    # One publication at a time per target; never cancel one in flight.
+    concurrency:
+      group: dogear-publication-${{ inputs.target }}
+      cancel-in-progress: false
+    steps:
+      - name: Check configuration
+        env:
+          TARGET: ${{ inputs.target }}
+          DATA_REPO: ${{ vars.PUBLICATION_DATA_REPO }}
+        run: |
+          case "$TARGET" in staging|production) ;; *) echo "::error::target must be staging or production"; exit 1;; esac
+          if ! printf '%s' "$DATA_REPO" | grep -Eq '^[A-Za-z0-9-]+/dogear-publication-data(-staging)?$'; then
+            echo "::error::PUBLICATION_DATA_REPO must be owner/dogear-publication-data[-staging]"; exit 1
+          fi
+          case "$TARGET:$DATA_REPO" in
+            staging:*-staging|production:*/dogear-publication-data) ;;
+            *) echo "::error::PUBLICATION_DATA_REPO does not match the $TARGET environment"; exit 1;;
+          esac
+
+      # Public setup and tests first: no private repository is checked out, and no
+      # deploy key is in use, until they have passed.
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false  # the source repository is only read
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fit checker (device fonts are vendored under mock/fonts)
+        run: |
+          python -m venv mock/.venv
+          mock/.venv/bin/pip install --quiet pillow==12.3.0 segno==1.6.6
+
+      - name: Tests (guard)
+        env:
+          GIT_AUTHOR_NAME: dogear-ci
+          GIT_AUTHOR_EMAIL: dogear-ci@users.noreply.github.com
+          GIT_COMMITTER_NAME: dogear-ci
+          GIT_COMMITTER_EMAIL: dogear-ci@users.noreply.github.com
+        run: python -m unittest discover -s tests
+
+      # The deploy key stays configured (core.sshCommand) for this checkout only,
+      # so the publisher's `git push` reaches this one repository and no other;
+      # checkout removes it when the job ends.
+      - name: Checkout publication data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.PUBLICATION_DATA_REPO }}
+          ssh-key: ${{ secrets.PUBLICATION_DATA_DEPLOY_KEY }}
+          path: publication-data
+
+      # Production reads the canonical dataset at exactly the editorial commit the
+      # gate checked; staging publishes the public synthetic fixture and needs none.
+      - name: Checkout editorial dataset (production, read-only, the gated commit)
+        if: ${{ inputs.target == 'production' }}
+        uses: actions/checkout@v4
+        with:
+          repository: archievalmariano/dogear-editorial
+          ref: ${{ needs.editorial-gate.outputs.editorial_sha }}
+          ssh-key: ${{ secrets.EDITORIAL_DEPLOY_KEY }}
+          path: dataset
+          persist-credentials: false
+
+      - name: Same commit pair as the gate (production)
+        if: ${{ inputs.target == 'production' }}
+        env:
+          GATE_PUBLIC: ${{ needs.editorial-gate.outputs.public_sha }}
+          GATE_EDITORIAL: ${{ needs.editorial-gate.outputs.editorial_sha }}
+        run: |
+          [ -n "$GATE_PUBLIC" ] && [ -n "$GATE_EDITORIAL" ] || { echo "::error::no gated commit pair"; exit 1; }
+          [ "$(git rev-parse HEAD)" = "$GATE_PUBLIC" ] || { echo "::error::public commit differs from the gated one"; exit 1; }
+          [ "$(git -C dataset rev-parse HEAD)" = "$GATE_EDITORIAL" ] || { echo "::error::editorial commit differs from the gated one"; exit 1; }
+          echo "publishing with the gated pair"
+
+      - name: Publication-data identity
+        working-directory: publication-data
+        run: |
+          git config user.name "dogear-publisher"
+          git config user.email "dogear-publisher@users.noreply.github.com"
+
+      # Inputs reach the publisher only as environment variables, validated by
+      # tools/run_publish.py and passed as separate arguments (no shell expansion);
+      # it always adds --public-log.
+      - name: Publish
+        env:
+          DOGEAR_TARGET: ${{ inputs.target }}
+          DOGEAR_OP: ${{ inputs.op }}
+          DOGEAR_WEEK: ${{ inputs.week }}
+          DOGEAR_REV: ${{ inputs.rev }}
+          DOGEAR_EXPECT_REV: ${{ inputs.expect_rev }}
+          DOGEAR_REASON: ${{ inputs.reason }}
+          DOGEAR_TXN: ${{ inputs.txn }}
+          PUBDATA: ${{ github.workspace }}/publication-data
+          DOGEAR_GIT: "1"
+          DOGEAR_R2_ACCOUNT_ID: ${{ secrets.DOGEAR_R2_ACCOUNT_ID }}
+          DOGEAR_R2_ACCESS_KEY_ID: ${{ secrets.DOGEAR_R2_ACCESS_KEY_ID }}
+          DOGEAR_R2_SECRET_ACCESS_KEY: ${{ secrets.DOGEAR_R2_SECRET_ACCESS_KEY }}
+        run: python tools/run_publish.py

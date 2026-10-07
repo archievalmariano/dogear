@@ -1,0 +1,3730 @@
+{
+ "cases": [
+  {
+   "expect": {
+    "body": "nothing published\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "empty"
+  },
+  {
+   "expect": {
+    "body": "nothing published\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "empty"
+  },
+  {
+   "expect": {
+    "body": "nothing published\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "empty"
+  },
+  {
+   "expect": {
+    "body": "nothing published\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "empty"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "empty"
+  },
+  {
+   "expect": {
+    "body": "{\n  \"issueId\": \"dogear-2026-11-09\",\n  \"issuePath\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n  \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n  \"revision\": 1,\n  \"webPath\": \"2026-11-09/\",\n  \"week\": {\n    \"start\": \"2026-11-09\",\n    \"end\": \"2026-11-15\"\n  }\n}\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "application/json",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Location": "/2026-11-09/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 302
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "<!doctype html><title>2026-11-09 r1</title>\n",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Content-Type": "text/html; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Location": "/2026-11-09/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 301
+   },
+   "method": "GET",
+   "path": "/2026-11-09",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Location": "/2026-11-09/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 301
+   },
+   "method": "GET",
+   "path": "/2026-11-12/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Location": "/2026-11-09/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 301
+   },
+   "method": "GET",
+   "path": "/2026-11-12",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-11-02/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Location": "/2026-11-02/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 301
+   },
+   "method": "GET",
+   "path": "/2026-11-08/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-11-16/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-11-17/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-02-30/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-13-01/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/1999-01-04/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "application/json",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.e162d75bace9d21b.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "application/json",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-02.b93ab06fe0425595.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-16.0123456789abcdef.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/web/2026-11-09/a507475b41f8d4b8.html",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/web/2026-11-16/0123456789abcdef.html",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/publication.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "OFL\n",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/LICENSE-Inter.txt",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/fonts/missing.woff2",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/fonts/../publication.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/fonts/Inter_Regular.woff2",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/staged/2026-11-09/issue.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/current.json/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/CURRENT.JSON",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/index.html",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/robots.txt",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-11-09/index.html",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "{\n  \"issueId\": \"dogear-2026-11-02\",\n  \"issuePath\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n  \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n  \"revision\": 0,\n  \"webPath\": \"2026-11-02/\",\n  \"week\": {\n    \"start\": \"2026-11-02\",\n    \"end\": \"2026-11-08\"\n  }\n}\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "application/json",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Location": "/2026-11-02/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 302
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "<!doctype html><title>2026-11-09 r1</title>\n",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Content-Type": "text/html; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Location": "/2026-11-09/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 301
+   },
+   "method": "GET",
+   "path": "/2026-11-09",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Location": "/2026-11-09/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 301
+   },
+   "method": "GET",
+   "path": "/2026-11-12/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Location": "/2026-11-09/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 301
+   },
+   "method": "GET",
+   "path": "/2026-11-12",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-11-02/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Location": "/2026-11-02/",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 301
+   },
+   "method": "GET",
+   "path": "/2026-11-08/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-11-16/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-11-17/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-02-30/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-13-01/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/1999-01-04/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "application/json",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.e162d75bace9d21b.json",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "application/json",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-02.b93ab06fe0425595.json",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-16.0123456789abcdef.json",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.json",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/web/2026-11-09/a507475b41f8d4b8.html",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/web/2026-11-16/0123456789abcdef.html",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/publication.json",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "OFL\n",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/LICENSE-Inter.txt",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/fonts/missing.woff2",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/fonts/../publication.json",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/fonts/Inter_Regular.woff2",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/staged/2026-11-09/issue.json",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/current.json/",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/CURRENT.JSON",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/index.html",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/robots.txt",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "not found\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 404
+   },
+   "method": "GET",
+   "path": "/2026-11-09/index.html",
+   "store": "held"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:not-json"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:not-json"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:not-json"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:not-json"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:not-json"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:empty"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:empty"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:empty"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:empty"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:empty"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:array"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:array"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:array"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:array"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:array"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:null"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:null"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:null"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:null"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:null"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:extra-top-level-field"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:extra-top-level-field"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:extra-top-level-field"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:extra-top-level-field"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:extra-top-level-field"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:schema-version-2"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:schema-version-2"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:schema-version-2"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:schema-version-2"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:schema-version-2"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:schema-version-true"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:schema-version-true"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:schema-version-true"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:schema-version-true"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:schema-version-true"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:bad-txn"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:bad-txn"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:bad-txn"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:bad-txn"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:bad-txn"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:current-unpublished"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:current-unpublished"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:current-unpublished"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:current-unpublished"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:current-unpublished"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:not-a-monday"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:not-a-monday"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:not-a-monday"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:not-a-monday"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:not-a-monday"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:no-weeks"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:no-weeks"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:no-weeks"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:no-weeks"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:no-weeks"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:active-out-of-range"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:active-out-of-range"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:active-out-of-range"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:active-out-of-range"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:active-out-of-range"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:active-true"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:active-true"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:active-true"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:active-true"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:active-true"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:rev-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:rev-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:rev-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:rev-mismatch"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:rev-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:issue-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:issue-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:issue-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:issue-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:issue-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:web-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:web-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:web-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:web-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:web-key-mismatch"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:issue-id-other-week"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:issue-id-other-week"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:issue-id-other-week"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:issue-id-other-week"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:issue-id-other-week"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:short-sha"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:short-sha"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:short-sha"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:short-sha"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:short-sha"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:issue-bytes-too-large"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:issue-bytes-too-large"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:issue-bytes-too-large"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:issue-bytes-too-large"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:issue-bytes-too-large"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:issue-bytes-zero"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:issue-bytes-zero"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:issue-bytes-zero"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:issue-bytes-zero"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:issue-bytes-zero"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:unknown-revision-field"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:unknown-revision-field"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:unknown-revision-field"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:unknown-revision-field"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:unknown-revision-field"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:correction-without-reason"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:correction-without-reason"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:correction-without-reason"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:correction-without-reason"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:correction-without-reason"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:bad-op"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:bad-op"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:bad-op"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:bad-op"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:bad-op"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:empty-generator"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:empty-generator"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:empty-generator"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:empty-generator"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:empty-generator"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:bad-hold"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:bad-hold"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:bad-hold"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:bad-hold"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:bad-hold"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:hold-empty-reason"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:hold-empty-reason"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:hold-empty-reason"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:hold-empty-reason"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:hold-empty-reason"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:float-issue-bytes"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:float-issue-bytes"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:float-issue-bytes"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:float-issue-bytes"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:float-issue-bytes"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/current.json",
+   "store": "corrupt:exponent-active"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/",
+   "store": "corrupt:exponent-active"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/2026-11-09/",
+   "store": "corrupt:exponent-active"
+  },
+  {
+   "expect": {
+    "body": "unavailable\n",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "text/plain; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 503
+   },
+   "method": "GET",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "corrupt:exponent-active"
+  },
+  {
+   "expect": {
+    "body": "font-bytes",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "font/woff2",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "GET",
+   "path": "/fonts/Inter-Regular.woff2",
+   "store": "corrupt:exponent-active"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "no-store",
+     "Content-Type": "application/json",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "HEAD",
+   "path": "/current.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=60",
+     "Content-Type": "text/html; charset=utf-8",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "HEAD",
+   "path": "/2026-11-09/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Cache-Control": "public, max-age=31536000, immutable",
+     "Content-Type": "application/json",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 200
+   },
+   "method": "HEAD",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "POST",
+   "path": "/current.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "POST",
+   "path": "/2026-11-09/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "POST",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "PUT",
+   "path": "/current.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "PUT",
+   "path": "/2026-11-09/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "PUT",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "DELETE",
+   "path": "/current.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "DELETE",
+   "path": "/2026-11-09/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "DELETE",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "OPTIONS",
+   "path": "/current.json",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "OPTIONS",
+   "path": "/2026-11-09/",
+   "store": "published"
+  },
+  {
+   "expect": {
+    "body": "",
+    "headers": {
+     "Allow": "GET, HEAD",
+     "Cache-Control": "no-store",
+     "X-Content-Type-Options": "nosniff",
+     "X-Robots-Tag": "noindex"
+    },
+    "status": 405
+   },
+   "method": "OPTIONS",
+   "path": "/issues/dogear-2026-11-09.2e33c01f5a84d425.json",
+   "store": "published"
+  }
+ ],
+ "comment": "Generated by tools/route_vectors.py from dogear.publish.routes; do not edit.",
+ "stores": {
+  "corrupt:active-out-of-range": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 2,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:active-true": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": true,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:array": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "[]",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:bad-hold": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": {\n    \"reason\": \"x\"\n  },\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:bad-op": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"rollback\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:bad-txn": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"not-a-txn\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:correction-without-reason": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:current-unpublished": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-16\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:empty": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:empty-generator": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:exponent-active": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0e0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:extra-top-level-field": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"extra\": 1,\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:float-issue-bytes": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000.0,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:hold-empty-reason": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": {\n    \"reason\": \"\",\n    \"since\": \"s\",\n    \"txn\": \"t\"\n  },\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:issue-bytes-too-large": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 32769,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:issue-bytes-zero": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 0,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:issue-id-other-week": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:issue-key-mismatch": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.0000000000000000.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:no-weeks": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {}\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:not-a-monday": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-03\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:not-json": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{not json",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:null": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "null",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:rev-mismatch": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 1,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:schema-version-2": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 2,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:schema-version-true": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": true,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:short-sha": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"abc\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:unknown-revision-field": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"extra\": \"x\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "corrupt:web-key-mismatch": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/x.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "empty": {
+   "fonts/Inter-Regular.woff2": "font-bytes"
+  },
+  "held": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-02\",\n  \"hold\": {\n    \"reason\": \"withdrawn\",\n    \"since\": \"2026-11-11T09:00:00+08:00\",\n    \"txn\": \"20261111T090000-rollback-000000000004\"\n  },\n  \"schemaVersion\": 1,\n  \"txn\": \"20261111T090000-rollback-000000000004\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  },
+  "published": {
+   "fonts/Inter-Regular.woff2": "font-bytes",
+   "fonts/LICENSE-Inter.txt": "OFL\n",
+   "issues/dogear-2026-11-02.b93ab06fe0425595.json": "{\"issueId\":\"dogear-2026-11-02\",\"rev\":0}\n",
+   "issues/dogear-2026-11-09.2e33c01f5a84d425.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":1}\n",
+   "issues/dogear-2026-11-09.e162d75bace9d21b.json": "{\"issueId\":\"dogear-2026-11-09\",\"rev\":0}\n",
+   "issues/dogear-2026-11-16.0123456789abcdef.json": "{}\n",
+   "publication.json": "{\n  \"current\": \"2026-11-09\",\n  \"hold\": null,\n  \"schemaVersion\": 1,\n  \"txn\": \"20261110T090000-correct-000000000003\",\n  \"weeks\": {\n    \"2026-11-02\": {\n      \"active\": 0,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-02T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-02\",\n          \"issueKey\": \"issues/dogear-2026-11-02.b93ab06fe0425595.json\",\n          \"issueSha256\": \"b93ab06fe0425595782c755f9e3e678b65827d1c42747f64b0ec32e5c4b41577\",\n          \"op\": \"launch\",\n          \"provenanceSha256\": \"8ecf5e3f4f2c7f04d97d47e4bb5a95b897ec8d9ee304c7da23cea54ddfa4d475\",\n          \"publishedAt\": \"2026-11-02T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261102T060200-launch-000000000001\",\n          \"webKey\": \"web/2026-11-02/83259717e70b8cd4.html\",\n          \"webSha256\": \"83259717e70b8cd4b62e28a93af21fb953d109cece386b8d7559a06661cca74e\"\n        }\n      ]\n    },\n    \"2026-11-09\": {\n      \"active\": 1,\n      \"revisions\": [\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4000,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.e162d75bace9d21b.json\",\n          \"issueSha256\": \"e162d75bace9d21bf87b90f6335238bb5aea2e444c598144a97c20731b62e761\",\n          \"op\": \"promote\",\n          \"provenanceSha256\": \"df04d62ca14bef618f3a329b1bf40e89208740201b13c68d912cae95e52e69f3\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"rev\": 0,\n          \"txn\": \"20261109T060200-promote-000000000002\",\n          \"webKey\": \"web/2026-11-09/36c0df202fee47da.html\",\n          \"webSha256\": \"36c0df202fee47da18ff74d049da0a2da985a8fd7899cdc173f702a456c6b044\"\n        },\n        {\n          \"datasetSha256\": \"b277fd623676a525c29b9eb155afc8c9010681814ceafb2d7627f47b9a232576\",\n          \"generatedAt\": \"2026-11-09T06:00:00+08:00\",\n          \"generator\": \"dogear@vectors\",\n          \"issueBytes\": 4001,\n          \"issueId\": \"dogear-2026-11-09\",\n          \"issueKey\": \"issues/dogear-2026-11-09.2e33c01f5a84d425.json\",\n          \"issueSha256\": \"2e33c01f5a84d425583af89c710fddf139c20e2dcd78fc4bd806b0ba3d112468\",\n          \"op\": \"correct\",\n          \"provenanceSha256\": \"c9ee5d2604b8f08069ed7d18c7adfcc6134d9664aeb7c498e918ed89b7a06028\",\n          \"publishedAt\": \"2026-11-09T06:02:00+08:00\",\n          \"reason\": \"headline\",\n          \"rev\": 1,\n          \"txn\": \"20261110T090000-correct-000000000003\",\n          \"webKey\": \"web/2026-11-09/a507475b41f8d4b8.html\",\n          \"webSha256\": \"a507475b41f8d4b8bbebadc05547409a5992e9a1654536da821022cd8ee4e774\"\n        }\n      ]\n    }\n  }\n}\n",
+   "web/2026-11-09/36c0df202fee47da.html": "<!doctype html><title>2026-11-09 r0</title>\n",
+   "web/2026-11-09/a507475b41f8d4b8.html": "<!doctype html><title>2026-11-09 r1</title>\n",
+   "web/2026-11-16/0123456789abcdef.html": "<html>stray</html>\n"
+  }
+ }
+}

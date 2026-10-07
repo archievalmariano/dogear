@@ -1,0 +1,32 @@
+# Friday: stage next week (PUBLISHING.md §4). See _dogear-publish.yml.
+# Scheduled runs act only when PUBLICATION_ENABLED == 'true', on PUBLICATION_TARGET
+# (default staging). dogear-scheduler dispatches this at 10:02 and 10:17 PHT; these
+# GitHub crons are the redundant fallback, off the top of the hour.
+name: DOGEAR stage
+
+on:
+  schedule:
+    - cron: "7 3 * * 5"   # Fri 03:07 UTC = 11:07 PHT
+  workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        options: [staging, production]
+        default: staging
+      week:
+        description: "A specific Monday (YYYY-MM-DD); empty = next week"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  stage:
+    if: ${{ github.event_name != 'schedule' || vars.PUBLICATION_ENABLED == 'true' }}
+    uses: ./.github/workflows/_dogear-publish.yml
+    secrets: inherit
+    with:
+      target: ${{ inputs.target || vars.PUBLICATION_TARGET || 'staging' }}
+      op: ${{ inputs.week && 'stage' || 'stage-next' }}
+      week: ${{ inputs.week }}

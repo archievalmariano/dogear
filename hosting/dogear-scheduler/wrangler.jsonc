@@ -1,0 +1,21 @@
+// dogear-scheduler: a standalone Worker (Pages has no Cron Triggers) that dispatches
+// DOGEAR's workflows on time. NOT CREATED, NOT DEPLOYED (gate G10, the user's).
+// Its one secret, GITHUB_TOKEN (a fine-grained PAT: Actions read+write on the dogear
+// repository only), is set with `wrangler secret put GITHUB_TOKEN`, never committed.
+// The crons MUST equal DECLARED_CRONS in src/dispatch.js (a test enforces it).
+{
+  "name": "dogear-scheduler",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-07",
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "triggers": {
+    "crons": ["2 2 * * 5", "17 2 * * 5", "2 22 * * 0", "17 22 * * 0", "32 22 * * *"]
+  },
+  "vars": {
+    "GITHUB_OWNER": "archievalmariano",
+    "GITHUB_REPO": "dogear",
+    "GITHUB_REF": "main",
+    "PUBLICATION_TARGET": "staging",
+    "PUBLICATION_ENABLED": "false"
+  }
+}

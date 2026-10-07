@@ -1,0 +1,13 @@
+out/
+mock/.venv/
+out-dev/
+stage/
+dev-builds/
+out-staging/
+site-staging/
+__pycache__/
+.wrangler/
+node_modules/
+mock/out/
+dataset
+dataset/

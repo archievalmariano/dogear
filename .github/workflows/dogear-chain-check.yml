@@ -1,0 +1,26 @@
+# Weekly: does each DOGEAR host present a chain the device's roots verify
+# (PUBLISHING.md §8)? Read-only, no secrets. Fails (and so alerts) before devices do.
+# See _dogear-publish.yml. The production host joins the list
+# once its CNAME exists (G7).
+name: DOGEAR certificate chain
+
+on:
+  schedule:
+    - cron: "17 1 * * 2"  # Tue 01:17 UTC = 09:17 PHT
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"  # get_verified_chain names the anchoring root
+      - run: python tools/chain_check.py dogear-staging.pages.dev

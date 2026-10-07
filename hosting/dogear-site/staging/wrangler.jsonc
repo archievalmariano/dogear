@@ -1,0 +1,12 @@
+// dogear-staging — the S2 staging host (PUBLISHING.md §8, §19). The Pages project
+// exists since S1 (static Direct Upload); S2 redeploys it in advanced mode with
+// this R2 binding, replacing the S1 static files. The bucket dogear-issues-staging
+// does not exist yet. NOT DEPLOYED: see ../README.md; each step needs approval.
+{
+  "name": "dogear-staging",
+  "pages_build_output_dir": "../site",
+  "compatibility_date": "2026-10-07",
+  "r2_buckets": [
+    { "binding": "ISSUES", "bucket_name": "dogear-issues-staging" }
+  ]
+}

@@ -1,0 +1,29 @@
+# Monday 06:00 PHT rollover, and the daily catch-up for the current week only
+# (PUBLISHING.md §4). Promotion is idempotent: once the week is in the registry, at
+# any revision, a run is a green no-op. See _dogear-publish.yml.
+# dogear-scheduler dispatches at 06:02 and 06:17 Monday and 06:32 daily (PHT); these
+# GitHub crons are the redundant fallback.
+name: DOGEAR promote
+
+on:
+  schedule:
+    - cron: "7 23 * * 0"  # Sun 23:07 UTC = Mon 07:07 PHT
+    - cron: "7 0 * * *"   # 00:07 UTC = 08:07 PHT daily catch-up
+  workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        options: [staging, production]
+        default: staging
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    if: ${{ github.event_name != 'schedule' || vars.PUBLICATION_ENABLED == 'true' }}
+    uses: ./.github/workflows/_dogear-publish.yml
+    secrets: inherit
+    with:
+      target: ${{ inputs.target || vars.PUBLICATION_TARGET || 'staging' }}
+      op: promote

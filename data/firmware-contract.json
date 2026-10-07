@@ -1,0 +1,17 @@
+{
+  "_note": "Generated from crosspoint-reader src/activities/dogear/DogearLimits.h by tools/firmware_contract.py --sync; do not edit.",
+  "firmwareCommit": "3d9d9e56",
+  "limits": {
+    "kMaxBodyLen": 2048,
+    "kMaxEntries": 12,
+    "kMaxHeadlineLen": 240,
+    "kMaxIssueBytes": 32768,
+    "kMaxIssueIdLen": 17,
+    "kMaxIssuePathLen": 128,
+    "kMaxLineLen": 160,
+    "kMaxManifestBytes": 4096,
+    "kMaxShaLen": 64,
+    "kMaxShortLen": 64,
+    "kMaxUrlLen": 2953
+  }
+}

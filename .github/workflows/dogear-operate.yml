@@ -1,0 +1,36 @@
+# Manual operations (PUBLISHING.md §4, §12): never scheduled. Production runs wait
+# for the required reviewer on the `production` Environment.
+name: DOGEAR operate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        options: [staging, production]
+        default: staging
+      op:
+        type: choice
+        options: [status, reconcile, launch, correct, rollback, restore, resume, abandon]
+        default: status
+      week: { description: "Monday YYYY-MM-DD (correct, rollback, restore)", type: string, default: "" }
+      rev: { description: "Revision (restore; optional for rollback)", type: string, default: "" }
+      expect_rev: { description: "The week's active revision now (correct)", type: string, default: "" }
+      reason: { description: "One line (correct, rollback)", type: string, default: "" }
+      txn: { description: "Transaction id (abandon, after inspection)", type: string, default: "" }
+
+permissions:
+  contents: read
+
+jobs:
+  operate:
+    uses: ./.github/workflows/_dogear-publish.yml
+    secrets: inherit
+    with:
+      target: ${{ inputs.target }}
+      op: ${{ inputs.op }}
+      week: ${{ inputs.week }}
+      rev: ${{ inputs.rev }}
+      expect_rev: ${{ inputs.expect_rev }}
+      reason: ${{ inputs.reason }}
+      txn: ${{ inputs.txn }}

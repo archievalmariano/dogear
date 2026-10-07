@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 3,
+  "records": [
+    {
+      "id": "staging-test-1",
+      "month": 2,
+      "day": 1,
+      "year": 2026,
+      "precision": "day",
+      "dateBasis": "recorded",
+      "claims": "straightforward",
+      "type": "publication",
+      "person": "Staging Writer 1",
+      "work": "Staging Test One",
+      "headline": "Staging test: the issue arrived over HTTPS",
+      "copy": {
+        "digest": "This is a synthetic test item for DOGEAR's staging host. This issue exists only on the DOGEAR staging host, so seeing it on a reader means the device fetched it over verified HTTPS and checked its SHA-256 hash. It is placeholder text, not a literary record.",
+        "expanded": "This is a synthetic test item for DOGEAR's staging host. This issue exists only on the DOGEAR staging host, so seeing it on a reader means the device fetched it over verified HTTPS and checked its SHA-256 hash. It is placeholder text, not a literary record.",
+        "allowSecondPage": false
+      },
+      "tags": [
+        "staging-test"
+      ],
+      "significance": 5,
+      "recognition": "anchor",
+      "discoveryValue": 0,
+      "phRelevance": 0,
+      "seaRelevance": 0,
+      "domain": "reading-culture",
+      "status": "verified",
+      "verifiedBy": "synthetic-fixture",
+      "verifiedOn": "2026-10-07",
+      "sources": [
+        {
+          "title": "Example Domain (IANA reserved)",
+          "url": "https://example.org/dogear-staging/1",
+          "kind": "secondary"
+        }
+      ],
+      "links": [
+        {
+          "type": "read-more",
+          "url": "https://example.org/dogear-staging/1",
+          "title": "Staging Test One",
+          "provider": "example.org"
+        }
+      ],
+      "notes": "Synthetic staging fixture. Not a literary record; never part of the canonical dataset.",
+      "area": "europe",
+      "language": "en",
+      "womenWriter": false,
+      "approval": null
+    },
+    {
+      "id": "staging-test-2",
+      "month": 2,
+      "day": 3,
+      "year": 2026,
+      "precision": "day",
+      "dateBasis": "recorded",
+      "claims": "straightforward",
+      "type": "publication",
+      "person": "Staging Writer 2",
+      "work": "Staging Test Two",
+      "headline": "Staging test: the copy was saved to the card",
+      "copy": {
+        "digest": "This is the second synthetic item. After reading it online, reopen DOGEAR offline: it should load from the card and show CACHED. This issue exists only on the DOGEAR staging host, so seeing it on a reader means the device fetched it over verified HTTPS and checked its SHA-256 hash.",
+        "expanded": "This is the second synthetic item. After reading it online, reopen DOGEAR offline: it should load from the card and show CACHED. This issue exists only on the DOGEAR staging host, so seeing it on a reader means the device fetched it over verified HTTPS and checked its SHA-256 hash.",
+        "allowSecondPage": false
+      },
+      "tags": [
+        "staging-test"
+      ],
+      "significance": 5,
+      "recognition": "anchor",
+      "discoveryValue": 0,
+      "phRelevance": 0,
+      "seaRelevance": 0,
+      "domain": "reading-culture",
+      "status": "verified",
+      "verifiedBy": "synthetic-fixture",
+      "verifiedOn": "2026-10-07",
+      "sources": [
+        {
+          "title": "Example Domain (IANA reserved)",
+          "url": "https://example.org/dogear-staging/2",
+          "kind": "secondary"
+        }
+      ],
+      "links": [
+        {
+          "type": "read-more",
+          "url": "https://example.org/dogear-staging/2",
+          "title": "Staging Test Two",
+          "provider": "example.org"
+        }
+      ],
+      "notes": "Synthetic staging fixture. Not a literary record; never part of the canonical dataset.",
+      "area": "europe",
+      "language": "en",
+      "womenWriter": false,
+      "approval": null
+    },
+    {
+      "id": "staging-test-3",
+      "month": 2,
+      "day": 5,
+      "year": 2026,
+      "precision": "day",
+      "dateBasis": "recorded",
+      "claims": "straightforward",
+      "type": "publication",
+      "person": "Staging Writer 3",
+      "work": "Staging Test Three",
+      "headline": "Staging test: nothing here is real",
+      "copy": {
+        "digest": "This is the third synthetic item. Every name, date and link in this issue is made up for testing, and the links lead to example.org, a domain reserved for examples. None of it comes from the DOGEAR dataset, and none of it will ever be published.",
+        "expanded": "This is the third synthetic item. Every name, date and link in this issue is made up for testing, and the links lead to example.org, a domain reserved for examples. None of it comes from the DOGEAR dataset, and none of it will ever be published.",
+        "allowSecondPage": false
+      },
+      "tags": [
+        "staging-test"
+      ],
+      "significance": 5,
+      "recognition": "anchor",
+      "discoveryValue": 0,
+      "phRelevance": 0,
+      "seaRelevance": 0,
+      "domain": "reading-culture",
+      "status": "verified",
+      "verifiedBy": "synthetic-fixture",
+      "verifiedOn": "2026-10-07",
+      "sources": [
+        {
+          "title": "Example Domain (IANA reserved)",
+          "url": "https://example.org/dogear-staging/3",
+          "kind": "secondary"
+        }
+      ],
+      "links": [
+        {
+          "type": "read-more",
+          "url": "https://example.org/dogear-staging/3",
+          "title": "Staging Test Three",
+          "provider": "example.org"
+        }
+      ],
+      "notes": "Synthetic staging fixture. Not a literary record; never part of the canonical dataset.",
+      "area": "europe",
+      "language": "en",
+      "womenWriter": false,
+      "approval": null
+    }
+  ]
+}
