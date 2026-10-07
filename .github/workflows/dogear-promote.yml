@@ -6,6 +6,8 @@
 name: DOGEAR promote
 
 on:
+  # INTENTIONALLY DISABLED until deployment approval (G10): this workflow is disabled in
+  # the repository's Actions settings, so neither the schedule nor a manual run can start it.
   schedule:
     - cron: "7 23 * * 0"  # Sun 23:07 UTC = Mon 07:07 PHT
     - cron: "7 0 * * *"   # 00:07 UTC = 08:07 PHT daily catch-up

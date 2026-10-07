@@ -1473,3 +1473,28 @@ credentials. `dogear-editorial`'s CI reads the public code anonymously.
 - Tests plant sentinel text in a reason, a hold, a blocked link, a notice,
   an unexpected error and the gate's checks, and assert it never appears.
 - Public setup and tests run before any private repository is checked out.
+
+### 20e. GitHub state (8 October 2026)
+
+- **Repositories:** public `dogear` (the audited one-commit import, then
+  this change); private `dogear-editorial`, `dogear-publication-data` and
+  `dogear-publication-data-staging`. Each has only `main`.
+- **Environments on `dogear`:** `staging`, `editorial-gate` and `production`,
+  each deploying from `main` only. `production` requires the owner's review,
+  with self-review allowed. No secrets or deploy keys yet.
+- **Branch rules:** `dogear`'s `main` blocks force pushes and deletion. GitHub
+  Free offers no rulesets or branch protection for private repositories, so
+  the three private repositories have none. The publication-data deploy keys
+  will be write keys on unprotected branches until that changes.
+- **Actions:** enabled on `dogear` only, with approval required for workflows
+  from all outside contributors. Only `DOGEAR tests` is active.
+  `DOGEAR stage`, `DOGEAR promote`, `DOGEAR operate`, the reusable publish job
+  and `DOGEAR certificate chain` are **disabled** in the repository's
+  settings until deployment approval (G10). Their schedules are kept in the
+  files, marked as disabled, and can't fire. Actions stays disabled on the
+  private repositories.
+- **Staging publication data:** `archievalmariano/dogear-publication-data-staging`
+  on GitHub is now **authoritative**. The Mac's local copy and S2 runner are
+  retired and refuse writes. Future staging writes come only through the CI
+  path, once that's intentionally enabled.
+

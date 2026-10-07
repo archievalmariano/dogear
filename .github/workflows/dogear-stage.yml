@@ -5,6 +5,8 @@
 name: DOGEAR stage
 
 on:
+  # INTENTIONALLY DISABLED until deployment approval (G10): this workflow is disabled in
+  # the repository's Actions settings, so neither the schedule nor a manual run can start it.
   schedule:
     - cron: "7 3 * * 5"   # Fri 03:07 UTC = 11:07 PHT
   workflow_dispatch:
