@@ -80,6 +80,20 @@ COVER_LEAD_GAP = 14
 COVER_RULE_GAP = 12
 COVER_HEAD_GAP = 8
 COVER_LADDER = ((18, 14, 6), (16, 14, 4), (16, 14, 2), (16, 12, 6))
+# A quiet week's cover (Quiet A, owner-approved 8 October 2026; PUBLISHING.md §21):
+# the regular ladder, then two quiet-only last resorts: tighter rows, then one-line
+# (ellipsized) supporting titles. (lead pt, row pt, row gap, lead title lines, row
+# title lines.) The lead's kicker and title are never cut further than a regular
+# cover cuts them. If even the last rung cannot hold every supporting row, the cover
+# lists as many as fit and the rest still have their own pages: the cover is not a
+# complete item list. Every rung, and the row count, keeps a clean bottom margin of
+# QUIET_MIN_MARGIN px; spacing is never tightened to force a fit. Same as
+# DogearActivity::drawQuietContents.
+QUIET_LADDER = tuple((a, b, g, 2, 2) for a, b, g in COVER_LADDER) + ((16, 12, 2, 2, 2), (16, 12, 2, 2, 1))
+QUIET_NOTE_MAX_LINES = 4
+QUIET_MIN_MARGIN = 12
+# The tallest possible quiet cover still lists this many supporting rows (owner, 9 October 2026).
+QUIET_MIN_WORST_ROWS = 3
 
 BODY_SIZES = (14, 12)  # 14 preferred; 12 is the controlled fallback
 HEADLINE_SIZES = {"featured": (18, 16), "standard": (16, 14)}
@@ -329,6 +343,9 @@ def draw_cover(c: Canvas, issue: dict) -> None:
             break
     c.text(MARGIN, y, text, df)
     y += line_h(df) + COVER_DATELINE_GAP
+    if issue.get("quiet"):
+        draw_quiet_contents(c, issue, y)
+        return
 
     featured = [e for e in issue["entries"] if e["role"] == "featured"]
     others = [e for e in issue["entries"] if e["role"] != "featured"]
@@ -382,6 +399,71 @@ def draw_cover(c: Canvas, issue: dict) -> None:
         for ln in lines:
             c.text(MARGIN, y, ln, f)
             y += line_h(f)
+        y += row_gap
+
+
+def quiet_plan(issue: dict, y: int) -> tuple:
+    """(y below the quiet copy, lead, rows, rung, spare px, rows left off) for a quiet
+    cover whose copy starts at ``y``: the first rung of QUIET_LADDER that holds every
+    supporting row with QUIET_MIN_MARGIN px to spare; else the last rung with as many
+    rows (in issue order) as keep that margin."""
+    q = issue["quiet"]
+    y += line_h(sans(14, True)) + 2
+    nf = serif(12, italic=True)
+    y += len(ellipsize(wrap(q["note"], nf, CONTENT_W), nf, CONTENT_W, QUIET_NOTE_MAX_LINES)) * line_h(nf)
+    y += 14 + COVER_RULE_GAP + 4
+    kf = sans(12, True)
+    featured = [e for e in issue["entries"] if e["role"] == "featured"]
+    others = [e for e in issue["entries"] if e["role"] != "featured"]
+    for rung in QUIET_LADDER:
+        feat_pt, row_pt, row_gap, lead_lines, row_lines = rung
+        ff, rf = serif(feat_pt, True), serif(row_pt)
+        # The kicker as the device lays out every lead: at most two lines.
+        lead = [(e, ellipsize(kicker_lines(e["dateLabel"], e["kicker"]), kf, CONTENT_W, 2),
+                 ellipsize(wrap(e["title"], ff, CONTENT_W), ff, CONTENT_W, lead_lines)) for e in featured]
+        rows = [(e, ellipsize(wrap(e["title"], rf, CONTENT_W), rf, CONTENT_W, row_lines)) for e in others]
+        h_lead = sum(len(ks) * line_h(kf) + 4 + len(ls) * line_h(ff) + COVER_LEAD_GAP for e, ks, ls in lead)
+        h_rows = [CONTENTS_LABEL_STEP + len(ls) * line_h(rf) + row_gap for _, ls in rows]
+        if y + h_lead + sum(h_rows) + QUIET_MIN_MARGIN <= BODY_BOTTOM:
+            return y, lead, rows, rung, BODY_BOTTOM - y - h_lead - sum(h_rows), 0
+    shown = len(rows)
+    while shown > 0 and y + h_lead + sum(h_rows[:shown]) + QUIET_MIN_MARGIN > BODY_BOTTOM:
+        shown -= 1
+    return y, lead, rows[:shown], rung, BODY_BOTTOM - y - h_lead - sum(h_rows[:shown]), len(rows) - shown
+
+
+def draw_quiet_contents(c: Canvas, issue: dict, y: int) -> None:
+    """Quiet A: the issue's quiet heading and note where the lead would start, a rule,
+    the lead in its usual treatment, then the other picks as contents rows with their
+    original dates. No ALSO THIS WEEK head: a quiet issue has none."""
+    q = issue["quiet"]
+    hf, nf, kf = sans(14, True), serif(12, italic=True), sans(12, True)
+    c.text(MARGIN, y, q["heading"], hf, tracking=2)
+    note_y = y + line_h(hf) + 2
+    for ln in ellipsize(wrap(q["note"], nf, CONTENT_W), nf, CONTENT_W, QUIET_NOTE_MAX_LINES):
+        c.text(MARGIN, note_y, ln, nf)
+        note_y += line_h(nf)
+    c.rule(note_y + 14)
+    y, lead, rows, (feat_pt, row_pt, row_gap, lead_lines, row_lines), spare, left_off = quiet_plan(issue, y)
+    if spare < QUIET_MIN_MARGIN:
+        print(f"  WARNING: {issue['issueId']} quiet cover keeps only {spare}px (minimum {QUIET_MIN_MARGIN})")
+    print(f"  quiet cover: lead {feat_pt}pt, contents {row_pt}pt, row gap {row_gap}px, {row_lines}-line rows, "
+          f"{len(rows)} row(s) listed, {left_off} on their own pages only, {spare}px spare")
+    for e, kicks, lines in lead:
+        for ln in kicks:
+            c.text(MARGIN, y, ln, kf)
+            y += line_h(kf)
+        y += 4
+        for ln in lines:
+            c.text(MARGIN, y, ln, serif(feat_pt, True))
+            y += line_h(serif(feat_pt, True))
+        y += COVER_LEAD_GAP
+    for e, lines in rows:
+        c.text(MARGIN, y, contents_label(e), sans(12))
+        y += CONTENTS_LABEL_STEP
+        for ln in lines:
+            c.text(MARGIN, y, ln, serif(row_pt))
+            y += line_h(serif(row_pt))
         y += row_gap
 
 
@@ -631,7 +713,35 @@ def fitcheck(dataset_path: Path) -> int:
             flag = "  (12pt fallback)"
         print(f"{r.id:<40} {len(r.digest.split()):>5}  {res[0]:<13} {res[1]:<13}{flag}")
     print(f"\n{problems} record(s) overflow one screen without permission for a second, or use a glyph the device lacks.")
+    spare, listed, left_off = quiet_cover_worst_case()
+    print(f"quiet cover worst case (5 items, 2-line lead kicker, long titles): {listed} supporting row(s) "
+          f"listed, {left_off} on their own pages only, {spare}px spare")
+    if spare < QUIET_MIN_MARGIN or listed < QUIET_MIN_WORST_ROWS:
+        print(f"  << the tallest quiet cover must keep {QUIET_MIN_MARGIN}px and list at least "
+              f"{QUIET_MIN_WORST_ROWS} supporting rows")
+        problems += 1
     return 1 if problems else 0
+
+
+def quiet_cover_worst_case() -> int:
+    """Spare px of the tallest quiet cover the publisher can produce: QUIET_MAX items,
+    a lead whose kicker wraps to two lines, every title far over two lines, the
+    approved copy, the tallest dateline."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from dogear.quiet import QUIET_MAX, quiet_object  # noqa: E402
+    # The device draws at most two kicker lines (DogearActivity: wrap(kMeta, ..., 2)); a
+    # real label such as NATIONAL ARTIST AWARDEE already takes two.
+    LONGEST_KICKER = "NATIONAL ARTIST AWARDEE 2026"
+    long_title = "An Exceedingly Long Title That Runs Well Past Two Lines On The Device Cover At Any Size"
+    entries = [{"role": "featured" if i == 0 else "standard", "dateLabel": "Wed 30 Sep",
+                "kicker": LONGEST_KICKER if i == 0 else "PUBLISHED 1950",
+                "title": long_title, "contentsLabel": None} for i in range(QUIET_MAX)]
+    issue = {"issueId": "dogear-worst-case", "quiet": quiet_object(), "entries": entries}
+    head = TOP_SAFE + line_h(sans(18, True)) + 2 + line_h(serif(12, italic=True)) + 12 + FEATURED_RULE + 14
+    y = head + line_h(sans(16, True)) + COVER_DATELINE_GAP  # the tallest dateline
+    assert len(kicker_lines(entries[0]["dateLabel"], entries[0]["kicker"])) == 2
+    plan = quiet_plan(issue, y)
+    return plan[4], len(plan[2]), plan[5]
 
 
 def specimen(issue: dict, entry_id: str, dataset_path: Path, dest: Path) -> None:

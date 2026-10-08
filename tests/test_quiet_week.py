@@ -137,8 +137,7 @@ class ConstantsAndPolicyTests(unittest.TestCase):
         self.assertEqual((QUIET_MIN, QUIET_MAX, QUIET_POOL_DAYS, QUIET_UPCOMING_DAYS, QUIET_SUBJECT_DAYS),
                          (3, 5, 182, 35, 365))
         self.assertEqual(QUIET_HEADING, "SOME QUIET THIS WEEK")
-        self.assertEqual(QUIET_NOTE, "Not much landed on our calendar this week. Still, we pinned a few things "
-                                     "worth a dogear for you.")
+        self.assertEqual(QUIET_NOTE, "Not much on our calendar, but still a few things worth a dogear for you.")
         self.assertEqual(EMPTY_CHOICES, ("hold-previous", "quiet-week"))
 
     def test_production_policy_keeps_quiet_week_off(self):

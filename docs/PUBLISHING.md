@@ -1890,7 +1890,7 @@ realistic staging validation, that is reported before any firmware change.
   - every item keeps its own original date;
   - a quiet issue has no "Also this week".
 - **The copy, exactly:** `SOME QUIET THIS WEEK` /
-  `Not much landed on our calendar this week. Still, we pinned a few things worth a dogear for you.`
+  `Not much on our calendar, but still a few things worth a dogear for you.` (note revised 9 October 2026)
 - **Code:**
   - `dogear/quiet.py`: constants, the copy, the frozen source and the
     anniversary window;
@@ -2002,8 +2002,35 @@ existing issue and provenance hashes.
   keeps its verified cache (`CACHED`); the next regular week displays
   normally.
 - Presentation firmware (accept 2 and 3; draw the heading and note on the
-  cover) is a later, owner-approved step. The cover layout is decided after a
-  mock render.
+  cover) is the owner-approved **Quiet A** cover:
+  - the quiet copy where the lead would start, then a rule;
+  - the lead keeps its usual treatment;
+  - the other picks follow as contents rows with their original dates, with no
+    "ALSO THIS WEEK" head.
+
+  Its size ladder:
+  1. the regular cover's plans;
+  2. two quiet-only last resorts: tighter rows, then one-line (ellipsized)
+     supporting titles;
+  3. if that still can't fit, the cover lists as many supporting rows as fit and
+     leaves the rest off.
+
+  The rules that hold throughout:
+  - the lead's kicker and title are never cut beyond a regular cover's limits;
+  - spacing is never tightened;
+  - every rung keeps a clean bottom margin of at least 12px;
+  - a row left off the cover is still a full issue item with its own page, and
+    the pager counts it; the cover is not a complete item list.
+
+  `mock/render_dogear.py` draws it (`draw_quiet_contents`, `QUIET_LADDER`,
+  `QUIET_MIN_MARGIN`). `--fitcheck` requires the tallest possible quiet cover
+  (5 items, a two-line lead kicker, a two-line lead title, long titles) to keep
+  12px and list at least 3 supporting rows; today it lists 3 with 31px spare.
+  Regular screens render byte-identically.
+- DOGEAR is compiled only into dev firmware today. Which CrossPoint release
+  includes it is an open owner decision. Until that release is installed and
+  verified, `data/firmware-contract.json` is not synced, and the production gate
+  stays closed.
 
 **Production.**
 - `Publisher._ready()` refuses `emptyWeek: quiet-week` unless the firmware

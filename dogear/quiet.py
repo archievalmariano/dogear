@@ -21,9 +21,9 @@ QUIET_POOL_DAYS = 182      # "Also this week" mentions from the previous 26 week
 QUIET_UPCOMING_DAYS = 35   # leave out a record whose anniversary falls in [W, W + 35 days)
 QUIET_SUBJECT_DAYS = 365   # leave out a person or work featured in full within 365 days
 
-# The approved copy, exactly (owner, 8 October 2026). Plain ASCII: no typesetting.
+# The approved copy, exactly (owner; note revised 9 October 2026). Plain ASCII: no typesetting.
 QUIET_HEADING = "SOME QUIET THIS WEEK"
-QUIET_NOTE = "Not much landed on our calendar this week. Still, we pinned a few things worth a dogear for you."
+QUIET_NOTE = "Not much on our calendar, but still a few things worth a dogear for you."
 
 REGULAR_SCHEMA_VERSION = 2  # what every DOGEAR reader so far accepts
 QUIET_SCHEMA_VERSION = 3    # pre-quiet firmware rejects it and keeps its verified cache
