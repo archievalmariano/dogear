@@ -96,8 +96,8 @@ class FixtureTests(unittest.TestCase):
         from dogear.synthetic import non_synthetic_records
         path = ROOT / "fixtures" / "staging-year.json"
         ds = load_dataset(path)
-        self.assertEqual(len(ds.records), 366)  # every month/day, 29 February included
-        self.assertEqual(len({(r.month, r.day) for r in ds.records}), 366)
+        self.assertEqual(len(ds.records), 366 - 13)  # every month/day but the 10-22 November gap
+        self.assertEqual(len({(r.month, r.day) for r in ds.records}), 366 - 13)
         for r in ds.records:
             self.assertTrue(r.id.startswith("staging-") and r.publishable, r.id)
             self.assertEqual(r.approval.by, "synthetic-fixture-not-editorial")

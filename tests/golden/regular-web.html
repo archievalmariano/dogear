@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>DOGEAR · 2–8 November 2026</title>
+<meta name="description" content="a limited weekly reading digest: 2–8 November 2026">
+<style>
+@font-face { font-family: 'Inter'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('../fonts/inter-latin-wght-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Inter'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('../fonts/inter-latin-ext-wght-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Inter'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('../fonts/inter-vietnamese-wght-normal.woff2') format('woff2'); unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB; }
+@font-face { font-family: 'Newsreader'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('../fonts/newsreader-latin-wght-normal.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Newsreader'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('../fonts/newsreader-latin-ext-wght-normal.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Newsreader'; font-style: normal; font-display: swap; font-weight: 100 900; src: url('../fonts/newsreader-vietnamese-wght-normal.woff2') format('woff2'); unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB; }
+@font-face { font-family: 'Newsreader'; font-style: italic; font-display: swap; font-weight: 100 900; src: url('../fonts/newsreader-latin-wght-italic.woff2') format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Newsreader'; font-style: italic; font-display: swap; font-weight: 100 900; src: url('../fonts/newsreader-latin-ext-wght-italic.woff2') format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Newsreader'; font-style: italic; font-display: swap; font-weight: 100 900; src: url('../fonts/newsreader-vietnamese-wght-italic.woff2') format('woff2'); unicode-range: U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB; }
+
+:root {
+  --paper: #f4f0e5; --ink: #172126; --ink-soft: #3f4a4e; --ink-faint: #636d71;
+  --rule: #b9b4a9; --heavy-rule: 2px solid var(--ink);
+  /* The one accent, as the portfolio uses it: --accent-ink for small text
+     (labels, kickers, actions), --accent for underlines, hover and focus. */
+  --accent: #d84f38; --accent-ink: #a93829;
+  --serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --step--1: clamp(0.83rem, 0.8rem + 0.15vw, 0.9rem);
+  --step-0: clamp(1rem, 0.96rem + 0.2vw, 1.08rem);
+  --step-1: clamp(1.2rem, 1.12rem + 0.4vw, 1.4rem);
+  --step-2: clamp(1.5rem, 1.35rem + 0.7vw, 1.9rem);
+  --step-3: clamp(1.95rem, 1.7rem + 1.2vw, 2.8rem);
+  --gutter: clamp(1rem, 5vw, 3.5rem);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: var(--step-0)/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overflow-x: clip; }
+a { color: inherit; text-decoration-color: var(--rule); text-underline-offset: 0.2em; }
+a:hover { color: var(--accent); text-decoration-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+main { max-width: 64rem; margin: 0 auto; padding: 0 var(--gutter) 6rem; }
+
+/* Masthead */
+.mast { padding: clamp(2.5rem, 7vw, 5.5rem) 0 1.25rem; border-bottom: var(--heavy-rule); }
+.label { margin: 0; font: 800 0.72rem/1.35 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; }
+.mast .label { color: var(--accent-ink); }
+.mast h1 { margin: 0.6rem 0 0; font: 760 clamp(3.3rem, 11vw, 7.2rem)/0.9 var(--sans); letter-spacing: -0.045em; }
+.mast .strap { margin: 0.9rem 0 0; font: italic 400 var(--step-1)/1.35 var(--serif); color: var(--ink-soft); }
+.mast .dateline { margin: 1.6rem 0 0; font: 760 var(--step-1)/1.2 var(--sans); letter-spacing: -0.01em; }
+.proof { margin: 1.25rem 0 0; padding: 0.55rem 0.7rem; border: 1px solid var(--ink);
+  font: 600 var(--step--1)/1.45 var(--sans); max-width: 40rem; }
+
+/* Contents */
+.contents { padding: 1.75rem 0 0.5rem; border-bottom: var(--heavy-rule); }
+.contents ol { list-style: none; margin: 0.9rem 0 0; padding: 0; border-top: 1px solid var(--rule); }
+.contents li { border-bottom: 1px solid var(--rule); }
+.contents li:last-child { border-bottom: 0; }
+.contents a { display: grid; grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr); gap: 0.2rem 1.5rem;
+  align-items: baseline; padding: 0.7rem 0; text-decoration: none; }
+.contents > .label, .also > .label { color: var(--accent-ink); }
+.contents li .label { color: var(--ink-faint); font-weight: 700; }
+.contents .title { font: 500 var(--step-1)/1.25 var(--serif); }
+.contents a:hover .title { color: var(--accent); }
+
+/* Entries */
+.entry { display: grid; grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr); gap: 0.75rem 1.5rem;
+  padding: 2.25rem 0 2.5rem; border-bottom: 1px solid var(--rule); }
+.entry .meta { padding-top: 0.45rem; }
+.entry .meta .label { color: var(--accent-ink); }
+.entry.lead .meta::before { content: ""; display: block; width: 2.5rem; height: 4px; margin-bottom: 0.8rem;
+  background: var(--accent); }
+.entry.lead .meta .label + .label { margin-top: 0.3rem; }
+.entry h2 { margin: 0 0 1rem; font: 560 var(--step-2)/1.12 var(--serif); letter-spacing: -0.012em; text-wrap: balance; }
+.entry.lead { border-bottom: var(--heavy-rule); }
+.entry.lead h2 { font: 760 var(--step-3)/1.02 var(--sans); letter-spacing: -0.035em; }
+.copy { max-width: 40rem; }
+.copy p { margin: 0 0 1.05em; font: 400 1.18rem/1.62 var(--serif); }
+.actions { margin: 1.4rem 0 0; }
+.action { margin: 0 0 0.7rem; }
+.cta { display: inline-block; font: 750 0.75rem/1.3 var(--sans); letter-spacing: 0.075em; text-transform: uppercase;
+  color: var(--accent-ink); text-decoration: none; border-bottom: 2px solid var(--accent); padding-bottom: 0.2rem; }
+.cta:hover { color: var(--ink); border-color: var(--ink); }
+.cta-detail { display: block; margin-top: 0.35rem; font: 400 var(--step--1)/1.45 var(--sans); color: var(--ink-faint); }
+.note { margin: 1.1rem 0 0; font: 400 var(--step--1)/1.5 var(--sans); color: var(--ink-faint); max-width: 40rem; }
+.sources { list-style: none; margin: 1.4rem 0 0; padding: 0; font: 400 var(--step--1)/1.45 var(--sans);
+  color: var(--ink-faint); max-width: 40rem; }
+.sources li { padding: 0.3rem 0; border-top: 1px solid var(--rule); }
+.sources li:last-child { border-bottom: 1px solid var(--rule); }
+
+/* Also this week, and the colophon */
+.also { padding: 2.25rem 0 0; }
+.also ul { list-style: none; margin: 0.9rem 0 0; padding: 0; border-top: var(--heavy-rule); }
+.also li { display: grid; grid-template-columns: minmax(10rem, 15rem) minmax(0, 1fr); gap: 0.2rem 1.5rem;
+  align-items: baseline; padding: 0.75rem 0; border-bottom: 1px solid var(--rule); }
+.also li .label { color: var(--ink-faint); font-weight: 700; }
+.also .title { font: 400 var(--step-0)/1.4 var(--serif); }
+footer { margin-top: 3rem; padding-top: 1.25rem; border-top: var(--heavy-rule); font: 400 var(--step--1)/1.55 var(--sans);
+  color: var(--ink-faint); }
+footer .label { margin: 0 0 0.3rem; color: var(--accent-ink); }
+footer .next { margin: 0 0 0.9rem; font: 760 var(--step-1)/1.3 var(--sans); color: var(--ink); letter-spacing: -0.01em; }
+footer p { margin: 0 0 0.4rem; }
+
+@media (max-width: 40rem) {
+  .contents a, .entry, .also li { grid-template-columns: minmax(0, 1fr); }
+  .entry .meta { padding-top: 0; }
+}
+</style>
+</head>
+<body>
+<main>
+<header class="mast">
+<p class="label">Desk · Archieval Mariano</p>
+<h1>DOGEAR</h1>
+<p class="strap">a limited weekly reading digest</p>
+<p class="dateline">2–8 NOVEMBER 2026</p>
+
+</header>
+<nav class="contents" aria-labelledby="contents"><p class="label" id="contents">In this issue</p><ol><li><a href="#golden-02-0"><span class="label">2 NOV · OBSERVANCE</span><span class="title">Golden observance 2 0</span></a></li><li><a href="#golden-02-1"><span class="label">2 NOV · OBSERVANCE</span><span class="title">Golden observance 2 1</span></a></li><li><a href="#golden-04-0"><span class="label">4 NOV · OBSERVANCE</span><span class="title">Golden observance 4 0</span></a></li><li><a href="#golden-04-1"><span class="label">4 NOV · OBSERVANCE</span><span class="title">Golden observance 4 1</span></a></li></ol></nav>
+<article class="entry lead" id="golden-02-0"><div class="meta"><p class="label">This week</p><p class="label">2 NOV · OBSERVANCE</p></div><div><h2>Golden observance 2 0</h2><div class="copy"><p>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word</p></div><div class="actions"><p class="action"><a class="cta" href="https://library.test/g/2/0">READ MORE ›</a><span class="cta-detail">Golden 2 0 · Library</span></p></div><ul class="sources" aria-label="Sources"><li><a href="https://library.test/s">S</a></li></ul></div></article><article class="entry" id="golden-02-1"><div class="meta"><p class="label">2 NOV · OBSERVANCE</p></div><div><h2>Golden observance 2 1</h2><div class="copy"><p>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word</p></div><div class="actions"><p class="action"><a class="cta" href="https://library.test/g/2/1">READ MORE ›</a><span class="cta-detail">Golden 2 1 · Library</span></p></div><ul class="sources" aria-label="Sources"><li><a href="https://library.test/s">S</a></li></ul></div></article><article class="entry" id="golden-04-0"><div class="meta"><p class="label">4 NOV · OBSERVANCE</p></div><div><h2>Golden observance 4 0</h2><div class="copy"><p>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word</p></div><div class="actions"><p class="action"><a class="cta" href="https://library.test/g/4/0">READ MORE ›</a><span class="cta-detail">Golden 4 0 · Library</span></p></div><ul class="sources" aria-label="Sources"><li><a href="https://library.test/s">S</a></li></ul></div></article><article class="entry" id="golden-04-1"><div class="meta"><p class="label">4 NOV · OBSERVANCE</p></div><div><h2>Golden observance 4 1</h2><div class="copy"><p>word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word</p></div><div class="actions"><p class="action"><a class="cta" href="https://library.test/g/4/1">READ MORE ›</a><span class="cta-detail">Golden 4 1 · Library</span></p></div><ul class="sources" aria-label="Sources"><li><a href="https://library.test/s">S</a></li></ul></div></article>
+<section class="also" aria-labelledby="also"><p class="label" id="also">Also this week</p><ul><li><span class="label">2 NOV · OBSERVANCE</span><span class="title">Golden observance 2 2</span></li><li><span class="label">4 NOV · OBSERVANCE</span><span class="title">Golden observance 4 2</span></li><li><span class="label">6 NOV · OBSERVANCE</span><span class="title">Golden observance 6 0</span></li></ul></section>
+<footer>
+<p class="label">Next issue</p>
+<p class="next">Monday 9 November 2026</p>
+<p>DOGEAR is drawn from a curated dataset of literary dates. Every entry keeps its sources.</p>
+</footer>
+</main>
+</body>
+</html>

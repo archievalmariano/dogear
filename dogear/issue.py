@@ -14,10 +14,11 @@ import json
 import re
 
 from .dataset import SOURCE_RANK, Record
+from .quiet import QUIET_SCHEMA_VERSION, REGULAR_SCHEMA_VERSION, quiet_object
 from .select import CTA_LABELS, Candidate, Selection, anniversary_bonus, offers_free_reading, qr_eligible
 from .week import day_month, long_date, range_dateline, range_dateline_short, short_date
 
-ISSUE_SCHEMA_VERSION = 2
+ISSUE_SCHEMA_VERSION = REGULAR_SCHEMA_VERSION
 LABEL = "DOGEAR"
 STRAPLINE = "a limited weekly reading digest"
 # Planned host (not deployed). One stable, readable path per issue: unlike GOTO's
@@ -110,8 +111,12 @@ def build_issue(selection: Selection, generated_at: dt.datetime, base_url: str =
             }
         )
     next_monday = week.start + dt.timedelta(days=7)
-    return {
-        "schemaVersion": ISSUE_SCHEMA_VERSION,
+    quiet = selection.edition == "quiet"
+    issue = {
+        # A quiet issue is schema 3: pre-quiet firmware accepts only 2, so it rejects a
+        # quiet issue and keeps its verified cache rather than show past-dated items
+        # without their explanation (PUBLISHING.md §21).
+        "schemaVersion": QUIET_SCHEMA_VERSION if quiet else ISSUE_SCHEMA_VERSION,
         "issueId": week.issue_id,
         "preview": selection.preview,
         "label": LABEL,
@@ -126,6 +131,9 @@ def build_issue(selection: Selection, generated_at: dt.datetime, base_url: str =
         "datasetSha256": selection.dataset_sha256,
         "entries": entries,
     }
+    if quiet:  # the issue belongs to this week; each entry keeps its own original date
+        issue["quiet"] = quiet_object()
+    return issue
 
 
 def _reading_links(rec: Record) -> list[dict]:

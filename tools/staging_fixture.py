@@ -1,9 +1,13 @@
 """Writes fixtures/staging-year.json: the synthetic dataset for the staging host.
 
 One placeholder record for every month and day of the calendar, 29 February
-included (it appears only in leap years), so a real-clock staging run can
-build an issue for ANY Monday-Sunday week. Staging follows the same calendar
-as production; nothing here sets or fakes a date.
+included (it appears only in leap years), EXCEPT a deliberate 13-day gap,
+10-22 November (QUIET_GAP). Any 13 consecutive days hold a full Monday-Sunday
+week, so every year has one genuinely empty week (16-22 November in 2026),
+which rehearses the quiet-week issue (PUBLISHING.md §21), and the weeks either
+side are sparse, which rehearses "sparse weeks are never padded". Every other
+real week builds an ordinary issue. Staging follows the same calendar as
+production; nothing here sets or fakes a date.
 
 This is test infrastructure, not editorial data, and not an editorial rule:
 one record a day is fixture density, chosen so a week offers about seven
@@ -11,7 +15,8 @@ candidates and selection still has to choose (scores vary by a fixed rotation
 of significance, recognition and type). Every record carries all the synthetic
 markers of dogear/synthetic.py (id prefix, tag, FIXTURE approval by a
 non-editor, example.org links), so production refuses this dataset and the
-staging target refuses anything else.
+staging target refuses anything else. Stable subject identities follow one
+documented convention: dogear:staging-person-MM-DD and dogear:staging-work-MM-DD.
 
     python3 tools/staging_fixture.py           # rewrite
     python3 tools/staging_fixture.py --check   # exit 1 if out of date
@@ -46,9 +51,22 @@ ROTATION = (
 )
 
 
+# The deliberate empty span (month, first day, last day), inclusive: 13 days, so it
+# always contains a full Monday-Sunday week.
+QUIET_GAP = (11, 10, 22)
+
+
+def in_gap(day: dt.date) -> bool:
+    month, first, last = QUIET_GAP
+    return day.month == month and first <= day.day <= last
+
+
 def days() -> list:
+    """(rotation index, day) for every calendar day outside the gap. The index is the
+    day's place in the full year, so the gap changes no other record."""
     start = dt.date(LEAP_YEAR, 1, 1)
-    return [start + dt.timedelta(days=i) for i in range(366)]
+    full = [start + dt.timedelta(days=i) for i in range(366)]
+    return [(n, d) for n, d in enumerate(full) if not in_gap(d)]
 
 
 def record(day: dt.date, n: int) -> dict:
@@ -61,6 +79,8 @@ def record(day: dt.date, n: int) -> dict:
         "id": f"staging-{day.month:02d}-{day.day:02d}", "month": day.month, "day": day.day, "year": 1950,
         "precision": "day", "dateBasis": "recorded", "claims": "straightforward", "type": kind,
         "person": f"Staging Writer {day.strftime('%b')} {day.day}", "work": f"Staging Work {day.strftime('%b')} {day.day}",
+        "personId": f"dogear:staging-person-{day.month:02d}-{day.day:02d}",
+        "workId": f"dogear:staging-work-{day.month:02d}-{day.day:02d}",
         "headline": f"Staging item: {label}",
         "copy": {"digest": text, "expanded": text, "allowSecondPage": False},
         "tags": [TAG], "significance": significance, "recognition": recognition, "discoveryValue": discovery,
@@ -77,7 +97,7 @@ def record(day: dt.date, n: int) -> dict:
 
 
 def build() -> dict:
-    return {"schemaVersion": 3, "records": [record(d, n) for n, d in enumerate(days())]}
+    return {"schemaVersion": 3, "records": [record(d, n) for n, d in days()]}
 
 
 def render() -> str:

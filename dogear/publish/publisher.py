@@ -30,10 +30,14 @@ import datetime as dt
 import json
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Optional
 
 from ..week import MANILA, IssueWeek, week_of, week_starting
 from .. import synthetic
+from ..quiet import QUIET_SCHEMA_VERSION, QuietSource
+from . import quiet_history
+from .edition import revision_problems
 from . import eligibility, routes
 from . import registry as regmod
 from .policy import PublicationPolicy
@@ -41,6 +45,10 @@ from .pubdata import CorruptState, PubData, SaveFailed, targets_problem
 from .registry import REGISTRY_KEY, NoOp, Refused
 from .staging import Checks, Staged, StageInputs, WeekHeld, provenance_bytes, verify_staged
 from .staging import stage as stage_week
+
+# The firmware contract (tools/firmware_contract.py --sync): quiet issues need
+# limits.kIssueSchemaMax >= 3 there before production may select quiet-week.
+FIRMWARE_CONTRACT = Path(__file__).resolve().parents[2] / "data" / "firmware-contract.json"
 from .store import PreconditionFailed, StoreError
 
 ROLLOVER = dt.time(6, 0)  # Monday, Asia/Manila
@@ -93,7 +101,7 @@ class Publisher:
                  checks: Checks = Checks(), clock: Optional[Callable[[], dt.datetime]] = None,
                  mode: str = "production", assets: Optional[dict] = None,
                  served: Optional[Callable[[str], tuple]] = None, attempts: int = 3,
-                 separation: Optional[str] = None) -> None:
+                 separation: Optional[str] = None, quiet_supported: Optional[bool] = None) -> None:
         if mode not in ("production", "test"):
             raise ValueError("mode must be production or test")
         if separation not in (None, "staging", "production") or (mode == "production" and separation == "staging"):
@@ -105,6 +113,8 @@ class Publisher:
         self.clock = clock or (lambda: dt.datetime.now(MANILA))
         self.mode, self.assets, self.attempts = mode, assets or {}, attempts
         self.served = served or (lambda path: routes.fetch(self.store, path))
+        # Whether DOGEAR firmware presents quiet issues (None: read the firmware contract).
+        self.quiet_supported = quiet_supported
 
     # Readiness and state.
 
@@ -118,6 +128,19 @@ class Publisher:
             missing.append("fit checker")
         if missing:
             raise NotReady("production publishing refused; unset: " + ", ".join(missing))
+        if self.policy.empty_week == "quiet-week" and not self._firmware_presents_quiet():
+            # The switch is the owner's, after presentation firmware is released and
+            # verified on devices; this only refuses it while the firmware cannot.
+            raise NotReady("production publishing refused; quiet-week needs firmware that presents quiet issues")
+
+    def _firmware_presents_quiet(self) -> bool:
+        if self.quiet_supported is not None:
+            return self.quiet_supported
+        try:
+            limits = json.loads(FIRMWARE_CONTRACT.read_text(encoding="utf-8")).get("limits", {})
+        except (OSError, ValueError, AttributeError):
+            return False
+        return isinstance(limits.get("kIssueSchemaMax"), int) and limits["kIssueSchemaMax"] >= QUIET_SCHEMA_VERSION
 
     def _read_registry(self) -> tuple:
         try:
@@ -195,6 +218,12 @@ class Publisher:
             self._history(reg, dt.date.max)  # every visible revision has its committed record
         except NeedsHuman as err:
             problems.append(str(err))
+        lines = {h["txn"]: h for h in quiet_history.content_lines(self.pubdata)}
+        for week in sorted(reg["weeks"]):  # each active revision's date/edition invariant, bound
+            rev = regmod.active_revision(reg, week)
+            line = lines.get(rev["txn"])
+            if line is not None:
+                problems += quiet_history.line_problems(line, reg, self.pubdata, self.store)
         return problems + self._hosted_problems(reg)
 
     def _fetch(self, path: str) -> tuple:
@@ -242,6 +271,48 @@ class Publisher:
             elif body != self.assets[name]:
                 problems.append(f"{where}: the served bytes differ from the publisher's copy")
         return problems
+
+    def attest_subjects(self, txn: str, mapping: object, source: Optional[bytes]) -> Outcome:
+        """Append one reviewed attestation of a LEGACY content line's subject identities
+        (PUBLISHING.md §21). Local and explicit only. Refuses unless the line validates
+        and has no subjects, nothing attests it yet, ``source`` is the publication's
+        original frozen dataset (bytes hashing to the registry revision's
+        datasetSha256), and the mapping names exactly its digest records at the
+        fingerprints that revision published, with identity presence matching each
+        original record. It infers nothing: the mapping is the reviewer's claim, and
+        the evidence it is bound to is kept immutably under evidence/<txn>/."""
+        reg, _obj = self._read_registry()
+        lines = quiet_history.validated_lines(reg, self.pubdata, self.store)
+        line = next((h for h in lines if h["txn"] == txn), None)
+        if line is None:
+            raise Refused(f"{txn} is not a committed content line")
+        if any(isinstance(a, dict) and a.get("txn") == txn for a in self.pubdata.read_attestations()):
+            raise Refused(f"{txn} is already attested")
+        rev = reg["weeks"][line["week"]]["revisions"][line["rev"]]
+        if source is None or regmod.sha256(source) != rev.get("datasetSha256"):
+            raise Refused("the original frozen dataset is unavailable or does not match the registry's hash")
+        if not isinstance(mapping, list):
+            raise Refused("the mapping must be a list of {recordId, personId, workId}")
+        prov = json.loads(self.pubdata.read_published_provenance(line["week"], line["rev"]))
+        pinned = {r["recordId"]: r["fingerprint"] for r in prov["records"] if r["section"] == "digest"}
+        entry = {"txn": txn, "sourceDatasetSha256": rev["datasetSha256"], "attestedAt": self.clock().isoformat(),
+                 "by": "operator",
+                 "subjects": [{"recordId": m.get("recordId"), "fingerprint": pinned.get(m.get("recordId")),
+                               "personId": m.get("personId"), "workId": m.get("workId")}
+                              for m in mapping if isinstance(m, dict)]}
+        created = self.pubdata.read_evidence_dataset(txn) is None
+        self.pubdata.write_evidence_dataset(txn, source)
+        problems = quiet_history.attestation_problems(entry, line, reg, self.pubdata)
+        if problems:
+            if created:  # leave nothing behind from a refused attestation
+                self.pubdata.evidence_dataset_path(txn).unlink()
+            raise Refused("attestation refused: " + "; ".join(problems))
+        self.pubdata.append_attestation(entry)
+        try:
+            self.pubdata.save(f"attest subjects {txn}")
+        except SaveFailed as err:
+            raise Aborted(f"the attestation was not saved ({err}); nothing changed in the remote") from None
+        return Outcome("attested", f"{txn}: {len(entry['subjects'])} digest record(s) attested", txn)
 
     # Reconciliation.
 
@@ -354,7 +425,11 @@ class Publisher:
             return None
         return synthetic.revision_problem(self.separation, provenance, issue, dataset_text)
 
-    def _eligibility_guard(self, provenance: dict, issue_bytes: bytes) -> Guard:
+    def _eligibility_guard(self, provenance: dict, issue_bytes: bytes, line: Optional[dict] = None,
+                           monday: Optional[dt.date] = None) -> Guard:
+        """Re-run before every registry-write attempt (launch, promote, correct, and each
+        retry): eligibility, separation, and the date/edition invariant of the proposed
+        revision against its proposed history line, all read afresh each time."""
         def guard() -> Optional[str]:
             try:
                 text, issue = self._dataset_text(), json.loads(issue_bytes)
@@ -363,15 +438,25 @@ class Publisher:
                 return f"cannot re-check eligibility: {err}"
             if problems:
                 return "eligibility changed during publication: " + "; ".join(problems)
-            return self._separation_problem(provenance, issue, text)
+            separated = self._separation_problem(provenance, issue, text)
+            if separated:
+                return separated
+            if monday is not None:
+                problems = revision_problems(monday, issue, provenance, line)
+                if line is not None and line.get("issueSha256") != regmod.sha256(issue_bytes):
+                    problems.append("the proposed history line names other issue bytes")
+                if problems:
+                    return "the revision breaks the date/edition invariant: " + "; ".join(problems)
+            return None
         return guard
 
     def _visible_revisions_guard(self, before: dict, after: dict) -> Guard:
         """For rollback and restore: every revision the change makes visible must still be publishable."""
         shown = [(w, e["active"]) for w, e in after["weeks"].items()
                  if before["weeks"][w]["active"] != e["active"]]
-        if after["current"] != before["current"]:
-            shown.append((after["current"], after["weeks"][after["current"]]["active"]))
+        # The current revision always: resume changes neither `current` nor an active
+        # number, yet makes the current revision visible again for automatic publication.
+        shown.append((after["current"], after["weeks"][after["current"]]["active"]))
 
         def guard() -> Optional[str]:
             for week, rev_no in sorted(set(shown)):
@@ -397,6 +482,14 @@ class Publisher:
                 separated = self._separation_problem(prov_obj, issue_obj, text)
                 if separated:
                     return f"{week} revision {rev_no} may not be shown here: {separated}"
+                # The stored revision's date/edition invariant, bound to its committed
+                # history line, provenance, issue and web bytes.
+                lines = [h for h in quiet_history.content_lines(self.pubdata) if h["txn"] == rev["txn"]]
+                if len(lines) != 1:
+                    return f"{week} revision {rev_no}: no single committed history line for it"
+                bound = quiet_history.line_problems(lines[0], after, self.pubdata, self.store)
+                if bound:
+                    return f"{week} revision {rev_no} may not be shown: " + "; ".join(bound)
             return None
         return guard
 
@@ -620,7 +713,9 @@ class Publisher:
             by[r["section"]].append(r["recordId"])
         entry = {"txn": None, "op": op, "week": week, "rev": rev, "issueSha256": staged.issue_sha,
                  "webSha256": staged.web_sha, "recordIds": by["digest"], "alsoIds": by["also"],
-                 "publishedAt": published_at}
+                 "edition": staged.provenance.get("edition", "regular"), "publishedAt": published_at}
+        if "subjects" in staged.provenance:  # stable identities, as the hash-pinned provenance records them
+            entry["subjects"] = staged.provenance["subjects"]
         if reason:
             entry["reason"] = reason
         return entry
@@ -633,7 +728,22 @@ class Publisher:
             notices.append(f"staged copy not saved ({err}); the transaction carries its provenance")
 
     def _stage(self, week: IssueWeek, history: list, now: dt.datetime) -> Staged:
-        return stage_week(week, self.inputs, self.policy, history, now, self.checks, self.mode)
+        try:
+            return stage_week(week, self.inputs, self.policy, history, now, self.checks, self.mode)
+        except WeekHeld as held:
+            if not (held.empty and self.policy.empty_week == "quiet-week"):
+                raise
+        # An empty week under quiet-week: only now is history validated and read.
+        return stage_week(week, self.inputs, self.policy, history, now, self.checks, self.mode,
+                          quiet_source=self._quiet_source(week.start))
+
+    def _quiet_source(self, monday: dt.date) -> QuietSource:
+        """The quiet inputs for week ``monday``, from validated history only
+        (CorruptState if any content line fails validation)."""
+        reg, _obj = self._read_registry()
+        lines = quiet_history.validated_lines(reg, self.pubdata, self.store)
+        attested = quiet_history.attested_subjects(lines, reg, self.pubdata)
+        return quiet_history.build_source(lines, attested, monday)
 
     def stage(self, monday: dt.date) -> Outcome:
         """Stage a week (the Friday job stages next week; see stage_next)."""
@@ -681,8 +791,9 @@ class Publisher:
         problems = []
         if staged is not None:
             try:
+                source = self._quiet_source(week.start) if staged.provenance.get("edition") == "quiet" else None
                 problems = verify_staged(staged, self.inputs, self.policy, history, self._dataset_text(),
-                                         self.checks, self.mode)
+                                         self.checks, self.mode, quiet_source=source)
             except (OSError, ValueError) as err:
                 problems = [f"cannot verify the staged week: {err}"]
         if staged is None or problems:
@@ -699,7 +810,8 @@ class Publisher:
         txn = regmod.make_txn(now, "promote", [obj.etag, staged.issue_sha, staged.web_sha])
         new_reg = regmod.promote(reg, week.start, staged.revision(published_at), txn)
         history_line = dict(self._history_entry("promote", key, 0, staged, published_at), txn=txn)
-        guard = self._all(self._week_guard(week), self._eligibility_guard(staged.provenance, staged.issue_bytes))
+        guard = self._all(self._week_guard(week), self._eligibility_guard(staged.provenance, staged.issue_bytes,
+                                                                          history_line, week.start))
         out = self._transact("promote", key, reg, obj, new_reg, self._uploads(staged), guard,
                              history_line, staged.provenance)
         out.notices = notices + out.notices
@@ -731,7 +843,8 @@ class Publisher:
         txn = regmod.make_txn(now, "launch", [None, staged.issue_sha, staged.web_sha])
         new_reg = regmod.launch(None, week.start, staged.revision(published_at), txn)
         history_line = dict(self._history_entry("launch", key, 0, staged, published_at), txn=txn)
-        guard = self._all(self._week_guard(week), self._eligibility_guard(staged.provenance, staged.issue_bytes))
+        guard = self._all(self._week_guard(week), self._eligibility_guard(staged.provenance, staged.issue_bytes,
+                                                                          history_line, week.start))
         out = self._transact("launch", key, None, None, new_reg, self._uploads(staged), guard,
                              history_line, staged.provenance)
         out.notices = notices + out.notices
@@ -762,7 +875,7 @@ class Publisher:
         rev = new_reg["weeks"][key]["active"]
         history_line = dict(self._history_entry("correct", key, rev, staged, published_at, reason), txn=txn)
         return self._transact("correct", key, reg, obj, new_reg, self._uploads(staged),
-                              self._eligibility_guard(staged.provenance, staged.issue_bytes),
+                              self._eligibility_guard(staged.provenance, staged.issue_bytes, history_line, monday),
                               history_line, staged.provenance)
 
     def _control(self, op: str, plan: Callable[[dict, str], dict], basis: list, week: str, detail: dict) -> Outcome:

@@ -2,5 +2,5 @@
   "_note": "S2 STAGING ONLY, with --mode test and fixtures/staging-s2.json. These are test values, not editorial decisions; data/publication-policy.json stays undecided and production refuses until it is set (PUBLISHING.md §14).",
   "slot5Bar": 42,
   "sparseWeek": "publish",
-  "emptyWeek": "hold-previous"
+  "emptyWeek": "quiet-week"
 }

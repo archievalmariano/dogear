@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 2,
+  "issueId": "dogear-2026-11-02",
+  "preview": false,
+  "label": "DOGEAR",
+  "strapline": "a limited weekly reading digest",
+  "rangeStart": "2026-11-02",
+  "rangeEnd": "2026-11-08",
+  "dateline": "2–8 NOVEMBER 2026",
+  "datelineShort": "2–8 NOV 2026",
+  "nextIssue": "Monday 9 November 2026",
+  "editionUrl": "https://dogear.example.org/2026-11-02/",
+  "generatedAt": "2026-10-30T10:02:00+08:00",
+  "datasetSha256": "bb407a4e488c1d0076d8eacb7031ef9e9814246dac2be8c61525770c400a1b47",
+  "entries": [
+    {
+      "id": "golden-02-0",
+      "role": "featured",
+      "date": "2026-11-02",
+      "dateLabel": "2 Nov",
+      "kicker": "OBSERVANCE",
+      "contentsLabel": "OBSERVANCE",
+      "title": "Golden observance 2 0",
+      "headline": "Golden observance 2 0",
+      "body": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+      "secondPage": false,
+      "cta": null
+    },
+    {
+      "id": "golden-02-1",
+      "role": "standard",
+      "date": "2026-11-02",
+      "dateLabel": "2 Nov",
+      "kicker": "OBSERVANCE",
+      "contentsLabel": "OBSERVANCE",
+      "title": "Golden observance 2 1",
+      "headline": "Golden observance 2 1",
+      "body": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+      "secondPage": false,
+      "cta": null
+    },
+    {
+      "id": "golden-04-0",
+      "role": "standard",
+      "date": "2026-11-04",
+      "dateLabel": "4 Nov",
+      "kicker": "OBSERVANCE",
+      "contentsLabel": "OBSERVANCE",
+      "title": "Golden observance 4 0",
+      "headline": "Golden observance 4 0",
+      "body": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+      "secondPage": false,
+      "cta": null
+    },
+    {
+      "id": "golden-04-1",
+      "role": "standard",
+      "date": "2026-11-04",
+      "dateLabel": "4 Nov",
+      "kicker": "OBSERVANCE",
+      "contentsLabel": "OBSERVANCE",
+      "title": "Golden observance 4 1",
+      "headline": "Golden observance 4 1",
+      "body": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+      "secondPage": false,
+      "cta": null
+    }
+  ]
+}

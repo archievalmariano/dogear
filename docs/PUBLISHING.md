@@ -1861,3 +1861,144 @@ records whether a device:
 
 The firmware is not changed to force a result. If the behaviour blocks
 realistic staging validation, that is reported before any firmware change.
+
+## 21. The quiet-week issue (owner decisions, 8 October 2026; Codex PLAN CLEAR)
+
+**Policy:**
+- `slot5Bar: 42` and `sparseWeek: publish` are decided and set in
+  `data/publication-policy.json`.
+- `emptyWeek` gains the mode `quiet-week`. It stays **unset in production**
+  until DOGEAR firmware presents quiet issues (see "Production" below), so
+  production still refuses to publish.
+- Staging uses `quiet-week`.
+
+**What a quiet issue is.**
+- **Trigger:** only when the regular selection picks nothing (a sparse week of
+  1-2 items publishes as it is, never padded).
+- **Contents:** 3 to 5 items drawn from earlier issues' **"Also this week"**
+  mentions. A mention is not a publication.
+- **Selection:** the regular scorer, composition nudges and slot bars (30 for
+  slots 1-4, 42 for slot 5), with a ceiling of 5.
+- **Fewer than 3:** the previous issue stays current.
+- **Never in the pool:**
+  - a record ever published as a full item;
+  - a record whose own anniversary falls in [W, W + 35 days);
+  - a record about a person or work featured in full within 365 days;
+  - a record lacking stable identities.
+- **Shape:**
+  - the issue belongs to its own Monday-Sunday week;
+  - every item keeps its own original date;
+  - a quiet issue has no "Also this week".
+- **The copy, exactly:** `SOME QUIET THIS WEEK` /
+  `Not much landed on our calendar this week. Still, we pinned a few things worth a dogear for you.`
+- **Code:**
+  - `dogear/quiet.py`: constants, the copy, the frozen source and the
+    anniversary window;
+  - `select_quiet_issue` in `dogear/select.py`.
+
+**Stable identities.** Canonical records carry `personId` and `workId`:
+- `wikidata:Q<digits>`, or `dogear:<slug>` minted once, never computed from a
+  display name;
+- required on approved records;
+- the one-per-subject rule uses them;
+- the name fallback, for proofs only, is Unicode-aware and never empty.
+
+Every new digest's identities are written to its provenance (`subjects`,
+hash-pinned by the registry) and to its history line, and the two must agree.
+
+**History, no new state.** `dogear/publish/quiet_history.py` derives the
+quiet inputs from committed launch, promote and correct lines. Before a line
+counts, it is validated against:
+- its registry revision (txn, op, issue and web hashes);
+- the hash-pinned provenance (digest, also, edition, subjects);
+- the stored issue and web bytes;
+- the date/edition invariant.
+
+Any mismatch is `CorruptState`, and nothing is published.
+
+**The sets for week W:**
+- every regular digest of any week, W included, plus quiet picks of other
+  weeks, is excluded for good;
+- W's own earlier quiet picks may be kept by a quiet → quiet correction;
+- a *different* record about one of those subjects may not;
+- the pool is "Also this week" from the previous 26 weeks;
+- subject identities come from the previous 365 days, any later week, and W's
+  own earlier regular revisions.
+
+Corrected-away and rolled-back revisions count. The source is frozen into a
+quiet issue's provenance (`inputs.quietSource`), so it regenerates byte for
+byte. If history changes after Friday's stage, Monday's promotion re-stages.
+
+**Legacy lines.** A line written before identities existed has no
+`subjects`. Inside the 365-day window it makes the source incomplete, and the
+quiet week **holds**: identity is never read back from current records. The
+only backfill is `dogear publish attest-subjects --txn T --from MAPPING.json
+[--source DATASET]`:
+- local and explicit, never in a workflow;
+- it refuses unless the line validates and lacks subjects, nothing attests it
+  yet, the source is the publication's original frozen dataset (it hashes to
+  the revision's `datasetSha256`), the mapping covers the digest exactly at the
+  pinned fingerprints, and id presence matches each original record;
+- the source is kept immutably under `evidence/<txn>/`;
+- the attestation is appended to `subject-attestations.jsonl`;
+- a duplicate, or altered evidence, proves nothing.
+
+**The date and edition invariant** (`dogear/publish/edition.py`):
+
+| Edition | Rule |
+|---|---|
+| Regular | schema 2, no `quiet` key, every entry dated inside its own week |
+| Quiet | schema 3, the exact copy, 3-5 entries each at its recorded original date, a `quietSource`, and no "Also this week" |
+
+The edition must agree across issue, provenance and history line. It is
+checked:
+- at stage;
+- at the staged-week re-check;
+- in the guard before every registry write and retry (launch, promote,
+  correct);
+- on every revision rollback, restore or **resume** makes visible (resume
+  re-checks the current revision);
+- when history is validated;
+- by the read-only reset preflight.
+
+The registry format is unchanged: the binding runs through each revision's
+existing issue and provenance hashes.
+
+**Devices: schema 3 is the boundary.**
+- Pre-quiet firmware accepts only schema 2, so it rejects a quiet issue and
+  keeps its verified cache (`CACHED`); the next regular week displays
+  normally.
+- Presentation firmware (accept 2 and 3; draw the heading and note on the
+  cover) is a later, owner-approved step. The cover layout is decided after a
+  mock render.
+
+**Production.**
+- `Publisher._ready()` refuses `emptyWeek: quiet-week` unless the firmware
+  contract records `kIssueSchemaMax >= 3`.
+- The switch itself stays the owner's, after the firmware is released and
+  physically verified on both devices.
+
+**Staging rehearsal.**
+- `fixtures/staging-year.json` leaves out **10-22 November**, so every year
+  has one empty week (16-22 November in 2026), and the weeks the gap cuts short
+  are sparse.
+- `DOGEAR staging ops` (`.github/workflows/dogear-staging-ops.yml`):
+  - manual `stage-next`, `promote` or `status`;
+  - the target is written literally as `staging`;
+  - a first job, with no Environment and no secrets, refuses any ref but
+    `main` and any other operation;
+  - no schedule.
+- **Observed in the multi-year test (2026-2030, weekly publication):**
+  - 2026's gap week is quiet (4 items);
+  - from 2027 the gap week **holds** ("2 qualifying items").
+
+  The fixture's records recur every year, and anything once published in full
+  is excluded for good, so the quiet pool thins year on year. That is the
+  owner's rule working as written. In the editorial dataset, the same rule
+  means quiet material comes only from records that have never been featured.
+- **Staging's one legacy line** (launch 2026-10-05) must be attested before
+  November's quiet week can publish. Its original frozen dataset is
+  `staged/2026-10-05/dataset.json` in `dogear-publication-data-staging`,
+  written once by `f4a4c27`. It hashes to that revision's `datasetSha256`
+  (`92c74279…`), and its 4 digest records match their pinned fingerprints.
+  The attestation itself is not written yet.

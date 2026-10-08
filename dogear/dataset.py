@@ -58,6 +58,7 @@ import datetime as dt
 import hashlib
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 from pathlib import Path
@@ -107,6 +108,12 @@ ID_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 LANG_RE = re.compile(r"^[a-z]{2,3}$")
 COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
 FP_RE = re.compile(r"^[0-9a-f]{16}$")
+# Stable subject identity (PUBLISHING.md §21): an explicit, editor-assigned id for the
+# person and for the work, never computed from a display name. Alternate spellings and
+# scripts of one subject share an id; different subjects sharing a name do not.
+#   wikidata:Q<digits>   preferred, when the subject has a Wikidata entity
+#   dogear:<slug>        otherwise, minted once by an editorial tool and then stored
+SUBJECT_ID_RE = re.compile(r"^(?:wikidata:Q[1-9][0-9]{0,11}|dogear:[a-z0-9](?:[a-z0-9-]{1,62})[a-z0-9])$")
 MAX_ID_LEN = 64
 # Years are CE as the sources print them (no BCE, no calendar conversion),
 # from 1 to 2100: within what Python dates support, and late enough for
@@ -127,11 +134,11 @@ DIGEST_WORDS = (40, 70)
 MATERIAL_FIELDS = (
     "id", "month", "day", "year", "precision", "type", "person", "work",
     "headline", "label", "copy", "status", "sources", "links", "dateBasis", "claims",
-    "locality",
+    "locality", "personId", "workId",
 )
 # Material fields added after records were first approved count only when
 # present, so adding one never withdraws an unrelated approval.
-_OPTIONAL_MATERIAL = ("locality",)
+_OPTIONAL_MATERIAL = ("locality", "personId", "workId")
 
 _DAYS_IN_MONTH = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)  # Feb 29 allowed
 
@@ -199,6 +206,8 @@ class Record:
     type: str
     person: Optional[str]
     work: Optional[str]
+    person_id: Optional[str]  # stable subject identity (SUBJECT_ID_RE), required once approved
+    work_id: Optional[str]
     headline: str
     label: Optional[str]  # kicker word override, e.g. "NOBEL PRIZE" for an event
     digest: str
@@ -277,12 +286,19 @@ class Record:
 
     @property
     def subject_keys(self) -> tuple[str, ...]:
-        """Keys used to keep one person or one work from appearing twice in an issue."""
+        """Keys used to keep one person or one work from appearing twice in an issue.
+
+        The stable id when there is one (every approved record has them). The name
+        fallback, for proofs and unapproved records only, is Unicode-aware and never
+        empty, so two different non-Latin names can no longer collide on "person:"."""
         keys = []
-        if self.person:
-            keys.append("person:" + _slug(self.person))
-        if self.work:
-            keys.append("work:" + _slug(self.work))
+        for kind, sid, name in (("person", self.person_id, self.person), ("work", self.work_id, self.work)):
+            if sid:
+                keys.append(f"{kind}:{sid}")
+            elif name:
+                fallback = subject_name_key(name)
+                if fallback:
+                    keys.append(f"{kind}-name:{fallback}")
         return tuple(keys)
 
 
@@ -297,6 +313,14 @@ class Dataset:
             if r.id == record_id:
                 return r
         raise KeyError(record_id)
+
+
+def subject_name_key(text: str) -> str:
+    """Unicode-aware name normalization for the fallback key and the editorial lint:
+    NFKC, case-folded, accents dropped, letters and digits of every script kept."""
+    folded = unicodedata.normalize("NFKD", unicodedata.normalize("NFKC", text).casefold())
+    kept = "".join(ch if ch.isalnum() else " " for ch in folded if not unicodedata.combining(ch))
+    return "-".join(kept.split())
 
 
 def _slug(text: str) -> str:
@@ -464,6 +488,16 @@ def _check_record(raw: dict, problems: list[str], warnings: list[str]) -> Option
     for field in ("person", "work", "notes", "verifiedBy"):
         if not _opt_text(raw.get(field)):
             bad(f"{field} must be text or null")
+    for name_field, id_field in (("person", "personId"), ("work", "workId")):
+        sid = raw.get(id_field)
+        if sid is not None and not (isinstance(sid, str) and SUBJECT_ID_RE.match(sid)):
+            bad(f"{id_field} must be wikidata:Q<digits> or dogear:<slug> (3-64 lowercase ASCII), or absent")
+        elif sid is not None and raw.get(name_field) is None:
+            bad(f"{id_field} is set but {name_field} is not")
+        elif sid is None and raw.get(name_field) is not None and raw.get("approval") is not None:
+            # Publishable records carry stable identities: a quiet week's subject rule and
+            # the issue's one-per-subject rule must never rest on display-name text.
+            bad(f"an approved record with a {name_field} needs {id_field}")
     verified_on = raw.get("verifiedOn")
     if verified_on is not None:
         try:
@@ -598,6 +632,8 @@ def _check_record(raw: dict, problems: list[str], warnings: list[str]) -> Option
         type=raw["type"],
         person=raw.get("person"),
         work=raw.get("work"),
+        person_id=raw.get("personId"),
+        work_id=raw.get("workId"),
         headline=headline,
         label=label,
         digest=digest,
@@ -680,8 +716,33 @@ def parse_dataset(text: str) -> Dataset:
         records.append(rec)
     if problems:
         raise DatasetError(problems)
+    warnings += _identity_lint(records)
     digest = hashlib.sha256(encoded).hexdigest()
     return Dataset(records=tuple(records), sha256=digest, warnings=tuple(warnings))
+
+
+def _identity_lint(records: list) -> list[str]:
+    """Editorial warnings, never errors: one id used for markedly different names, or
+    one name used with different ids (both are sometimes right; both deserve a look)."""
+    out = []
+    for kind, sid_of, name_of in (("person", lambda r: r.person_id, lambda r: r.person),
+                                  ("work", lambda r: r.work_id, lambda r: r.work)):
+        names_by_id: dict = {}
+        ids_by_name: dict = {}
+        for r in records:
+            sid, name = sid_of(r), name_of(r)
+            if not sid or not name:
+                continue
+            key = subject_name_key(name)
+            names_by_id.setdefault(sid, set()).add(key)
+            ids_by_name.setdefault(key, set()).add(sid)
+        for sid, names in sorted(names_by_id.items()):
+            if len(names) > 1:
+                out.append(f"{kind} id {sid} is used with {len(names)} different names (alternate spellings?)")
+        for key, sids in sorted(ids_by_name.items()):
+            if key and len(sids) > 1:
+                out.append(f"{kind} name {key!r} carries {len(sids)} different ids (two subjects, or a missed merge?)")
+    return out
 
 
 def _read_dataset_text(path: Path) -> str:

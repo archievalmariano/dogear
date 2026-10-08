@@ -66,7 +66,8 @@ from dataclasses import dataclass, field
 
 from .affinity import EMPTY, Affinity
 from .dataset import Dataset, Record
-from .week import IssueWeek, is_leap
+from .quiet import QUIET_MAX, QuietSource, anniversary_imminent
+from .week import IssueWeek, is_leap, week_starting
 
 # Shape. MAX is a ceiling, not a target: nothing pads an issue.
 MAX_ENTRIES = 8
@@ -162,10 +163,15 @@ class Selection:
     candidates: list[Candidate]  # everything that matched the week, scored
     dataset_sha256: str
     preview: bool = False  # a proof: never publish (see select_issue)
+    edition: str = "regular"  # "quiet": an empty week's quiet issue (select_quiet_issue)
 
     @property
     def runners_up(self) -> list[Candidate]:
-        """Eligible records that lost only to the issue's shape, for the web edition."""
+        """Eligible records that lost only to the issue's shape, for the web edition.
+        A quiet issue has none: its leftovers are neither shown nor recorded, so they
+        never cycle back into a later quiet pool."""
+        if self.edition == "quiet":
+            return []
         return [c for c in self.candidates if c.shape_blocked]
 
     @property
@@ -324,10 +330,11 @@ def _composition(cand: Candidate, picked: list[Candidate]) -> tuple[int, list[st
     return adj, why
 
 
-def _shape_block(cand: Candidate, picked: list[Candidate], used: set[str], per_day: Counter) -> str | None:
+def _shape_block(cand: Candidate, picked: list[Candidate], used: set[str], per_day: Counter,
+                 max_entries: int = MAX_ENTRIES) -> str | None:
     rec = cand.record
-    if len(picked) >= MAX_ENTRIES:
-        return f"issue full ({MAX_ENTRIES})"
+    if len(picked) >= max_entries:
+        return f"issue full ({max_entries})"
     clash = next((k for k in rec.subject_keys if k in used), None)
     if clash:
         return f"same subject already in issue ({clash})"
@@ -354,24 +361,44 @@ def select_issue(
         if date is None:
             continue
         cand = _score(record, date, affinity, history, week, overrep)
-        if record.status != "verified":
-            cand.excluded = f"status is {record.status}"
-        elif record.approval_state != "approved" and not preview:
-            cand.excluded = "changed since approval" if record.approval_state == "changed" else "awaiting approval"
-        elif record.year is not None and record.year > date.year:
-            cand.excluded = "event is in the future"
-        elif cand.years is not None and cand.years < 1:
-            cand.excluded = "no anniversary yet"
-        elif not record.sourcing_ok:
-            cand.excluded = "complex claim rests on reference sources only"
-        elif record.significance < MIN_SIGNIFICANCE:
-            cand.excluded = f"significance below {MIN_SIGNIFICANCE}"
+        cand.excluded = _ineligible(record, date, cand, preview)
         cand.pending_approval = cand.excluded is None and record.approval_state != "approved"
         candidates.append(cand)
     candidates.sort(key=lambda c: (-c.score, c.date, c.record.id))
+    picked = _compose(candidates, slot_bars, MAX_ENTRIES)
+    return Selection(
+        week=week,
+        picked=_finish(picked),
+        candidates=candidates,
+        dataset_sha256=dataset.sha256,
+        # A --preview run is always a proof, whatever it picked; so is any issue
+        # that renders a record awaiting approval, here or in ALSO THIS WEEK.
+        # A publisher must still check approvals itself, not trust this flag.
+        preview=preview or any(c.pending_approval for c in picked + [c for c in candidates if c.shape_blocked]),
+    )
 
-    # Compose: at each step take the open candidate with the best score plus
-    # composition nudge, given what is already in the issue.
+
+def _ineligible(record: Record, date: dt.date, cand: Candidate, preview: bool) -> str | None:
+    """Why a record may not be published on this occurrence, or None."""
+    if record.status != "verified":
+        return f"status is {record.status}"
+    if record.approval_state != "approved" and not preview:
+        return "changed since approval" if record.approval_state == "changed" else "awaiting approval"
+    if record.year is not None and record.year > date.year:
+        return "event is in the future"
+    if cand.years is not None and cand.years < 1:
+        return "no anniversary yet"
+    if not record.sourcing_ok:
+        return "complex claim rests on reference sources only"
+    if record.significance < MIN_SIGNIFICANCE:
+        return f"significance below {MIN_SIGNIFICANCE}"
+    return None
+
+
+def _compose(candidates: list[Candidate], slot_bars: tuple[tuple[int, int], ...], max_entries: int) -> list[Candidate]:
+    """Compose: at each step take the open candidate with the best score plus
+    composition nudge, given what is already in the issue. Stops at the first item
+    that misses its slot's bar, or at ``max_entries``; never pads."""
     picked: list[Candidate] = []
     used: set[str] = set()
     per_day: Counter = Counter()
@@ -379,7 +406,7 @@ def select_issue(
     while open_:
         best, best_key = None, None
         for cand in open_:
-            block = _shape_block(cand, picked, used, per_day)
+            block = _shape_block(cand, picked, used, per_day, max_entries)
             if block:
                 cand.excluded, cand.shape_blocked = block, True
                 continue
@@ -404,21 +431,70 @@ def select_issue(
         used.update(best.record.subject_keys)
         per_day[best.date] += 1
         open_.remove(best)
+    return picked
 
+
+def _finish(picked: list[Candidate]) -> list[Candidate]:
+    """Roles, QR, and issue order: featured by strength, then standard by date."""
     _assign_roles(picked)
     _assign_qr(picked)
     featured = sorted((c for c in picked if c.role == "featured"), key=lambda c: (-c.intrinsic, -c.score, c.record.id))
     standard = sorted((c for c in picked if c.role == "standard"), key=lambda c: (c.date, -c.score, c.record.id))
-    return Selection(
-        week=week,
-        picked=featured + standard,
-        candidates=candidates,
-        dataset_sha256=dataset.sha256,
-        # A --preview run is always a proof, whatever it picked; so is any issue
-        # that renders a record awaiting approval, here or in ALSO THIS WEEK.
-        # A publisher must still check approvals itself, not trust this flag.
-        preview=preview or any(c.pending_approval for c in picked + [c for c in candidates if c.shape_blocked]),
-    )
+    return featured + standard
+
+
+def select_quiet_issue(
+    dataset: Dataset,
+    week: IssueWeek,
+    history: History | None,
+    source: "QuietSource",
+    affinity: Affinity = EMPTY,
+    slot_bars: tuple[tuple[int, int], ...] = SLOT_BARS,
+) -> Selection:
+    """An empty week's quiet issue (PUBLISHING.md §21), from ``source`` only.
+
+    Candidates are earlier issues' "Also this week" mentions (``source.pool``), each
+    at its ORIGINAL date (its occurrence in the week that mentioned it), never one
+    published as a full item, never one whose anniversary falls in [W, W + 35 days),
+    never one about a person or work featured within 365 days, and never one without
+    stable identities for its person/work. Then the regular scorer and composer, with
+    the regular slot bars and a ceiling of QUIET_MAX. The caller enforces QUIET_MIN.
+    Never a proof: only approved records are candidates."""
+    history = history or History()
+    overrep = _overrepresented(dataset, history, week)
+    by_id = {r.id: r for r in dataset.records}
+    excluded = set(source.excluded)
+    retainable = set(source.retainable)
+    blocked_ids = set(source.subject_identities)
+    same_week_ids = set(source.same_week_identities)
+    seen: set[str] = set()
+    candidates: list[Candidate] = []
+    for rid, recorded in sorted(source.pool, key=lambda p: (p[1], p[0])):
+        if rid in seen:
+            continue
+        seen.add(rid)
+        record = by_id.get(rid)
+        if record is None or rid in excluded:
+            continue
+        date = occurrence_in(record, week_starting(dt.date.fromisoformat(recorded)))
+        if date is None or date >= week.start:
+            continue
+        cand = _score(record, date, affinity, history, week, overrep)
+        cand.excluded = _ineligible(record, date, cand, preview=False)
+        if cand.excluded is None and anniversary_imminent(record.month, record.day, week.start):
+            cand.excluded = "its own anniversary is within the next five weeks"
+        identities = [i for i in (record.person_id, record.work_id) if i]
+        if cand.excluded is None and ((record.person and not record.person_id) or (record.work and not record.work_id)):
+            cand.excluded = "no stable subject identity"
+        if cand.excluded is None and any(i in blocked_ids for i in identities):
+            cand.excluded = "subject featured within 365 days"
+        if cand.excluded is None and rid not in retainable and any(i in same_week_ids for i in identities):
+            cand.excluded = "subject of this week's earlier quiet pick"
+        candidates.append(cand)
+    candidates.sort(key=lambda c: (-c.score, c.date, c.record.id))
+    picked = _compose(candidates, slot_bars, QUIET_MAX)
+    return Selection(week=week, picked=_finish(picked), candidates=candidates, dataset_sha256=dataset.sha256,
+                     preview=False, edition="quiet")
 
 
 def _assign_roles(picked: list[Candidate]) -> None:

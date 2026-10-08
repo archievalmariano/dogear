@@ -61,6 +61,11 @@ def rec(rid, month, day, year=1900, approved=True, **kw):
         one = kw.pop("link")
         kw["links"] = [one] if one else []
     r.update(kw)
+    # Approved records carry stable subject identities (dataset.SUBJECT_ID_RE). The tests'
+    # convention mints them from the record id; pass personId/workId to choose otherwise.
+    for name_field, id_field, prefix in (("person", "personId", "person"), ("work", "workId", "work")):
+        if id_field not in kw and r.get(name_field) is not None:
+            r[id_field] = f"dogear:{prefix}-{rid}"
     if r["type"] == "observance" and "area" not in kw:
         r["area"] = "global"  # a national observance must name its locality
     if approved and r["status"] == "verified" and r["approval"] is None:
@@ -262,8 +267,9 @@ class EligibilityAndShapeTests(unittest.TestCase):
         self.assertEqual(ids(select_issue(ds, WEEK)), [])
 
     def test_one_subject_per_issue(self):
-        ds = dataset(rec("born", 11, 24, person="Mara Ilagan"),
-                     rec("book", 11, 26, type="publication", person="Mara Ilagan", work="The Salt Orchard", significance=5))
+        ds = dataset(rec("born", 11, 24, person="Mara Ilagan", personId="dogear:mara-ilagan"),
+                     rec("book", 11, 26, type="publication", person="Mara Ilagan", personId="dogear:mara-ilagan",
+                         work="The Salt Orchard", significance=5))
         s = select_issue(ds, WEEK)
         self.assertEqual(ids(s), ["book"])
         self.assertTrue(cand(s, "born").shape_blocked)

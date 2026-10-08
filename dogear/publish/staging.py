@@ -18,11 +18,13 @@ from typing import Callable, Optional
 from ..affinity import EMPTY, parse_affinity
 from ..dataset import DatasetError, parse_dataset
 from ..issue import build_issue, build_web, dumps
-from ..select import CTA_LABELS, History, select_issue
+from ..quiet import QUIET_MIN, QUIET_SCHEMA_VERSION, REGULAR_SCHEMA_VERSION, QuietSource
+from ..select import CTA_LABELS, History, select_issue, select_quiet_issue
 from ..synthetic import synthetic_records
 from ..web import render_web
 from ..week import IssueWeek, week_starting
 from . import eligibility
+from .edition import revision_problems
 from .policy import PublicationPolicy
 from .registry import MAX_ISSUE_BYTES, issue_key, web_key
 
@@ -63,7 +65,12 @@ class StageRefused(Exception):
 
 
 class WeekHeld(StageRefused):
-    """The editorial policy says this week does not publish (sparse or empty)."""
+    """The editorial policy says this week does not publish (sparse or empty).
+    ``empty``: the regular selection picked nothing, so a quiet issue may be tried."""
+
+    def __init__(self, week: dt.date, problems: list, empty: bool = False):
+        super().__init__(week, problems)
+        self.empty = empty
 
 
 def provenance_bytes(provenance: dict) -> bytes:
@@ -80,6 +87,7 @@ class Frozen:
     policy: PublicationPolicy
     history: tuple  # ((monday iso, issueSha256, (record ids...)), ...) of published weeks
     generated_at: dt.datetime
+    quiet_source: Optional[QuietSource] = None  # an empty week's quiet inputs (quiet_history)
 
 
 @dataclass
@@ -143,9 +151,10 @@ def _read(path: Path) -> bytes:
         return b""
 
 
-def freeze(inputs: StageInputs, policy: PublicationPolicy, history: list, now: dt.datetime) -> Frozen:
+def freeze(inputs: StageInputs, policy: PublicationPolicy, history: list, now: dt.datetime,
+           quiet_source: Optional[QuietSource] = None) -> Frozen:
     return Frozen(_read(inputs.dataset), _read(inputs.affinity), inputs.base_url, inputs.generator, policy,
-                  tuple((m, sha, tuple(ids)) for m, sha, ids in history), now)
+                  tuple((m, sha, tuple(ids)) for m, sha, ids in history), now, quiet_source)
 
 
 def generate(week: IssueWeek, frozen: Frozen) -> tuple:
@@ -159,6 +168,17 @@ def generate(week: IssueWeek, frozen: Frozen) -> tuple:
                          if dt.date.fromisoformat(m) < week.start))
     selection = select_issue(dataset, week, hist, preview=False, affinity=affinity,
                              slot_bars=frozen.policy.slot_bars())
+    source = frozen.quiet_source
+    if (not selection.picked and frozen.policy.empty_week == "quiet-week" and source is not None
+            and source.complete):
+        selection = select_quiet_issue(dataset, week, hist, source, affinity=affinity,
+                                       slot_bars=frozen.policy.slot_bars())
+    subjects = []
+    for c in selection.picked:  # stable identities, recorded with every digest (never names)
+        r = c.record
+        if (r.person and not r.person_id) or (r.work and not r.work_id):
+            raise StageRefused(week.start, [f"{r.id}: no stable identity for its person or work"])
+        subjects.append({"recordId": r.id, "personId": r.person_id, "workId": r.work_id})
     issue = build_issue(selection, frozen.generated_at, frozen.base_url)
     issue_bytes = dumps(issue).encode("utf-8")
     web_bytes = render_web(build_web(selection, issue)).encode("utf-8")
@@ -169,6 +189,8 @@ def generate(week: IssueWeek, frozen: Frozen) -> tuple:
     provenance = {
         "schemaVersion": 1,
         "week": week.start.isoformat(),
+        "edition": selection.edition,
+        "subjects": subjects,
         "records": records,
         "inputs": {
             "generator": frozen.generator,
@@ -178,6 +200,7 @@ def generate(week: IssueWeek, frozen: Frozen) -> tuple:
             "generatedAt": frozen.generated_at.isoformat(),
             "baseUrl": frozen.base_url,
             "policy": frozen.policy.as_json(),
+            **({"quietSource": source.as_json()} if selection.edition == "quiet" else {}),
         },
         "artifacts": {"issueSha256": hashlib.sha256(issue_bytes).hexdigest(),
                       "webSha256": hashlib.sha256(web_bytes).hexdigest()},
@@ -206,8 +229,17 @@ def device_limit_problems(issue: dict, issue_bytes: bytes) -> list:
     p = []
     if len(issue_bytes) > MAX_ISSUE_BYTES:
         p.append(f"issue is {len(issue_bytes)} B, over {MAX_ISSUE_BYTES}")
-    if issue.get("schemaVersion") != 2:
-        p.append("issue schemaVersion is not 2")
+    if issue.get("schemaVersion") not in (REGULAR_SCHEMA_VERSION, QUIET_SCHEMA_VERSION):
+        p.append(f"issue schemaVersion is not {REGULAR_SCHEMA_VERSION} or {QUIET_SCHEMA_VERSION}")
+    quiet = issue.get("quiet")
+    if quiet is not None:  # the device draws these on the cover (heading short, note one line)
+        if not isinstance(quiet, dict) or set(quiet) != {"heading", "note"}:
+            p.append("quiet must be {heading, note}")
+        else:
+            for name, limit in (("heading", MAX_SHORT), ("note", MAX_LINE)):
+                value = quiet[name]
+                if not isinstance(value, str) or not value or len(value.encode("utf-8")) > limit:
+                    p.append(f"quiet {name} missing or over {limit} bytes")
     entries = issue.get("entries") or []
     if not 0 < len(entries) <= MAX_ENTRIES:
         p.append(f"{len(entries)} entries (device allows 1-{MAX_ENTRIES})")
@@ -239,11 +271,16 @@ def device_limit_problems(issue: dict, issue_bytes: bytes) -> list:
 
 
 def stage(week: IssueWeek, inputs: StageInputs, policy: PublicationPolicy, history: list, now: dt.datetime,
-          checks: Checks, mode: str = "test") -> Staged:
-    """A validated week, or StageRefused / WeekHeld."""
+          checks: Checks, mode: str = "test", quiet_source: Optional[QuietSource] = None) -> Staged:
+    """A validated week, or StageRefused / WeekHeld.
+
+    An empty week under ``emptyWeek: quiet-week`` needs ``quiet_source`` (the caller
+    derives it from validated history only when needed): without one this raises
+    WeekHeld(empty=True) so the caller can supply it; with one it builds a quiet
+    issue of 3-5 items, or holds."""
     if policy.unset():
         raise StageRefused(week.start, [f"publication policy unset: {', '.join(policy.unset())}"])
-    frozen = freeze(inputs, policy, history, now)
+    frozen = freeze(inputs, policy, history, now, quiet_source)
     if mode == "production":
         synthetic = synthetic_records(frozen.dataset_bytes.decode("utf-8", "replace"))
         if synthetic:  # the staging fixture, or any record marked like it, never reaches production
@@ -252,9 +289,15 @@ def stage(week: IssueWeek, inputs: StageInputs, policy: PublicationPolicy, histo
     selection, issue_bytes, web_bytes, provenance = generate(week, frozen)
 
     n = len(selection.picked)
-    if n == 0:
-        raise WeekHeld(week.start, [f"no eligible items; emptyWeek policy: {policy.empty_week}"])
-    if n <= 2 and policy.sparse_week == "hold-previous":
+    if selection.edition == "quiet":
+        if n < QUIET_MIN:  # never padded: the previous issue stays current
+            raise WeekHeld(week.start, [f"quiet week: {n} qualifying item(s), fewer than {QUIET_MIN}"])
+    elif n == 0:
+        if policy.empty_week == "quiet-week" and quiet_source is not None and not quiet_source.complete:
+            raise WeekHeld(week.start, ["quiet week: subject history incomplete"])
+        raise WeekHeld(week.start, [f"no eligible items; emptyWeek policy: {policy.empty_week}"],
+                       empty=quiet_source is None)
+    elif n <= 2 and policy.sparse_week == "hold-previous":
         raise WeekHeld(week.start, [f"{n} item(s); sparseWeek policy: hold-previous"])
 
     issue = json.loads(issue_bytes)
@@ -263,6 +306,7 @@ def stage(week: IssueWeek, inputs: StageInputs, policy: PublicationPolicy, histo
     if (issue2, web2, prov2) != (issue_bytes, web_bytes, provenance):
         problems.append("regenerating from the frozen inputs gave different bytes")
     problems += artifact_problems(week, inputs.base_url, selection, issue, issue_bytes, web_bytes)
+    problems += revision_problems(week.start, issue, provenance)
     blocking, warnings = run_checks(frozen, selection, checks)
     problems += blocking
     if problems:
@@ -277,6 +321,7 @@ def stage(week: IssueWeek, inputs: StageInputs, policy: PublicationPolicy, histo
         "externalLinks": external_links(selection),
         "warnings": warnings,
         "items": n,
+        "edition": selection.edition,
     }
     return Staged(week.start, issue_bytes, web_bytes, provenance, validation, frozen.dataset_bytes,
                   frozen.affinity_bytes)
@@ -300,7 +345,8 @@ def artifact_problems(week: IssueWeek, base_url: str, selection, issue: dict, is
 
 
 def verify_staged(staged: Staged, inputs: StageInputs, policy: PublicationPolicy, history: list,
-                  current_dataset_text: str, checks: Checks, mode: str) -> list:
+                  current_dataset_text: str, checks: Checks, mode: str,
+                  quiet_source: Optional[QuietSource] = None) -> list:
     """Problems that stop a staged week from being published as it stands.
 
     The staged files are trusted for nothing: the issue, the web page and the
@@ -325,6 +371,18 @@ def verify_staged(staged: Staged, inputs: StageInputs, policy: PublicationPolicy
         problems.append("the publication policy changed since staging")
     if want.get("history") != [list(h) for h in history]:
         problems.append("the published history changed since staging")
+    frozen_source = None
+    if prov.get("edition") == "quiet":
+        # The quiet inputs are re-derived from validated history as it is now: any
+        # change since Friday (a correction, a new line) re-stages at promotion.
+        try:
+            frozen_source = QuietSource.from_json(want.get("quietSource"))
+        except ValueError as err:
+            return [f"the staged quiet source is invalid ({err})"]
+        if quiet_source is None or not quiet_source.complete or quiet_source.as_json() != want.get("quietSource"):
+            problems.append("the published history changed since staging")
+    elif "quietSource" in want:
+        problems.append("a regular week's provenance carries a quiet source")
     if problems:
         return problems
     try:
@@ -332,7 +390,7 @@ def verify_staged(staged: Staged, inputs: StageInputs, policy: PublicationPolicy
     except (KeyError, TypeError, ValueError):
         return ["staged generatedAt unreadable"]
     frozen = Frozen(staged.dataset_bytes, staged.affinity_bytes, inputs.base_url, inputs.generator, policy,
-                    tuple((m, sha, tuple(ids)) for m, sha, ids in history), generated_at)
+                    tuple((m, sha, tuple(ids)) for m, sha, ids in history), generated_at, frozen_source)
     week = week_starting(staged.week)
     try:
         selection, issue_bytes, web_bytes, regenerated = generate(week, frozen)
@@ -344,6 +402,7 @@ def verify_staged(staged: Staged, inputs: StageInputs, policy: PublicationPolicy
     issue = json.loads(issue_bytes)
     problems += eligibility.check(regenerated, current_dataset_text, issue)
     problems += artifact_problems(week, inputs.base_url, selection, issue, issue_bytes, web_bytes)
+    problems += revision_problems(week.start, issue, regenerated)
     if mode == "production" and staged.validation.get("mode") != "production":
         problems.append("staged without production validation")
     blocking, _warnings = run_checks(frozen, selection, checks)

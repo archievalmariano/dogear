@@ -104,6 +104,12 @@ def add_parser(sub) -> None:
     s.add_argument("--expect-current", required=True, help="the week the live registry must show (YYYY-MM-DD)")
     s = ops.add_parser("abandon")
     s.add_argument("txn")
+    s = ops.add_parser("attest-subjects", help="local only: attest a legacy line's subject identities (PUBLISHING §21)")
+    s.add_argument("--txn", required=True, help="the legacy content line's transaction id")
+    s.add_argument("--from", dest="mapping", type=Path, required=True,
+                   help="the reviewed mapping: JSON list of {recordId, personId, workId}")
+    s.add_argument("--source", type=Path,
+                   help="the original frozen dataset (default: staged/<week>/dataset.json in --pubdata)")
     p.set_defaults(fn=run)
 
 
@@ -270,6 +276,22 @@ def _reset_preflight_refusal(args) -> Optional[str]:
     return None
 
 
+def _attest_subjects(args, pub) -> int:
+    try:
+        mapping = json.loads(args.mapping.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as err:
+        print(f"error: cannot read the mapping: {err}", file=sys.stderr)
+        return 4
+    source = None
+    line = next((h for h in pub.pubdata.history() if h.get("txn") == args.txn), None)
+    path = args.source or (args.pubdata / "staged" / line["week"] / "dataset.json" if line else None)
+    if path is not None and Path(path).is_file():
+        source = Path(path).read_bytes()
+    out = pub.attest_subjects(args.txn, mapping, source)
+    print(f"{out.status}: {out.message}")
+    return 0
+
+
 def _reset_preflight(args, pub) -> int:
     """PASS (0) or HOLD (3), with every reason. Local and read-only: never in CI."""
     problems = _pubdata_git_problems(args.pubdata) + pub.reset_preflight(args.expect_current)
@@ -288,6 +310,9 @@ def run(args) -> int:
         if refusal:
             print(f"error: {refusal}", file=sys.stderr)
             return 4
+    if args.op == "attest-subjects" and (args.public_log or args.drill):
+        print("error: attest-subjects is local and explicit: no --public-log or --drill", file=sys.stderr)
+        return 4
     problem = _apply_target(args)
     if problem:
         print(f"error: {problem}", file=sys.stderr)
@@ -326,6 +351,8 @@ def run(args) -> int:
             return 0
         if args.op == "reset-preflight":
             return _reset_preflight(args, pub)
+        if args.op == "attest-subjects":
+            return _attest_subjects(args, pub)
         out = {
             "reconcile": lambda: pub.reconcile(),
             "stage-next": pub.stage_next,

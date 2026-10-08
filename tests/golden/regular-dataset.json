@@ -1,0 +1,355 @@
+{
+ "schemaVersion": 3,
+ "records": [
+  {
+   "id": "golden-02-0",
+   "month": 11,
+   "day": 2,
+   "year": 1931,
+   "precision": "day",
+   "dateBasis": "recorded",
+   "claims": "straightforward",
+   "type": "observance",
+   "person": null,
+   "work": null,
+   "headline": "Golden observance 2 0",
+   "copy": {
+    "digest": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "expanded": null,
+    "allowSecondPage": false
+   },
+   "tags": [],
+   "significance": 4,
+   "recognition": "core",
+   "discoveryValue": 0,
+   "phRelevance": 0,
+   "seaRelevance": 0,
+   "domain": "literature",
+   "status": "verified",
+   "sources": [
+    {
+     "title": "S",
+     "url": "https://library.test/s",
+     "kind": "institutional"
+    }
+   ],
+   "links": [
+    {
+     "type": "read-more",
+     "url": "https://library.test/g/2/0",
+     "title": "Golden 2 0",
+     "provider": "Library"
+    }
+   ],
+   "notes": null,
+   "area": "global",
+   "language": "en",
+   "womenWriter": false,
+   "approval": {
+    "by": "Editor",
+    "on": "2026-10-07",
+    "fingerprint": "d07a43af98379af4"
+   }
+  },
+  {
+   "id": "golden-02-1",
+   "month": 11,
+   "day": 2,
+   "year": 1932,
+   "precision": "day",
+   "dateBasis": "recorded",
+   "claims": "straightforward",
+   "type": "observance",
+   "person": null,
+   "work": null,
+   "headline": "Golden observance 2 1",
+   "copy": {
+    "digest": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "expanded": null,
+    "allowSecondPage": false
+   },
+   "tags": [],
+   "significance": 4,
+   "recognition": "core",
+   "discoveryValue": 0,
+   "phRelevance": 0,
+   "seaRelevance": 0,
+   "domain": "literature",
+   "status": "verified",
+   "sources": [
+    {
+     "title": "S",
+     "url": "https://library.test/s",
+     "kind": "institutional"
+    }
+   ],
+   "links": [
+    {
+     "type": "read-more",
+     "url": "https://library.test/g/2/1",
+     "title": "Golden 2 1",
+     "provider": "Library"
+    }
+   ],
+   "notes": null,
+   "area": "global",
+   "language": "en",
+   "womenWriter": false,
+   "approval": {
+    "by": "Editor",
+    "on": "2026-10-07",
+    "fingerprint": "42f28bd0503dc562"
+   }
+  },
+  {
+   "id": "golden-02-2",
+   "month": 11,
+   "day": 2,
+   "year": 1933,
+   "precision": "day",
+   "dateBasis": "recorded",
+   "claims": "straightforward",
+   "type": "observance",
+   "person": null,
+   "work": null,
+   "headline": "Golden observance 2 2",
+   "copy": {
+    "digest": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "expanded": null,
+    "allowSecondPage": false
+   },
+   "tags": [],
+   "significance": 3,
+   "recognition": "core",
+   "discoveryValue": 0,
+   "phRelevance": 0,
+   "seaRelevance": 0,
+   "domain": "literature",
+   "status": "verified",
+   "sources": [
+    {
+     "title": "S",
+     "url": "https://library.test/s",
+     "kind": "institutional"
+    }
+   ],
+   "links": [
+    {
+     "type": "read-more",
+     "url": "https://library.test/g/2/2",
+     "title": "Golden 2 2",
+     "provider": "Library"
+    }
+   ],
+   "notes": null,
+   "area": "global",
+   "language": "en",
+   "womenWriter": false,
+   "approval": {
+    "by": "Editor",
+    "on": "2026-10-07",
+    "fingerprint": "1331a7a0a52239c8"
+   }
+  },
+  {
+   "id": "golden-04-0",
+   "month": 11,
+   "day": 4,
+   "year": 1931,
+   "precision": "day",
+   "dateBasis": "recorded",
+   "claims": "straightforward",
+   "type": "observance",
+   "person": null,
+   "work": null,
+   "headline": "Golden observance 4 0",
+   "copy": {
+    "digest": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "expanded": null,
+    "allowSecondPage": false
+   },
+   "tags": [],
+   "significance": 4,
+   "recognition": "core",
+   "discoveryValue": 0,
+   "phRelevance": 0,
+   "seaRelevance": 0,
+   "domain": "literature",
+   "status": "verified",
+   "sources": [
+    {
+     "title": "S",
+     "url": "https://library.test/s",
+     "kind": "institutional"
+    }
+   ],
+   "links": [
+    {
+     "type": "read-more",
+     "url": "https://library.test/g/4/0",
+     "title": "Golden 4 0",
+     "provider": "Library"
+    }
+   ],
+   "notes": null,
+   "area": "global",
+   "language": "en",
+   "womenWriter": false,
+   "approval": {
+    "by": "Editor",
+    "on": "2026-10-07",
+    "fingerprint": "f063fbd04180c22b"
+   }
+  },
+  {
+   "id": "golden-04-1",
+   "month": 11,
+   "day": 4,
+   "year": 1932,
+   "precision": "day",
+   "dateBasis": "recorded",
+   "claims": "straightforward",
+   "type": "observance",
+   "person": null,
+   "work": null,
+   "headline": "Golden observance 4 1",
+   "copy": {
+    "digest": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "expanded": null,
+    "allowSecondPage": false
+   },
+   "tags": [],
+   "significance": 4,
+   "recognition": "core",
+   "discoveryValue": 0,
+   "phRelevance": 0,
+   "seaRelevance": 0,
+   "domain": "literature",
+   "status": "verified",
+   "sources": [
+    {
+     "title": "S",
+     "url": "https://library.test/s",
+     "kind": "institutional"
+    }
+   ],
+   "links": [
+    {
+     "type": "read-more",
+     "url": "https://library.test/g/4/1",
+     "title": "Golden 4 1",
+     "provider": "Library"
+    }
+   ],
+   "notes": null,
+   "area": "global",
+   "language": "en",
+   "womenWriter": false,
+   "approval": {
+    "by": "Editor",
+    "on": "2026-10-07",
+    "fingerprint": "e4c452ab24c852f4"
+   }
+  },
+  {
+   "id": "golden-04-2",
+   "month": 11,
+   "day": 4,
+   "year": 1933,
+   "precision": "day",
+   "dateBasis": "recorded",
+   "claims": "straightforward",
+   "type": "observance",
+   "person": null,
+   "work": null,
+   "headline": "Golden observance 4 2",
+   "copy": {
+    "digest": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "expanded": null,
+    "allowSecondPage": false
+   },
+   "tags": [],
+   "significance": 3,
+   "recognition": "core",
+   "discoveryValue": 0,
+   "phRelevance": 0,
+   "seaRelevance": 0,
+   "domain": "literature",
+   "status": "verified",
+   "sources": [
+    {
+     "title": "S",
+     "url": "https://library.test/s",
+     "kind": "institutional"
+    }
+   ],
+   "links": [
+    {
+     "type": "read-more",
+     "url": "https://library.test/g/4/2",
+     "title": "Golden 4 2",
+     "provider": "Library"
+    }
+   ],
+   "notes": null,
+   "area": "global",
+   "language": "en",
+   "womenWriter": false,
+   "approval": {
+    "by": "Editor",
+    "on": "2026-10-07",
+    "fingerprint": "b302bbd4a67d67be"
+   }
+  },
+  {
+   "id": "golden-06-0",
+   "month": 11,
+   "day": 6,
+   "year": 1931,
+   "precision": "day",
+   "dateBasis": "recorded",
+   "claims": "straightforward",
+   "type": "observance",
+   "person": null,
+   "work": null,
+   "headline": "Golden observance 6 0",
+   "copy": {
+    "digest": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+    "expanded": null,
+    "allowSecondPage": false
+   },
+   "tags": [],
+   "significance": 4,
+   "recognition": "core",
+   "discoveryValue": 0,
+   "phRelevance": 0,
+   "seaRelevance": 0,
+   "domain": "literature",
+   "status": "verified",
+   "sources": [
+    {
+     "title": "S",
+     "url": "https://library.test/s",
+     "kind": "institutional"
+    }
+   ],
+   "links": [
+    {
+     "type": "read-more",
+     "url": "https://library.test/g/6/0",
+     "title": "Golden 6 0",
+     "provider": "Library"
+    }
+   ],
+   "notes": null,
+   "area": "global",
+   "language": "en",
+   "womenWriter": false,
+   "approval": {
+    "by": "Editor",
+    "on": "2026-10-07",
+    "fingerprint": "d877d6d70472071b"
+   }
+  }
+ ]
+}

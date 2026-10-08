@@ -1,6 +1,6 @@
 {
   "_note": "Editorial decisions the publisher needs. null = undecided; production refuses to stage or publish until each is set. See docs/PUBLISHING.md §14.",
-  "slot5Bar": null,
-  "sparseWeek": null,
+  "slot5Bar": 42,
+  "sparseWeek": "publish",
   "emptyWeek": null
 }

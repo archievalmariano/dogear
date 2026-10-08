@@ -13,7 +13,9 @@ from typing import Optional
 
 SLOT5_CHOICES = (40, 42)
 SPARSE_CHOICES = ("publish", "hold-previous")  # a 1-2 item week
-EMPTY_CHOICES = ("hold-previous",)  # a 0-item week; a "quiet week" issue is not built
+# A 0-item week: hold the previous issue, or build a quiet issue from earlier "Also
+# this week" mentions, holding when fewer than 3 qualify (dogear/quiet.py, PUBLISHING §21).
+EMPTY_CHOICES = ("hold-previous", "quiet-week")
 
 
 class PolicyError(ValueError):

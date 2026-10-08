@@ -169,6 +169,13 @@ def _entry(e: dict) -> str:
     )
 
 
+# Emitted only on a quiet issue's page, so every regular page stays byte-identical.
+_QUIET_CSS = """.quiet { margin: 1.4rem 0 0; }
+.quiet p { margin: 0.35rem 0 0; max-width: 36rem; font: italic 400 var(--step-0)/1.45 var(--serif); }
+.quiet .label { color: var(--accent-ink); font-style: normal; }
+"""
+
+
 def render_web(web: dict) -> str:
     proof = (
         '<p class="proof">Proof. This issue contains records still awaiting editorial approval. '
@@ -192,6 +199,10 @@ def render_web(web: dict) -> str:
         also = (f'<section class="also" aria-labelledby="also"><p class="label" id="also">Also this week</p>'
                 f"<ul>{items}</ul></section>")
     entries = "".join(_entry(e) for e in web["entries"])
+    quiet = ""
+    if web.get("quiet"):  # an empty week's quiet issue: the approved copy, exactly
+        quiet = (f'<section class="quiet" aria-labelledby="quiet"><p class="label" id="quiet">'
+                 f'{escape(web["quiet"]["heading"])}</p><p>{escape(web["quiet"]["note"])}</p></section>\n')
     title = f'{web["label"]} · {web["dateline"].title()}'
     return f"""<!doctype html>
 <html lang="en">
@@ -203,7 +214,7 @@ def render_web(web: dict) -> str:
 <meta name="description" content="{escape(web["strapline"])}: {escape(web["dateline"].title())}">
 <style>
 {_FONT_FACES}
-{_CSS}</style>
+{_CSS}{_QUIET_CSS if web.get("quiet") else ""}</style>
 </head>
 <body>
 <main>
@@ -212,7 +223,7 @@ def render_web(web: dict) -> str:
 <h1>{escape(web["label"])}</h1>
 <p class="strap">{escape(web["strapline"])}</p>
 <p class="dateline">{escape(web["dateline"])}</p>
-{proof}
+{quiet}{proof}
 </header>
 <nav class="contents" aria-labelledby="contents"><p class="label" id="contents">In this issue</p><ol>{contents}</ol></nav>
 {entries}

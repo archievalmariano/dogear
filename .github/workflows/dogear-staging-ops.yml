@@ -1,0 +1,46 @@
+# Staging-only manual operations, for rehearsing the weekly cycle on the real
+# calendar (PUBLISHING.md §21: the quiet-week hosted rehearsal). There is no target
+# input: the reusable job is called with `target: staging` written literally, so no
+# path from here reaches the production Environment. The first job holds no
+# Environment and no secrets; it refuses any ref but main and any operation outside
+# the allowlist (an API dispatch can send any string) before the reusable job, and
+# so any Environment, is entered. Never scheduled; DOGEAR stage and DOGEAR promote
+# (the scheduled workflows) stay disabled.
+name: DOGEAR staging ops
+
+on:
+  workflow_dispatch:
+    inputs:
+      op:
+        description: A staging operation
+        type: choice
+        options: [stage-next, promote, status]
+        default: status
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Main only, allowlisted operation
+        env:
+          REF: ${{ github.ref }}
+          OP: ${{ inputs.op }}
+        run: |
+          [ "$REF" = refs/heads/main ] || { echo "::error::staging ops run only from main"; exit 1; }
+          case "$OP" in
+            stage-next|promote|status) echo "staging: $OP" ;;
+            *) echo "::error::operation not allowed here"; exit 1 ;;
+          esac
+
+  staging:
+    needs: guard
+    if: ${{ github.ref == 'refs/heads/main' }}
+    uses: ./.github/workflows/_dogear-publish.yml
+    secrets: inherit
+    with:
+      target: staging
+      op: ${{ inputs.op }}

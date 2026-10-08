@@ -241,9 +241,12 @@ class PolicyTests(unittest.TestCase):
             g.pub.launch(first_publication=True)
         self.assertIn("link checker", str(err.exception))
 
-    def test_the_committed_policy_file_is_undecided(self):
+    def test_the_committed_policy_file_leaves_empty_week_undecided(self):
+        """slot5Bar 42 and sparseWeek publish are decided (owner, 8 October 2026); emptyWeek
+        stays unset until quiet-week firmware ships, so production still refuses."""
         policy = load_policy(Path(__file__).resolve().parents[1] / "data" / "publication-policy.json")
-        self.assertEqual(policy.unset(), ["slot5Bar", "sparseWeek", "emptyWeek"])
+        self.assertEqual((policy.slot5_bar, policy.sparse_week), (42, "publish"))
+        self.assertEqual(policy.unset(), ["emptyWeek"])
 
     def test_policy_values_are_restricted(self):
         for bad in (dict(slot5_bar=41), dict(slot5_bar=True), dict(sparse_week="maybe"), dict(empty_week="publish")):

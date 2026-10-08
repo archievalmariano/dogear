@@ -162,6 +162,52 @@ class PubData:
         except FileNotFoundError:
             return None
 
+    # Subject attestations (PUBLISHING.md §21): for a legacy content line written before
+    # stable identities, a reviewed mapping bound to that publication's ORIGINAL frozen
+    # dataset, which is kept immutably under evidence/<txn>/ (a later stage or
+    # correction may replace staged/<week>/). Both files only ever grow.
+
+    @property
+    def attestations_path(self) -> Path:
+        return self.root / "subject-attestations.jsonl"
+
+    def read_attestations(self) -> list:
+        try:
+            lines = self.attestations_path.read_text(encoding="utf-8").splitlines()
+        except FileNotFoundError:
+            return []
+        out = []
+        for n, line in enumerate(lines, 1):
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                raise CorruptState(f"subject-attestations.jsonl line {n} is not JSON") from None
+        return out
+
+    def append_attestation(self, entry: dict) -> None:
+        self.attestations_path.parent.mkdir(parents=True, exist_ok=True)
+        with self.attestations_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, sort_keys=True, ensure_ascii=False) + "\n")
+
+    def evidence_dataset_path(self, txn: str) -> Path:
+        if not re.fullmatch(r"[0-9]{8}T[0-9]{6}-[a-z]+-[0-9a-f]{12}", txn or ""):
+            raise CorruptState(f"not a transaction id: {txn!r}")
+        return self.root / "evidence" / txn / "dataset.json"
+
+    def read_evidence_dataset(self, txn: str) -> Optional[bytes]:
+        try:
+            return self.evidence_dataset_path(txn).read_bytes()
+        except FileNotFoundError:
+            return None
+
+    def write_evidence_dataset(self, txn: str, data: bytes) -> None:
+        """Immutable: writing different bytes over existing evidence is refused."""
+        existing = self.read_evidence_dataset(txn)
+        if existing is not None and existing != data:
+            raise CorruptState(f"evidence for {txn} already exists with different bytes")
+        if existing is None:
+            _write(self.evidence_dataset_path(txn), data)
+
     # Served output not yet verified: per transaction, the targets the host must show.
 
     @property

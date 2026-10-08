@@ -41,21 +41,58 @@ def manila(day: dt.date, hh: int, mm: int = 0) -> dt.datetime:
 
 
 class YearRoundFixtureTests(unittest.TestCase):
-    def test_every_real_week_builds_a_normal_issue(self):
+    def test_every_real_week_publishes_under_weekly_publication(self):
         """Every Monday-Sunday week from 2026 to 2030 (leap 2028, every year boundary),
-        published in sequence so the 365-day history applies from the second year."""
-        monday, history, sizes = dt.date(2025, 12, 29), [], set()
+        published in sequence so the 365-day history applies: regular 4-5, or sparse
+        (beside the November gap, never padded), and in the gap week a quiet issue of
+        3-5 or, when fewer than 3 qualify, a hold. 2026's gap week (the hosted
+        rehearsal) must be quiet. Later years may hold: the fixture's records recur
+        every year and anything once published in full is excluded for good, so the
+        pool thins year on year (the owner's rule, working as written). Quiet weeks draw
+        on the simulated history exactly as validated history would give it."""
+        from dogear.publish.quiet_history import build_source
+        from dogear.publish.staging import WeekHeld
+        monday, history, lines = dt.date(2025, 12, 29), [], []
+        kinds = {"regular": 0, "sparse": 0, "quiet": 0, "held": 0}
+        quiet_years = []
         while monday <= dt.date(2030, 12, 30):
-            staged = stage(week_starting(monday), INPUTS, POLICY, history, manila(monday - dt.timedelta(days=3), 10, 2),
-                           Checks(), "test")
-            n = staged.validation["items"]
-            self.assertGreaterEqual(n, 3, monday)  # never sparse, never held
-            sizes.add(n)
-            ids = [r["recordId"] for r in staged.provenance["records"] if r["section"] == "digest"]
-            self.assertTrue(all(i.startswith("staging-") for i in ids))
-            history.append((monday.isoformat(), staged.issue_sha, ids))
+            now = manila(monday - dt.timedelta(days=3), 10, 2)
+            try:
+                staged = stage(week_starting(monday), INPUTS, POLICY, history, now, Checks(), "test")
+            except WeekHeld as held:
+                self.assertTrue(held.empty, monday)
+                source = build_source(lines, {}, monday)
+                self.assertTrue(source.complete)
+                try:
+                    staged = stage(week_starting(monday), INPUTS, POLICY, history, now, Checks(), "test",
+                                   quiet_source=source)
+                except WeekHeld as thin:
+                    self.assertIn("fewer than 3", str(thin))
+                    self.assertTrue(dt.date(monday.year, 11, 10) <= monday <= dt.date(monday.year, 11, 22))
+                    kinds["held"] += 1
+                    monday += dt.timedelta(days=7)
+                    continue
+            n, edition = staged.validation["items"], staged.validation["edition"]
+            digest = [r["recordId"] for r in staged.provenance["records"] if r["section"] == "digest"]
+            also = [r["recordId"] for r in staged.provenance["records"] if r["section"] == "also"]
+            if edition == "quiet":
+                self.assertTrue(3 <= n <= 5, monday)
+                self.assertTrue(dt.date(monday.year, 11, 10) <= monday <= dt.date(monday.year, 11, 22), monday)
+                kinds["quiet"] += 1
+                quiet_years.append(monday.year)
+            elif n <= 2:
+                kinds["sparse"] += 1
+            else:
+                self.assertTrue(3 <= n <= 5, (monday, n))  # 3 only in weeks the gap cuts short
+                kinds["regular"] += 1
+            self.assertTrue(all(i.startswith("staging-") for i in digest))
+            history.append((monday.isoformat(), staged.issue_sha, digest))
+            lines.append({"txn": f"t-{monday}", "week": monday.isoformat(), "rev": 0, "edition": edition,
+                          "recordIds": digest, "alsoIds": also, "subjects": staged.provenance["subjects"]})
             monday += dt.timedelta(days=7)
-        self.assertLessEqual(max(sizes), 8)
+        self.assertIn(2026, quiet_years)  # the hosted rehearsal's week
+        self.assertEqual(kinds["quiet"] + kinds["held"], 5)  # exactly one empty week a year
+        self.assertGreaterEqual(kinds["sparse"], 1)  # weeks the gap cuts to 1-2 items publish as they are
 
     def test_leap_day_appears_only_in_leap_years(self):
         def ids(monday):
@@ -76,7 +113,7 @@ class SyntheticSeparationTests(unittest.TestCase):
 
     def test_markers(self):
         fixture = FIXTURE.read_text(encoding="utf-8")
-        self.assertEqual(len(synthetic_records(fixture)), 366)
+        self.assertEqual(len(synthetic_records(fixture)), 366 - 13)  # the November gap
         self.assertEqual(non_synthetic_records(fixture), [])
         real = rec("ordinary-1", 3, 1)
         self.assertEqual(synthetic_records(json.dumps({"records": [real]})), [])
