@@ -140,6 +140,7 @@ class Candidate:
     qr: bool = False
     pending_approval: bool = False  # admitted only because this is a preview
     pick_order: int | None = None
+    source_week: dt.date | None = None  # quiet only: the Monday whose "Also this week" recorded it
 
     @property
     def score(self) -> int:
@@ -476,10 +477,12 @@ def select_quiet_issue(
         record = by_id.get(rid)
         if record is None or rid in excluded:
             continue
-        date = occurrence_in(record, week_starting(dt.date.fromisoformat(recorded)))
+        source_week = week_starting(dt.date.fromisoformat(recorded))
+        date = occurrence_in(record, source_week)
         if date is None or date >= week.start:
             continue
         cand = _score(record, date, affinity, history, week, overrep)
+        cand.source_week = source_week.start
         cand.excluded = _ineligible(record, date, cand, preview=False)
         if cand.excluded is None and anniversary_imminent(record.month, record.day, week.start):
             cand.excluded = "its own anniversary is within the next five weeks"

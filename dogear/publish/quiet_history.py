@@ -23,7 +23,7 @@ import hashlib
 import json
 from typing import Optional
 
-from ..dataset import SUBJECT_ID_RE, DatasetError, fingerprint, parse_dataset
+from ..dataset import SUBJECT_ID_RE, DatasetError, fingerprint, parse_historical_dataset
 from ..quiet import QUIET_POOL_DAYS, QUIET_SUBJECT_DAYS, QuietSource
 from . import registry as regmod
 from .edition import revision_problems, subjects_problem
@@ -103,33 +103,66 @@ def validated_lines(reg: Optional[dict], pubdata, store) -> list:
     return lines
 
 
-def attestation_problems(att: object, line: dict, reg: dict, pubdata) -> list:
-    """Why an attestation does not prove the identities of a legacy line's digest."""
-    if not isinstance(att, dict) or set(att) != {"txn", "sourceDatasetSha256", "subjects", "attestedAt", "by"}:
-        return ["malformed attestation"]
-    if "subjects" in line:
-        return ["the line already records its subjects"]
-    rev = reg["weeks"][line["week"]]["revisions"][line["rev"]]
-    if att["sourceDatasetSha256"] != rev.get("datasetSha256"):
-        return ["the attested source dataset is not the one the registry recorded"]
-    evidence = pubdata.read_evidence_dataset(line["txn"])
-    if evidence is None or _sha(evidence) != att["sourceDatasetSha256"]:
-        return ["the original frozen dataset is missing or altered"]
+def legacy_evidence(evidence: Optional[bytes], recorded_sha: object, provenance: object,
+                    digest_ids: list) -> tuple:
+    """(originals, problems) for the evidence half of an attestation: is ``evidence``
+    exactly the frozen dataset a legacy revision was generated from, holding exactly
+    the record versions it published? ``originals`` maps each digest record id to its
+    raw historical record, in digest order; it is {} whenever there is a problem.
+
+    Read with parse_historical_dataset (pre-§21 approved records lack personId and
+    workId); every other rule of the current parser still applies. Required: the
+    bytes hash to the registry's datasetSha256 and to the provenance's own
+    inputs.datasetSha256; the provenance digest is the line's digest, in order;
+    every digest record is present once, at the fingerprint the provenance pinned,
+    verified and approved at that fingerprint (as it had to be to publish)."""
+    if evidence is None:
+        return {}, ["the original frozen dataset is missing"]
+    if not isinstance(recorded_sha, str) or _sha(evidence) != recorded_sha:
+        return {}, ["the frozen dataset's bytes do not hash to the registry's datasetSha256"]
+    if not isinstance(provenance, dict) or (provenance.get("inputs") or {}).get("datasetSha256") != recorded_sha:
+        return {}, ["the provenance was not generated from this dataset"]
     try:
-        parse_dataset(evidence.decode("utf-8"))
-        originals = {r["id"]: r for r in json.loads(evidence)["records"]}
-    except (DatasetError, UnicodeDecodeError, ValueError, KeyError, TypeError):
-        return ["the original frozen dataset is unreadable"]
-    prov = json.loads(pubdata.read_published_provenance(line["week"], line["rev"]))
-    pinned = {r["recordId"]: r["fingerprint"] for r in prov["records"] if r["section"] == "digest"}
-    subjects = att["subjects"]
-    if not isinstance(subjects, list) or [s.get("recordId") for s in subjects if isinstance(s, dict)] != line["recordIds"]:
+        parse_historical_dataset(evidence.decode("utf-8"))
+        raws = json.loads(evidence)["records"]
+    except (DatasetError, UnicodeDecodeError, ValueError, KeyError, TypeError) as err:
+        return {}, [f"the original frozen dataset is not a valid dataset ({err})"]
+    pinned = [(r.get("recordId"), r.get("fingerprint")) for r in provenance.get("records") or []
+              if isinstance(r, dict) and r.get("section") == "digest"]
+    if [rid for rid, _fp in pinned] != list(digest_ids) or not pinned:
+        return {}, ["the provenance digest is not the line's digest"]
+    by_id: dict = {}
+    for raw in raws:
+        by_id.setdefault(raw["id"], []).append(raw)
+    originals, problems = {}, []
+    for rid, fp in pinned:
+        found = by_id.get(rid, [])
+        if len(found) != 1:
+            problems.append(f"{rid}: not in the frozen dataset exactly once")
+            continue
+        raw = found[0]
+        if fingerprint(raw) != fp:
+            problems.append(f"{rid}: the frozen record is not the version the revision published")
+        elif raw.get("status") != "verified" or (raw.get("approval") or {}).get("fingerprint") != fp:
+            problems.append(f"{rid}: the frozen record was not approved at the published version")
+        originals[rid] = raw
+    return ({} if problems else originals), problems
+
+
+def mapping_problems(subjects: object, originals: dict, provenance: dict) -> list:
+    """Why a reviewed identity mapping does not attest a legacy digest. It must list
+    every digest record in order, each bound to the fingerprint the revision
+    published, with a well-formed id exactly where the original record names a person
+    or work; an id the original record already carried may not be changed."""
+    pinned = {r["recordId"]: r["fingerprint"] for r in provenance["records"] if r["section"] == "digest"}
+    if not isinstance(subjects, list) or not all(isinstance(s, dict) for s in subjects) or \
+            [s.get("recordId") for s in subjects] != list(originals):
         return ["the attestation does not cover exactly the line's digest, in order"]
     for s in subjects:
         if set(s) != {"recordId", "fingerprint", "personId", "workId"}:
             return ["an attested subject has the wrong fields"]
-        rid, raw = s["recordId"], originals.get(s["recordId"])
-        if raw is None or s["fingerprint"] != pinned.get(rid) or fingerprint(raw) != s["fingerprint"]:
+        rid, raw = s["recordId"], originals[s["recordId"]]
+        if s["fingerprint"] != pinned.get(rid) or fingerprint(raw) != s["fingerprint"]:
             return [f"{rid}: not the record version the revision published"]
         for name_field, id_field in (("person", "personId"), ("work", "workId")):
             sid = s[id_field]
@@ -137,7 +170,25 @@ def attestation_problems(att: object, line: dict, reg: dict, pubdata) -> list:
                 return [f"{rid}: {id_field} presence does not match the original record's {name_field}"]
             if sid is not None and not (isinstance(sid, str) and SUBJECT_ID_RE.match(sid)):
                 return [f"{rid}: {id_field} is not a stable identity"]
+            if raw.get(id_field) is not None and raw[id_field] != sid:
+                return [f"{rid}: {id_field} differs from the id the original record carried"]
     return []
+
+
+def attestation_problems(att: object, line: dict, reg: dict, pubdata) -> list:
+    """Why an attestation does not prove the identities of a legacy line's digest:
+    the evidence (legacy_evidence), then the reviewed mapping (mapping_problems)."""
+    if not isinstance(att, dict) or set(att) != {"txn", "sourceDatasetSha256", "subjects", "attestedAt", "by"}:
+        return ["malformed attestation"]
+    if "subjects" in line:
+        return ["the line already records its subjects"]
+    rev = reg["weeks"][line["week"]]["revisions"][line["rev"]]
+    if att["sourceDatasetSha256"] != rev.get("datasetSha256"):
+        return ["the attested source dataset is not the one the registry recorded"]
+    prov = json.loads(pubdata.read_published_provenance(line["week"], line["rev"]))
+    originals, problems = legacy_evidence(pubdata.read_evidence_dataset(line["txn"]), rev.get("datasetSha256"),
+                                          prov, line["recordIds"])
+    return problems or mapping_problems(att["subjects"], originals, prov)
 
 
 def attested_subjects(lines: list, reg: Optional[dict], pubdata) -> dict:

@@ -1935,20 +1935,53 @@ quiet week **holds**: identity is never read back from current records. The
 only backfill is `dogear publish attest-subjects --txn T --from MAPPING.json
 [--source DATASET]`:
 - local and explicit, never in a workflow;
-- it refuses unless the line validates and lacks subjects, nothing attests it
-  yet, the source is the publication's original frozen dataset (it hashes to
-  the revision's `datasetSha256`), the mapping covers the digest exactly at the
-  pinned fingerprints, and id presence matches each original record;
+- it refuses unless the line validates and lacks subjects, and nothing attests
+  it yet;
 - the source is kept immutably under `evidence/<txn>/`;
 - the attestation is appended to `subject-attestations.jsonl`;
 - a duplicate, or altered evidence, proves nothing.
+
+An attestation is checked in two halves, on every read as well as when it is
+written:
+1. **Evidence** (`legacy_evidence`). The source must be the publication's
+   original frozen dataset: its bytes hash to the registry revision's
+   `datasetSha256` and to the provenance's own `inputs.datasetSha256`. Every
+   digest record must be in it exactly once, at the fingerprint the provenance
+   pinned, verified and approved at that fingerprint.
+2. **The reviewed mapping** (`mapping_problems`):
+   - it lists exactly the digest records, in order, each bound to its pinned
+     fingerprint;
+   - it has a well-formed id where the original record names a person or work,
+     and none where it does not;
+   - it never changes an id the original record already carried.
+
+Datasets frozen before §21 have no `personId` or `workId`, and today's
+`parse_dataset` rightly rejects an approved record without them. The evidence
+is therefore read with `parse_historical_dataset`, which applies every other
+rule and is used for nothing else. Publishing, staging, approval and the
+eligibility check still use `parse_dataset` unchanged.
 
 **The date and edition invariant** (`dogear/publish/edition.py`):
 
 | Edition | Rule |
 |---|---|
 | Regular | schema 2, no `quiet` key, every entry dated inside its own week |
-| Quiet | schema 3, the exact copy, 3-5 entries each at its recorded original date, a `quietSource`, and no "Also this week" |
+| Quiet | schema 3, the exact copy, 3-5 entries each on its pinned occurrence, a `quietSource`, and no "Also this week" |
+
+**Exact occurrence.** A quiet provenance pins, in digest order,
+`quietOccurrences: [{recordId, sourceWeek, month, day, date}]`:
+- generation derives each one from the frozen record's month and day in the
+  Monday whose "Also this week" recorded it;
+- regeneration at stage and at the pre-promotion re-check must reproduce it
+  byte for byte, and those two checks also compare it with the frozen record at
+  its pinned fingerprint;
+- every stored-revision check requires `sourceWeek` to be the earliest week the
+  frozen pool recorded, `date` to be that month and day within `sourceWeek`
+  (before W), and each issue entry's `date` to equal it **exactly**.
+
+A date moved within the same source week (2 November to 3 November) is
+refused. Regular provenance carries no `quietOccurrences`, and regular bytes
+are unchanged.
 
 The edition must agree across issue, provenance and history line. It is
 checked:
@@ -2001,4 +2034,7 @@ existing issue and provenance hashes.
   `staged/2026-10-05/dataset.json` in `dogear-publication-data-staging`,
   written once by `f4a4c27`. It hashes to that revision's `datasetSha256`
   (`92c74279…`), and its 4 digest records match their pinned fingerprints.
-  The attestation itself is not written yet.
+  The same bytes are the public `fixtures/staging-year.json` as of `6b32df2`
+  (kept compressed as `tests/golden/legacy-staging-dataset.json.gz`). They
+  pass the evidence half read-only; no mapping is reviewed and no attestation
+  is written yet.

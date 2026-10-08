@@ -440,7 +440,8 @@ def _check_link(raw: dict, raw_link: dict, problems: list[str], where: str) -> O
     return Link(ltype, url, title, provider, match, author, raw_link.get("edition"), rights, market)
 
 
-def _check_record(raw: dict, problems: list[str], warnings: list[str]) -> Optional[Record]:
+def _check_record(raw: dict, problems: list[str], warnings: list[str],
+                  historical: bool = False) -> Optional[Record]:
     if not isinstance(raw, dict):
         problems.append(f"a record must be an object, not {type(raw).__name__}")
         return None
@@ -494,7 +495,8 @@ def _check_record(raw: dict, problems: list[str], warnings: list[str]) -> Option
             bad(f"{id_field} must be wikidata:Q<digits> or dogear:<slug> (3-64 lowercase ASCII), or absent")
         elif sid is not None and raw.get(name_field) is None:
             bad(f"{id_field} is set but {name_field} is not")
-        elif sid is None and raw.get(name_field) is not None and raw.get("approval") is not None:
+        elif (sid is None and raw.get(name_field) is not None and raw.get("approval") is not None
+              and not historical):
             # Publishable records carry stable identities: a quiet week's subject rule and
             # the issue's one-per-subject rule must never rest on display-name text.
             bad(f"an approved record with a {name_field} needs {id_field}")
@@ -685,6 +687,20 @@ def _check_json_shape(payload) -> Optional[str]:
 
 
 def parse_dataset(text: str) -> Dataset:
+    """The dataset as it may be published now: every rule, identities included."""
+    return _parse(text, historical=False)
+
+
+def parse_historical_dataset(text: str) -> Dataset:
+    """A frozen dataset kept as evidence of what an earlier revision published, read
+    ONLY to attest that revision's subjects (PUBLISHING.md §21). Every rule of
+    parse_dataset applies except one: an approved record may lack personId/workId,
+    because datasets frozen before §21 predate those fields. Ids that are present
+    must still be well formed. Nothing parsed here is ever selected or published."""
+    return _parse(text, historical=True)
+
+
+def _parse(text: str, historical: bool) -> Dataset:
     try:
         encoded = text.encode("utf-8")
         payload = json.loads(text)
@@ -706,7 +722,7 @@ def parse_dataset(text: str) -> Dataset:
     records = []
     seen = set()
     for raw in payload["records"]:
-        rec = _check_record(raw, problems, warnings)
+        rec = _check_record(raw, problems, warnings, historical)
         if rec is None:
             continue
         if rec.id in seen:

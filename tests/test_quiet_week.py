@@ -891,3 +891,470 @@ class MoreHistoryTests(unittest.TestCase):
         rewrite_line(f, line_for(f, W2)["txn"], edition="regular")
         problems = f.run().reset_preflight(W2.isoformat())
         self.assertTrue(any("edition" in p for p in problems), problems)
+
+
+# Codex implementation review of 145ce9f: (1) genuine pre-ID evidence, (2) exact occurrence.
+
+LEGACY_GOLDEN = ROOT / "tests" / "golden" / "legacy-staging-dataset.json.gz"
+LEGACY_SHA = "92c7427938d086718092d7cc205266dd282fa691458a89f7d4276e7f389a3844"
+LEGACY_DIGEST = ["staging-10-07", "staging-10-06", "staging-10-09", "staging-10-11"]
+
+
+def legacy_bytes() -> bytes:
+    """The staging launch's real frozen dataset (public fixtures/staging-year.json as of
+    6b32df2): approved records with persons and works and no personId/workId."""
+    import gzip
+    return gzip.decompress(LEGACY_GOLDEN.read_bytes())
+
+
+def legacy_provenance(data: bytes, digest=LEGACY_DIGEST) -> dict:
+    raws = {r["id"]: r for r in json.loads(data)["records"]}
+    return {"inputs": {"datasetSha256": regmod.sha256(data)},
+            "records": [{"recordId": rid, "fingerprint": fingerprint(raws[rid]), "section": "digest",
+                         "position": i} for i, rid in enumerate(digest, 1)]}
+
+
+def reviewed(prov: dict, **override) -> list:
+    """A reviewer's mapping, bound to the pinned fingerprints (what attest-subjects builds)."""
+    out = []
+    for r in prov["records"]:
+        if r["section"] == "digest":
+            s = {"recordId": r["recordId"], "fingerprint": r["fingerprint"],
+                 "personId": f"dogear:reviewed-person-{r['recordId']}", "workId": f"dogear:reviewed-work-{r['recordId']}"}
+            s.update(override.get(r["recordId"], {}))
+            out.append(s)
+    return out
+
+
+def redump(data: bytes, edit) -> bytes:
+    from dogear.dataset import dumps_dataset
+    payload = json.loads(data)
+    edit(payload["records"])
+    return dumps_dataset(payload).encode("utf-8")
+
+
+class GenuinePreIdEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.data = legacy_bytes()
+        self.prov = legacy_provenance(self.data)
+
+    def evidence(self, data=None, sha=None, prov=None, digest=LEGACY_DIGEST):
+        data = self.data if data is None else data
+        return quiet_history.legacy_evidence(data, sha or regmod.sha256(data), prov or self.prov, digest)
+
+    def test_it_is_the_real_staging_evidence(self):
+        self.assertEqual(regmod.sha256(self.data), LEGACY_SHA)
+        records = json.loads(self.data)["records"]
+        self.assertFalse(any("personId" in r or "workId" in r for r in records))
+        for rid in LEGACY_DIGEST:
+            raw = next(r for r in records if r["id"] == rid)
+            self.assertTrue(raw["person"] and raw["work"] and raw["approval"]["fingerprint"] == fingerprint(raw))
+
+    def test_the_modern_parser_still_rejects_it_and_only_for_identities(self):
+        from dogear.dataset import parse_historical_dataset
+        with self.assertRaises(DatasetError) as caught:
+            parse_dataset(self.data.decode("utf-8"))
+        self.assertTrue(caught.exception.problems)
+        self.assertTrue(all(p.endswith(("needs personId", "needs workId")) for p in caught.exception.problems),
+                        caught.exception.problems[:3])
+        self.assertEqual(len(parse_historical_dataset(self.data.decode("utf-8")).records), 366)
+
+    def test_the_historical_parser_keeps_every_other_rule(self):
+        from dogear.dataset import parse_historical_dataset
+        breaks = {
+            "malformed id": lambda rs: rs[0].update(personId="Person A"),
+            "id without name": lambda rs: rs[0].update(person=None, personId="dogear:someone"),
+            "bad month": lambda rs: rs[0].update(month=13),
+            "duplicate id": lambda rs: rs.append(dict(rs[0])),
+            "no headline": lambda rs: rs[0].update(headline=""),
+        }
+        for name, edit in breaks.items():
+            with self.subTest(name), self.assertRaises(DatasetError):
+                parse_historical_dataset(redump(self.data, edit).decode("utf-8"))
+        with self.assertRaises(DatasetError):
+            parse_historical_dataset(json.dumps({"schemaVersion": 2, "records": []}))
+
+    def test_accepted_with_frozen_hashes_fingerprints_and_a_reviewed_mapping(self):
+        originals, problems = self.evidence()
+        self.assertEqual(problems, [])
+        self.assertEqual(list(originals), LEGACY_DIGEST)
+        self.assertEqual(quiet_history.mapping_problems(reviewed(self.prov), originals, self.prov), [])
+
+    def test_altered_evidence_is_refused(self):
+        def recorded(data):  # a dataset that is internally consistent, but not the original
+            return self.evidence(data, prov=dict(self.prov, inputs={"datasetSha256": regmod.sha256(data)}))[1]
+        cases = {
+            "missing": quiet_history.legacy_evidence(None, LEGACY_SHA, self.prov, LEGACY_DIGEST)[1],
+            "bytes altered": self.evidence(self.data + b" ", sha=LEGACY_SHA)[1],
+            "registry hash": self.evidence(sha="0" * 64)[1],
+            "provenance hash": self.evidence(prov=dict(self.prov, inputs={"datasetSha256": "0" * 64}))[1],
+            "record removed": recorded(redump(self.data, lambda rs: rs.remove(
+                next(r for r in rs if r["id"] == "staging-10-09")))),
+            "record substituted": recorded(redump(self.data, lambda rs: next(
+                r for r in rs if r["id"] == "staging-10-09").update(headline="Another headline"))),
+            "substituted and re-approved": recorded(redump(self.data, lambda rs: [
+                r.update(headline="Another headline") or r["approval"].update(fingerprint=fingerprint(r))
+                for r in rs if r["id"] == "staging-10-09"])),
+            "approval withdrawn": recorded(redump(self.data, lambda rs: [
+                r.update(approval=None) for r in rs if r["id"] == "staging-10-09"])),
+            "pinned fingerprint": self.evidence(prov=dict(self.prov, records=[
+                dict(self.prov["records"][0], fingerprint="0" * 16)] + self.prov["records"][1:]))[1],
+            "digest coverage": self.evidence(digest=LEGACY_DIGEST[:3])[1],
+            "digest order": self.evidence(digest=[LEGACY_DIGEST[1], LEGACY_DIGEST[0]] + LEGACY_DIGEST[2:])[1],
+            "unreadable": self.evidence(b"not json", sha=regmod.sha256(b"not json"),
+                                        prov=dict(self.prov, inputs={"datasetSha256": regmod.sha256(b"not json")}))[1],
+        }
+        for name, problems in cases.items():
+            with self.subTest(name):
+                self.assertTrue(problems, name)
+        self.assertTrue(any("exactly once" in p for p in cases["record removed"]), cases["record removed"])
+
+    def test_altered_mapping_is_refused(self):
+        originals, _ = self.evidence()
+        good = reviewed(self.prov)
+        cases = {
+            "coverage": good[:3],
+            "extra": good + [dict(good[0], recordId="staging-10-08")],
+            "order": [good[1], good[0]] + good[2:],
+            "fingerprint": [dict(good[0], fingerprint="0" * 16)] + good[1:],
+            "unbound": [{k: v for k, v in good[0].items() if k != "fingerprint"}] + good[1:],
+            "extra field": [dict(good[0], name="A")] + good[1:],
+            "id syntax": [dict(good[0], personId="Person A")] + good[1:],
+            "id format": [dict(good[0], workId="wikidata:Q0")] + good[1:],
+            "presence": [dict(good[0], workId=None)] + good[1:],
+            "not a list": {"subjects": good},
+        }
+        for name, mapping in cases.items():
+            with self.subTest(name):
+                self.assertTrue(quiet_history.mapping_problems(mapping, originals, self.prov), name)
+
+    def test_an_id_the_original_carried_cannot_be_changed(self):
+        def with_id(rs):
+            r = next(r for r in rs if r["id"] == "staging-10-07")
+            r["personId"] = "wikidata:Q42"
+            r["approval"]["fingerprint"] = fingerprint(r)
+        data = redump(self.data, with_id)
+        prov = legacy_provenance(data)
+        originals, problems = quiet_history.legacy_evidence(data, regmod.sha256(data), prov, LEGACY_DIGEST)
+        self.assertEqual(problems, [])
+        mapping = reviewed(prov, **{"staging-10-07": {"personId": "wikidata:Q42"}})
+        self.assertEqual(quiet_history.mapping_problems(mapping, originals, prov), [])
+        mapping[0]["personId"] = "wikidata:Q43"
+        self.assertTrue(quiet_history.mapping_problems(mapping, originals, prov))
+
+
+def make_pre_id_legacy(f: Fixture, week: dt.date, rev: int = 0) -> tuple:
+    """make_legacy, and also the frozen dataset as it was before §21: no personId or
+    workId anywhere, approvals at those pre-ID fingerprints, and the provenance and
+    registry pinning that dataset. (txn, original frozen dataset bytes)."""
+    from dogear.dataset import dumps_dataset
+    txn = make_legacy(f, week, rev)
+    payload = json.loads((f.remote.remote / "staged" / week.isoformat() / "dataset.json").read_bytes())
+    for r in payload["records"]:
+        r.pop("personId", None), r.pop("workId", None)
+        if r.get("approval"):
+            r["approval"]["fingerprint"] = fingerprint(r)
+    data = dumps_dataset(payload).encode("utf-8")
+    fps = {r["id"]: fingerprint(r) for r in payload["records"]}
+    prov_path = f.remote.remote / "published" / week.isoformat() / f"rev{rev}.provenance.json"
+    prov = json.loads(prov_path.read_bytes())
+    for r in prov["records"]:
+        r["fingerprint"] = fps[r["recordId"]]
+    prov["inputs"]["datasetSha256"] = regmod.sha256(data)
+    prov_data = provenance_bytes(prov)
+    prov_path.write_bytes(prov_data)
+    reg = f.registry()
+    r = reg["weeks"][week.isoformat()]["revisions"][rev]
+    r["provenanceSha256"], r["datasetSha256"] = regmod.sha256(prov_data), regmod.sha256(data)
+    reg_bytes = regmod.dumps(reg)
+    f.store.objects[REGISTRY_KEY] = Obj(reg_bytes, '"pre-id"')
+    (f.remote.remote / "publication.json").write_bytes(reg_bytes)
+    return txn, data
+
+
+class PreIdAttestationEndToEndTests(unittest.TestCase):
+    def setup_pre_id(self):
+        f = published(self, [regular_week(W0, "a"), regular_week(W1, "b")])
+        txn, data = make_pre_id_legacy(f, W0)
+        promote(f, W1)
+        return f, txn, data
+
+    def mapping(self, f, txn):
+        return LegacyAndAttestationTests.mapping(None, f, txn)
+
+    def test_a_genuine_pre_id_publication_can_be_attested(self):
+        f, txn, data = self.setup_pre_id()
+        with self.assertRaises(DatasetError):
+            parse_dataset(data.decode("utf-8"))  # the modern path still refuses it
+        self.assertFalse(f.run()._quiet_source(W2).complete)
+        self.assertEqual(promote(f, W2).status, "held")
+        out = f.run().attest_subjects(txn, self.mapping(f, txn), data)
+        self.assertEqual(out.status, "attested")
+        self.assertEqual((f.remote.remote / "evidence" / txn / "dataset.json").read_bytes(), data)
+        self.assertTrue(f.run()._quiet_source(W2).complete)
+        self.assertEqual(promote(f, W2).status, "published")
+
+    def test_altered_pre_id_evidence_or_mapping_is_refused(self):
+        f, txn, data = self.setup_pre_id()
+        good = self.mapping(f, txn)
+        later = (f.remote.remote / "staged" / W1.isoformat() / "dataset.json").read_bytes()
+        cases = [
+            ("bytes", good, data + b" "),
+            ("a later dataset", good, later),
+            ("record removed", good, redump(data, lambda rs: rs.remove(
+                next(r for r in rs if r["id"] == good[0]["recordId"])))),
+            ("coverage", good[:-1], data),
+            ("presence", [dict(good[0], workId=None)] + good[1:], data),
+            ("syntax", [dict(good[0], personId="Person A")] + good[1:], data),
+        ]
+        for name, mapping, source in cases:
+            with self.subTest(name), self.assertRaises(Refused):
+                f.run().attest_subjects(txn, mapping, source)
+        self.assertFalse((f.remote.remote / "evidence").exists())
+        self.assertEqual(PubData(f.remote.remote).read_attestations(), [])
+
+    def test_a_stored_pre_id_attestation_is_rechecked_on_every_read(self):
+        f, txn, data = self.setup_pre_id()
+        f.run().attest_subjects(txn, self.mapping(f, txn), data)
+        path = f.remote.remote / "subject-attestations.jsonl"
+        att = json.loads(path.read_text(encoding="utf-8"))
+        for name, edit in (("fingerprint", lambda a: a["subjects"][0].update(fingerprint="0" * 16)),
+                           ("identity format", lambda a: a["subjects"][0].update(personId="Person A")),
+                           ("source hash", lambda a: a.update(sourceDatasetSha256="0" * 64))):
+            with self.subTest(name):
+                forged = copy.deepcopy(att)
+                edit(forged)
+                path.write_text(json.dumps(forged, sort_keys=True) + "\n", encoding="utf-8")
+                self.assertFalse(f.run()._quiet_source(W2).complete)
+        path.write_text(json.dumps(att, sort_keys=True) + "\n", encoding="utf-8")
+        self.assertTrue(f.run()._quiet_source(W2).complete)
+        evidence = f.remote.remote / "evidence" / txn / "dataset.json"
+        evidence.write_bytes(redump(data, lambda rs: rs.pop()))  # a different (valid) dataset
+        self.assertFalse(f.run()._quiet_source(W2).complete)
+
+
+NOV_2, NOV_3 = dt.date(2026, 11, 2), dt.date(2026, 11, 3)
+EXACT = "the exact occurrence its provenance pinned"
+
+
+def forge_entry_date(f: Fixture, week: dt.date, rev: int, rid: str, new: dt.date) -> None:
+    """Move one stored quiet entry's date, re-pinning every hash consistently (issue
+    object and key, provenance artifacts, registry, mirror, history line), so that only
+    the exact-occurrence rule can notice."""
+    from dogear.issue import dumps
+    reg = f.registry()
+    r = reg["weeks"][week.isoformat()]["revisions"][rev]
+    issue = json.loads(f.store.objects[r["issueKey"]].data)
+    for e in issue["entries"]:
+        if e["id"] == rid:
+            e["date"] = new.isoformat()
+    data = dumps(issue).encode("utf-8")
+    sha = regmod.sha256(data)
+    r["issueKey"], r["issueSha256"] = regmod.issue_key(issue["issueId"], sha), sha
+    f.store.objects[r["issueKey"]] = Obj(data, '"forged"')
+    prov_path = f.remote.remote / "published" / week.isoformat() / f"rev{rev}.provenance.json"
+    prov = json.loads(prov_path.read_bytes())
+    prov["artifacts"]["issueSha256"] = sha
+    prov_data = provenance_bytes(prov)
+    prov_path.write_bytes(prov_data)
+    r["provenanceSha256"] = regmod.sha256(prov_data)
+    reg_bytes = regmod.dumps(reg)
+    f.store.objects[REGISTRY_KEY] = Obj(reg_bytes, '"forged-reg"')
+    (f.remote.remote / "publication.json").write_bytes(reg_bytes)
+    rewrite_line(f, r["txn"], issueSha256=sha)
+
+
+class ExactOccurrenceTests(unittest.TestCase):
+    """W2 (16-22 November) is quiet; its pick a-d0-2 was recorded by W0's "Also this
+    week" (2-8 November) and occurs on Monday 2 November."""
+
+    def quiet(self, extra=()):
+        f = published(self, [regular_week(W0, "a"), regular_week(W1, "b"), list(extra)])
+        promote(f, W1)
+        self.assertEqual(promote(f, W2).status, "published")
+        return f
+
+    def prov(self, f, week=W2, rev=0):
+        return json.loads((f.remote.remote / "published" / week.isoformat() / f"rev{rev}.provenance.json").read_bytes())
+
+    def test_generation_pins_the_record_anniversary_in_its_source_week(self):
+        f = self.quiet()
+        occ = self.prov(f)["quietOccurrences"]
+        self.assertEqual(occ[0], {"recordId": "a-d0-2", "sourceWeek": "2026-11-02", "month": 11, "day": 2,
+                                  "date": "2026-11-02"})
+        raws = {r["id"]: r for r in f.records}
+        from dogear.dataset import parse_dataset as pd
+        ds = {r.id: r for r in pd(json.dumps({"schemaVersion": 3, "records": f.records})).records}
+        from dogear.select import occurrence_in
+        for o in occ:
+            self.assertEqual(o["date"], occurrence_in(ds[o["recordId"]], week_starting(
+                dt.date.fromisoformat(o["sourceWeek"]))).isoformat())
+            self.assertEqual((o["month"], o["day"]), (raws[o["recordId"]]["month"], raws[o["recordId"]]["day"]))
+        self.assertEqual([e["date"] for e in stored_issue(f, W2)["entries"]], [o["date"] for o in occ])
+        self.assertNotIn("quietOccurrences", self.prov(f, W1))  # regular provenance is unchanged
+
+    def test_2_to_3_november_is_refused_and_2_november_passes(self):
+        f = self.quiet()
+        issue, prov, line = stored_issue(f, W2), self.prov(f), line_for(f, W2)
+        self.assertEqual(revision_problems(W2, issue, prov, line), [])
+        moved = copy.deepcopy(issue)
+        moved["entries"][0]["date"] = NOV_3.isoformat()
+        # 3 November is inside the same source week and before W2: the old week-range
+        # check would have accepted it.
+        self.assertTrue(NOV_2 <= NOV_3 <= NOV_2 + dt.timedelta(days=6) and NOV_3 < W2)
+        problems = revision_problems(W2, moved, prov, line)
+        self.assertTrue(any(EXACT in p for p in problems), problems)
+        moved["entries"][0]["date"] = NOV_2.isoformat()
+        self.assertEqual(revision_problems(W2, moved, prov, line), [])
+
+    def test_the_pinned_occurrence_itself_must_be_the_anniversary(self):
+        f = self.quiet()
+        issue, prov = stored_issue(f, W2), self.prov(f)
+        raws = {r["id"]: r for r in f.records}
+        self.assertEqual(revision_problems(W2, issue, prov, frozen_records=raws), [])
+
+        def forged(**change):
+            p = copy.deepcopy(prov)
+            p["quietOccurrences"][0].update(change)
+            i = copy.deepcopy(issue)
+            i["entries"][0]["date"] = p["quietOccurrences"][0]["date"]
+            return i, p
+        cases = {
+            # date and issue moved together, month/day left: not the anniversary
+            "date only": (forged(date=NOV_3.isoformat()), None),
+            # all three moved consistently: only the frozen record can tell
+            "month/day too": (forged(date=NOV_3.isoformat(), day=3), raws),
+            "source week": (forged(sourceWeek=W1.isoformat(), date="2026-11-09", day=9), None),
+            "not a Monday": (forged(sourceWeek="2026-11-01", date="2026-11-01", day=1), None),
+            "missing": ((issue, {k: v for k, v in prov.items() if k != "quietOccurrences"}), None),
+            "order": ((issue, dict(prov, quietOccurrences=prov["quietOccurrences"][::-1])), None),
+            "extra field": (forged(note="x"), None),
+        }
+        for name, ((i, p), frozen) in cases.items():
+            with self.subTest(name):
+                self.assertTrue(revision_problems(W2, i, p, frozen_records=frozen), name)
+        # a pool forged to record W itself: only "before W" stops an in-week date
+        p = copy.deepcopy(prov)
+        p["inputs"]["quietSource"]["pool"] = [[rid, W2.isoformat() if rid == "a-d0-2" else wk]
+                                              for rid, wk in p["inputs"]["quietSource"]["pool"]]
+        p["quietOccurrences"][0].update(sourceWeek=W2.isoformat(), day=16, date=W2.isoformat())
+        i = copy.deepcopy(issue)
+        i["entries"][0]["date"] = W2.isoformat()
+        problems = revision_problems(W2, i, p)
+        self.assertTrue(any("anniversary in its source week" in x for x in problems), problems)
+        # the consistent month/day forgery is caught only with the frozen record
+        (i, p), _ = cases["month/day too"]
+        self.assertEqual(revision_problems(W2, i, p), [])
+        regular = self.prov(f, W1)
+        self.assertTrue(revision_problems(W1, stored_issue(f, W1), dict(regular, quietOccurrences=[])))
+
+    def test_every_stored_revision_path_refuses_the_moved_date(self):
+        def fresh():
+            f = self.quiet(extra=regular_week(W3, "c"))
+            return f
+
+        with self.subTest("history validation"):
+            f = fresh()
+            forge_entry_date(f, W2, 0, "a-d0-2", NOV_3)
+            with self.assertRaises(CorruptState) as caught:
+                f.run()._quiet_source(W3)
+            self.assertIn(EXACT, str(caught.exception))
+
+        with self.subTest("reset preflight"):
+            f = fresh()
+            pub = f.run()
+            pub.assets = {}
+            self.assertFalse(any(EXACT in p for p in pub.reset_preflight(W2.isoformat())))
+            forge_entry_date(f, W2, 0, "a-d0-2", NOV_3)
+            pub = f.run()
+            pub.assets = {}
+            problems = pub.reset_preflight(W2.isoformat())
+            self.assertTrue(any(EXACT in p for p in problems), problems)
+
+        with self.subTest("restore"):
+            f = fresh()
+            self.assertEqual(f.run().rollback(W1, None, "check").status, "published")
+            forge_entry_date(f, W2, 0, "a-d0-2", NOV_3)
+            with self.assertRaises(Refused) as caught:
+                f.run().restore(W2, 0)
+            self.assertIn(EXACT, str(caught.exception))
+
+        with self.subTest("resume"):  # held on the quiet week: resume re-checks the current revision
+            f = fresh()
+            self.assertEqual(promote(f, W3).status, "published")
+            self.assertEqual(f.run().rollback(W2, None, "check").status, "published")
+            forge_entry_date(f, W2, 0, "a-d0-2", NOV_3)
+            with self.assertRaises(Refused) as caught:
+                f.run().resume()
+            self.assertIn(EXACT, str(caught.exception))
+
+        with self.subTest("rollback"):
+            f = fresh()
+            self.assertEqual(promote(f, W3).status, "published")
+            forge_entry_date(f, W2, 0, "a-d0-2", NOV_3)
+            with self.assertRaises(Refused) as caught:
+                f.run().rollback(W2, None, "back to the quiet week")
+            self.assertIn(EXACT, str(caught.exception))
+
+        with self.subTest("correction"):
+            f = fresh()
+            forge_entry_date(f, W2, 0, "a-d0-2", NOV_3)
+            f.edit("a-d2-2", headline="Edited")
+            with self.assertRaises(CorruptState) as caught:
+                f.run().correct(W2, 0, "a quiet pick edited")
+            self.assertIn(EXACT, str(caught.exception))
+
+        with self.subTest("pre-write guard and retry"):
+            f = fresh()
+            pub = f.run()
+            reg = f.registry()
+            rev = reg["weeks"][W2.isoformat()]["revisions"][0]
+            good = f.store.objects[rev["issueKey"]].data
+            guard = pub._eligibility_guard(self.prov(f), good, line_for(f, W2), W2)
+            self.assertIsNone(guard())
+            forge_entry_date(f, W2, 0, "a-d0-2", NOV_3)
+            rev = f.registry()["weeks"][W2.isoformat()]["revisions"][0]
+            moved = f.store.objects[rev["issueKey"]].data
+            reason = pub._eligibility_guard(self.prov(f), moved, line_for(f, W2), W2)()
+            self.assertIn(EXACT, reason or "")
+
+    def test_the_pre_promotion_recheck_refuses_a_moved_staged_date(self):
+        from dogear.publish.staging import Staged, verify_staged
+        f = published(self, [regular_week(W0, "a"), regular_week(W1, "b")])
+        promote(f, W1)
+        f.clock.t = at(W2 - dt.timedelta(days=3), 10, 2)
+        self.assertEqual(f.run().stage_next().status, "staged")
+        pub = f.run()
+        files = PubData(f.remote.remote).read_staged(W2)
+        staged = Staged.from_files(W2, files)
+        source = pub._quiet_source(W2)
+        history = pub._history(f.registry(), W2)
+        args = (pub.inputs, QUIET, history, pub._dataset_text(), Checks(), "test")
+        self.assertEqual(verify_staged(staged, *args, quiet_source=source), [])
+        issue = json.loads(files["issue.json"])
+        issue["entries"][0]["date"] = NOV_3.isoformat()
+        from dogear.issue import dumps
+        moved = Staged.from_files(W2, dict(files, **{"issue.json": dumps(issue).encode("utf-8")}))
+        self.assertTrue(verify_staged(moved, *args, quiet_source=source))
+        # Monday's promotion re-stages from the frozen inputs: 2 November is what publishes
+        PubData(f.remote.remote).write_staged(W2, dict(files, **{"issue.json": dumps(issue).encode("utf-8")}))
+        self.assertEqual(promote(f, W2).status, "published")
+        self.assertEqual(stored_issue(f, W2)["entries"][0]["date"], NOV_2.isoformat())
+
+    def test_stage_and_the_recheck_compare_occurrences_with_the_frozen_records(self):
+        import dogear.publish.staging as st
+        seen = []
+        real = st.revision_problems
+
+        def spy(monday, issue, provenance, line=None, frozen_records=None):
+            if provenance.get("edition") == "quiet":
+                seen.append(frozen_records)
+            return real(monday, issue, provenance, line, frozen_records=frozen_records)
+        f = published(self, [regular_week(W0, "a"), regular_week(W1, "b")])
+        promote(f, W1)
+        f.clock.t = at(W2 - dt.timedelta(days=3), 10, 2)
+        with mock.patch.object(st, "revision_problems", spy):
+            self.assertEqual(f.run().stage_next().status, "staged")   # stage
+            self.assertEqual(promote(f, W2).status, "published")      # verify_staged
+        self.assertGreaterEqual(len(seen), 2)
+        self.assertTrue(all(isinstance(s, dict) and "a-d0-2" in s for s in seen))

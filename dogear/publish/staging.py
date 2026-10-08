@@ -151,6 +151,11 @@ def _read(path: Path) -> bytes:
         return b""
 
 
+def _raw_records(dataset_bytes: bytes) -> dict:
+    """{id: raw record} from frozen dataset bytes that generate() has already parsed."""
+    return {r["id"]: r for r in json.loads(dataset_bytes)["records"]}
+
+
 def freeze(inputs: StageInputs, policy: PublicationPolicy, history: list, now: dt.datetime,
            quiet_source: Optional[QuietSource] = None) -> Frozen:
     return Frozen(_read(inputs.dataset), _read(inputs.affinity), inputs.base_url, inputs.generator, policy,
@@ -192,6 +197,11 @@ def generate(week: IssueWeek, frozen: Frozen) -> tuple:
         "edition": selection.edition,
         "subjects": subjects,
         "records": records,
+        # Quiet only: each entry's exact date, derived here from the frozen record's
+        # month and day in the week whose "Also this week" recorded it, and pinned with
+        # the provenance, so a stored entry can never drift within that week.
+        **({"quietOccurrences": [quiet_occurrence(c) for c in selection.picked]}
+           if selection.edition == "quiet" else {}),
         "inputs": {
             "generator": frozen.generator,
             "datasetSha256": hashlib.sha256(frozen.dataset_bytes).hexdigest(),
@@ -206,6 +216,11 @@ def generate(week: IssueWeek, frozen: Frozen) -> tuple:
                       "webSha256": hashlib.sha256(web_bytes).hexdigest()},
     }
     return selection, issue_bytes, web_bytes, provenance
+
+
+def quiet_occurrence(c) -> dict:
+    return {"recordId": c.record.id, "sourceWeek": c.source_week.isoformat(), "month": c.record.month,
+            "day": c.record.day, "date": c.date.isoformat()}
 
 
 def external_links(selection) -> list:
@@ -306,7 +321,8 @@ def stage(week: IssueWeek, inputs: StageInputs, policy: PublicationPolicy, histo
     if (issue2, web2, prov2) != (issue_bytes, web_bytes, provenance):
         problems.append("regenerating from the frozen inputs gave different bytes")
     problems += artifact_problems(week, inputs.base_url, selection, issue, issue_bytes, web_bytes)
-    problems += revision_problems(week.start, issue, provenance)
+    problems += revision_problems(week.start, issue, provenance,
+                                  frozen_records=_raw_records(frozen.dataset_bytes))
     blocking, warnings = run_checks(frozen, selection, checks)
     problems += blocking
     if problems:
@@ -402,7 +418,8 @@ def verify_staged(staged: Staged, inputs: StageInputs, policy: PublicationPolicy
     issue = json.loads(issue_bytes)
     problems += eligibility.check(regenerated, current_dataset_text, issue)
     problems += artifact_problems(week, inputs.base_url, selection, issue, issue_bytes, web_bytes)
-    problems += revision_problems(week.start, issue, regenerated)
+    problems += revision_problems(week.start, issue, regenerated,
+                                  frozen_records=_raw_records(staged.dataset_bytes))
     if mode == "production" and staged.validation.get("mode") != "production":
         problems.append("staged without production validation")
     blocking, _warnings = run_checks(frozen, selection, checks)

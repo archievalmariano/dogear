@@ -6,8 +6,9 @@ history before it feeds a quiet pool, and by the read-only reset preflight.
 
 A regular issue (schema 2, no ``quiet``) holds only entries whose anniversary falls
 in its own Monday-Sunday week. A quiet issue (schema 3, the exact ``quiet`` copy)
-holds 3-5 earlier-dated entries, each at its occurrence in the week whose "Also
-this week" recorded it, and nothing in "Also this week". The edition must agree
+holds 3-5 earlier-dated entries, each on exactly the occurrence its provenance
+pinned (``quietOccurrences``: the record's anniversary in the week whose "Also
+this week" recorded it), and nothing in "Also this week". The edition must agree
 across the issue, its provenance and its history line.
 """
 
@@ -16,7 +17,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from ..dataset import SUBJECT_ID_RE
+from ..dataset import SUBJECT_ID_RE, fingerprint
 from ..quiet import (EDITIONS, QUIET_MAX, QUIET_MIN, QUIET_SCHEMA_VERSION, REGULAR_SCHEMA_VERSION, QuietSource,
                      quiet_object)
 from ..select import MAX_ENTRIES
@@ -44,10 +45,67 @@ def subjects_problem(subjects: object, digest_ids: list) -> Optional[str]:
     return None
 
 
-def revision_problems(monday: dt.date, issue: object, provenance: object, line: Optional[dict] = None) -> list:
+def _anniversary_in(month: object, day: object, source_week: dt.date) -> Optional[dt.date]:
+    """The day in the Monday-Sunday week ``source_week`` with this month and day (a
+    29 February only in a leap year), as the selector's occurrence_in finds it."""
+    for i in range(7):
+        d = source_week + dt.timedelta(days=i)
+        if (d.month, d.day) == (month, day):
+            return d
+    return None
+
+
+def occurrence_problems(monday: dt.date, entries: list, provenance: dict, source: QuietSource,
+                        frozen_records: Optional[dict]) -> list:
+    """A quiet issue's entries must sit on the exact occurrences its provenance pinned:
+    ``quietOccurrences`` names every digest record, in order, with the Monday whose
+    "Also this week" recorded it (the earliest such week in the frozen pool, as the
+    selector takes it), the record's month and day, and the one date in that week with
+    that month and day, before this week. Each issue entry's date must equal it
+    exactly. With ``frozen_records`` (the frozen dataset, at stage and at the
+    pre-promotion re-check) the month and day are also the record's own, at the
+    fingerprint the provenance pinned."""
+    occurrences = provenance.get("quietOccurrences")
+    digest = _ids(provenance, "digest")
+    if not isinstance(occurrences, list) or not all(isinstance(o, dict) and set(o) == {
+            "recordId", "sourceWeek", "month", "day", "date"} for o in occurrences):
+        return ["a quiet issue's provenance must pin quietOccurrences"]
+    if [o["recordId"] for o in occurrences] != digest:
+        return ["quietOccurrences do not name the digest, in order"]
+    first_recorded = {}
+    for rid, week in sorted(source.pool):
+        first_recorded.setdefault(rid, week)
+    pinned_fp = {r.get("recordId"): r.get("fingerprint") for r in provenance.get("records") or []
+                 if isinstance(r, dict) and r.get("section") == "digest"}
+    by_id = {e.get("id"): e for e in entries if isinstance(e, dict)}
+    problems = []
+    for o in occurrences:
+        rid = o["recordId"]
+        try:
+            source_week, date = dt.date.fromisoformat(o["sourceWeek"]), dt.date.fromisoformat(o["date"])
+        except (TypeError, ValueError):
+            problems.append(f"{rid}: its pinned occurrence is not a date")
+            continue
+        if first_recorded.get(rid) != o["sourceWeek"] or source_week.weekday() != 0:
+            problems.append(f"{rid}: its pinned source week is not the week the pool recorded it")
+        if _anniversary_in(o["month"], o["day"], source_week) != date or date >= monday:
+            problems.append(f"{rid}: its pinned date is not its anniversary in its source week")
+        if (by_id.get(rid) or {}).get("date") != o["date"]:
+            problems.append(f"{rid}: the issue's date is not the exact occurrence its provenance pinned")
+        if frozen_records is not None:
+            raw = frozen_records.get(rid)
+            if raw is None or fingerprint(raw) != pinned_fp.get(rid) or \
+                    (raw.get("month"), raw.get("day")) != (o["month"], o["day"]) or raw.get("precision") != "day":
+                problems.append(f"{rid}: its pinned occurrence is not the frozen record's anniversary")
+    return problems
+
+
+def revision_problems(monday: dt.date, issue: object, provenance: object, line: Optional[dict] = None,
+                      frozen_records: Optional[dict] = None) -> list:
     """Every way this revision breaks the date/edition invariant. [] means it holds.
     ``line`` is the history line (committed, or proposed before a write); None while
-    staging, before any line exists."""
+    staging, before any line exists. ``frozen_records`` ({id: raw record} from the
+    frozen dataset) where it is at hand: at stage and at the pre-promotion re-check."""
     if not isinstance(issue, dict) or not isinstance(provenance, dict):
         return ["issue or provenance malformed"]
     problems = []
@@ -91,22 +149,18 @@ def revision_problems(monday: dt.date, issue: object, provenance: object, line: 
             problems.append(f"a quiet issue's provenance needs a valid quietSource ({err})")
             source = None
         if source is not None:
-            recorded = {}
-            for rid, week in source.pool:
-                recorded.setdefault(rid, week)
-            for rid, day in dates:
-                week = recorded.get(rid)
-                if week is None:
+            recorded = {rid for rid, _week in source.pool}
+            for rid, _day in dates:
+                if rid not in recorded:
                     problems.append(f"{rid}: not in the quiet pool")
-                    continue
-                start = dt.date.fromisoformat(week)
-                if not (start <= day <= start + dt.timedelta(days=6)) or day >= monday:
-                    problems.append(f"{rid}: its date is not its occurrence in the week that recorded it")
                 if rid in source.excluded:
                     problems.append(f"{rid}: was published as a full item")
+            problems += occurrence_problems(monday, entries, provenance, source, frozen_records)
     else:
         if (provenance.get("inputs") or {}).get("quietSource") is not None:
             problems.append("a regular issue's provenance carries a quiet source")
+        if "quietOccurrences" in provenance:
+            problems.append("a regular issue's provenance carries quiet occurrences")
         if not 1 <= len(entries) <= MAX_ENTRIES:
             problems.append(f"a regular issue holds 1-{MAX_ENTRIES} entries, not {len(entries)}")
         for rid, day in dates:
