@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
@@ -73,6 +74,9 @@ class Outcome:
     message: str
     txn: Optional[str] = None
     notices: list = field(default_factory=list)
+
+
+_PAGE_FONT = re.compile(r"url\('\.\./fonts/([A-Za-z0-9-]+\.woff2)'\)")
 
 
 def rollover_week(now: dt.datetime) -> Optional[IssueWeek]:
@@ -191,13 +195,52 @@ class Publisher:
             self._history(reg, dt.date.max)  # every visible revision has its committed record
         except NeedsHuman as err:
             problems.append(str(err))
+        return problems + self._hosted_problems(reg)
+
+    def _fetch(self, path: str) -> tuple:
+        """(status, body, None) from the host, or (None, None, why) if it could not be read."""
         try:
-            status, body = self.served("/current.json")
+            status, body = self.served(path)
         except Exception as err:  # noqa: BLE001 - any failure to read the host is a HOLD
-            problems.append(f"the host could not be read: {type(err).__name__}")
-        else:
-            if status != 200 or regmod.sha256(body) != regmod.sha256(regmod.manifest_bytes(reg)):
-                problems.append("the host does not serve the live registry's manifest")
+            return None, None, f"the host could not be read ({type(err).__name__})"
+        if not isinstance(status, int) or not isinstance(body, (bytes, bytearray)):
+            return None, None, "the host gave a malformed response"
+        return status, bytes(body), None
+
+    def _hosted_problems(self, reg: dict) -> list:
+        """Read-only: everything the live registry makes visible, fetched through the host
+        and compared byte for byte. Verification history is not enough: an object can
+        disappear after it was verified.
+
+        * the manifest (/current.json), and each week's ACTIVE page and device issue,
+          against the hashes the registry records (verification_targets with no
+          earlier registry: every week, not only changed ones);
+        * every font those pages load (../fonts/NAME.woff2), against the publisher's
+          own copy of that font (the bytes it uploads; the registry records none)."""
+        problems, fonts = [], set()
+        for t in verification_targets(None, reg):
+            where = f"{t['kind']} {t['path']}"
+            status, body, why = self._fetch(t["path"])
+            if why:
+                problems.append(f"{where}: {why}")
+            elif status != 200:
+                problems.append(f"{where}: the host answered {status}")
+            elif regmod.sha256(body) != t["sha256"]:
+                problems.append(f"{where}: the served bytes do not match the registry")
+            elif t["kind"] == "page":
+                fonts.update(_PAGE_FONT.findall(body.decode("utf-8", "replace")))
+        for name in sorted(fonts):
+            where = f"font /fonts/{name}"
+            if name not in self.assets:
+                problems.append(f"{where}: the publisher has no copy to compare it with")
+                continue
+            status, body, why = self._fetch(f"/fonts/{name}")
+            if why:
+                problems.append(f"{where}: {why}")
+            elif status != 200:
+                problems.append(f"{where}: the host answered {status}")
+            elif body != self.assets[name]:
+                problems.append(f"{where}: the served bytes differ from the publisher's copy")
         return problems
 
     # Reconciliation.

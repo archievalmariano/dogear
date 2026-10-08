@@ -230,19 +230,31 @@ def _public_status(status: dict) -> dict:
 
 
 def _pubdata_git_problems(root: Path) -> list:
-    """The publication-data checkout must be exactly the remote's main, unmodified."""
+    """The publication-data checkout must be exactly the remote's main, unmodified.
+    Fails closed: every git command must succeed, or its failure is the reason."""
     if not (root / ".git").exists():
         return ["the publication data is not a git checkout of its remote"]
+
     def git(*a):
-        return subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True)
+        try:
+            return subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.SubprocessError) as err:
+            return subprocess.CompletedProcess(a, 1, "", type(err).__name__)
+
     problems = []
-    if git("status", "--porcelain").stdout.strip():
+    status = git("status", "--porcelain")
+    if status.returncode != 0:
+        problems.append(f"git status failed (exit {status.returncode}): the checkout cannot be shown clean")
+    elif status.stdout.strip():
         problems.append("the publication-data checkout has local changes")
-    head = git("rev-parse", "HEAD").stdout.strip()
-    remote = git("ls-remote", "origin", "refs/heads/main")
-    if remote.returncode != 0 or not remote.stdout.strip():
-        problems.append("the publication-data remote main could not be read")
-    elif remote.stdout.split()[0] != head:
+    head = git("rev-parse", "--verify", "HEAD")
+    if head.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", head.stdout.strip()):
+        problems.append(f"git rev-parse HEAD failed (exit {head.returncode}): the checkout has no readable commit")
+    remote = git("ls-remote", "--exit-code", "origin", "refs/heads/main")
+    tip = remote.stdout.split()[0] if remote.returncode == 0 and remote.stdout.split() else ""
+    if remote.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", tip):
+        problems.append(f"git ls-remote origin main failed (exit {remote.returncode}): the remote tip is unknown")
+    elif head.returncode == 0 and tip != head.stdout.strip():
         problems.append("the publication-data checkout is not the remote's current main")
     return problems
 

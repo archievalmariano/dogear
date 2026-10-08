@@ -1739,7 +1739,10 @@ approved the transition.
      `python3 -m dogear.cli publish --target staging --pubdata <fresh clone> reset-preflight --expect-current 2027-03-29`.
      It never reconciles, verifies or saves anything, and it isn't
      reachable from any workflow. It reports PASS only if all of these hold:
-     - the clone is exactly the remote `main`, with no local changes;
+     - the clone is exactly the remote `main`, with no local changes. Every
+       git command must succeed: `git status`, `git rev-parse HEAD` and
+       `git ls-remote origin main`. A failed command is a HOLD reason, never
+       read as clean;
      - no `pending.json`;
      - `unverified.json` is empty and every committed transaction is in
        `verified.jsonl`;
@@ -1748,7 +1751,16 @@ approved the transition.
      - its current week is 2027-03-29, with no hold;
      - its transaction is the last committed one, so no write is unresolved;
      - every visible revision has its committed record;
-     - the host serves exactly that registry's manifest.
+     - the host serves exactly what that registry shows. Each item is
+       fetched again, because verification history is not enough: an object
+       can disappear after it was verified. The checks are:
+       - the manifest, and every week's *active* page and device issue,
+         byte-compared with the hashes the registry records;
+       - every font those pages load, byte-compared with the publisher's
+         own copy, since the registry records no font hash.
+
+       A missing object, failed fetch, malformed response or hash mismatch
+       is a HOLD.
 
      Anything else is **HOLD**, with every reason listed.
 2. **Snapshot.** Record `dogear-publication-data-staging` `main` (`128f44c`
