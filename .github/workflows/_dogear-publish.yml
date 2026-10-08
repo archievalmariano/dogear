@@ -14,7 +14,9 @@
 #                   (write, dogear-publication-data only), EDITORIAL_DEPLOY_KEY (read-only)
 #                   vars: PUBLICATION_DATA_REPO = archievalmariano/dogear-publication-data
 # The bucket, host, mode, dataset and policy are not variables: `--target` fixes them.
-# Scheduled runs act only once PUBLICATION_ENABLED=true (G10).
+# PUBLICATION_ENABLED=true (G10) gates only the SCHEDULED stage and promote jobs; a manual
+# workflow_dispatch of an enabled workflow runs regardless. Until approval, safety also
+# rests on those workflows staying disabled in the repository's Actions settings.
 name: dogear publish (reusable)
 
 on:

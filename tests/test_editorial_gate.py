@@ -26,6 +26,9 @@ class EditorialGateTests(unittest.TestCase):
         for r in data["records"]:
             r["id"] = r["id"].replace("staging-", "standin-")
             r["tags"], r["approval"] = [], None
+            r["person"], r["work"] = r["person"].replace("Staging", "Standin"), r["work"].replace("Staging", "Standin")
+            for x in r["links"] + r["sources"]:
+                x["url"] = "https://library.test/"
         return json.dumps(data)
 
     def make(self, test_ok=True, samples_ok=True, fit_ok=True, synthetic=False) -> tuple:

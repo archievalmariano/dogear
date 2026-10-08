@@ -1633,7 +1633,8 @@ S2 ran on a simulated 2027 clock (`--now`), so the staging registry's current
 week is 29 March 2027. With the real clock, CI could publish nothing on
 staging: promotion refuses any week not after the current one. Staging is
 the permanent rehearsal target, so it moves to the real Monday-Sunday
-calendar that production uses. The S2 state is archived, not deleted.
+calendar that production uses. The S2 state is archived, not deleted, and
+only from a quiescent, reconciled state.
 
 **The year-round synthetic fixture.**
 - **What it is.** `fixtures/staging-year.json`, written by
@@ -1641,87 +1642,202 @@ calendar that production uses. The S2 state is archived, not deleted.
   `staging-s2.json`. It has one placeholder record for every month and day,
   29 February included (it appears only in leap years). So every real week
   offers about seven candidates, and selection still has to choose.
-- **Not an editorial rule.** That density is fixture shape only. Scores vary
-  by a fixed rotation of significance, recognition and type.
+- **Not an editorial rule.** That density is fixture shape only.
 - **Coverage.** Every week from 29 December 2025 to 30 December 2030 builds
   an issue of 4-5 items, published in sequence so the 365-day history
   applies. The fit check passes for all 366 records.
-- **Synthetic markers.** Every record carries all of them
-  (`dogear/synthetic.py`):
-  - id `staging-MM-DD`;
-  - tag `staging-test`;
-  - a FIXTURE approval by `synthetic-fixture-not-editorial`;
-  - only `https://example.org/` links;
-  - "Staging Writer" and "Staging Work" names.
 
-  The affinity file is empty, so it holds no real preferences.
+**The declared synthetic markers.** These five, exactly as `MARKERS` in
+`dogear/synthetic.py` defines them:
 
-**Staging and production separation.**
-- **Production refuses synthetic data.** It refuses any dataset holding a
-  record with *any* synthetic marker. This applies when staging, when
-  re-verifying a staged week before publishing it, and in the editorial gate
-  (a new check, "no synthetic records", which prints no count). So the
-  fixture copied over the canonical dataset, or a single marked record,
-  cannot publish.
-- **Staging refuses real data.** `--target staging` refuses any record that
-  lacks *all* the markers. So neither the canonical dataset nor a real record
-  pasted into the fixture can reach the staging host.
-- **Fixed targets.** The targets stay as before: staging is
-  `dogear-issues-staging`, test mode, the fixture, and no editorial checkout.
-  Production never points at `fixtures/`.
+| Marker | Present when |
+|---|---|
+| `id` | the id starts with `staging-` or `s2-` |
+| `tag` | the tags include `staging-test` |
+| `approver` | the approval is by `synthetic-fixture-not-editorial` |
+| `names` | the person starts with `Staging Writer`, or the work with `Staging Work` |
+| `links` | a source or link URL is on `example.org` |
+
+Every fixture record has the full *staging shape*:
+- all five markers;
+- both names;
+- at least one URL, with every URL on `example.org`.
+
+The affinity file is empty, so it holds no real preferences.
+
+**Staging and production separation, at every write.**
+- **Production shows nothing synthetic.** Production refuses a record with
+  *any* marker, and a revision whose ids, dataset records or issue entries
+  carry one. This is checked when staging, when re-verifying a staged week,
+  in the editorial gate ("no synthetic records", which prints no count),
+  and in the guard re-run just before every registry write. That guard
+  covers rollback and restore, which make an *existing* revision visible.
+  The check is made on that stored revision itself, not only by rebuilding
+  it.
+- **Staging shows only synthetic data.** The staging target refuses any
+  record without the full staging shape, and any revision that isn't wholly
+  synthetic, at the same points. A real or canonical revision can't become
+  current on staging through rollback or restore.
+- **Target settings:** production mode always has production separation.
+  `--target staging` has staging separation. The staging target stays
+  `dogear-issues-staging`, in test mode, using the fixture, with no editorial
+  checkout. Production never points at `fixtures/`.
 
 **Real clock.**
 - Nothing sets a date on the workflow path. `tools/run_publish.py` never
   passes `--now`, `--drill`, `--no-network-checks`, `--mode`, `--dataset`,
-  `--store` or `--policy`, and no workflow mentions them. (Tests check both.)
+  `--store` or `--policy`, and no workflow mentions them. Tests check both.
 - The week is resolved as in production: Monday-Sunday in PHT, rolling over
   on Monday at 06:00.
-- `--now` remains for local test-mode rehearsals only, as before.
+- `--now` remains for local test-mode rehearsals only.
 
-**The transition.** Run once, after Codex has reviewed this change and the
-owner approves it. Nothing in it deletes S2 history.
+**Workflows and schedules, precisely.**
+- `PUBLICATION_ENABLED` gates only the *scheduled* runs of `DOGEAR stage`
+  and `DOGEAR promote`. A manual `workflow_dispatch` of either still runs
+  whenever that workflow is enabled. Safety before approval therefore also
+  depends on both workflows staying **disabled** in the repository's
+  Actions settings until the owner explicitly approves.
+- `DOGEAR operate` is manual-only. It can target production, but not with
+  one click:
+  - its first job, which holds no Environment and no secrets, refuses
+    production unless `confirm_production` is typed exactly as
+    `production`;
+  - the run then still waits for the `production` Environment's required
+    reviewer.
 
-1. **Snapshot.** Record `dogear-publication-data-staging` `main` (`128f44c`)
-   and the SHA-256 of the staging bucket's `publication.json`. It must equal
-   the publication-data mirror `publication.json`, with current 2027-03-29.
-2. **Publication data.** Make one ordinary fast-forward commit to
-   `dogear-publication-data-staging`. It moves the live S2 state
-   (`publication.json`, `history.jsonl`, `verified.jsonl`, `staged/`,
-   `published/`, and `unverified.json` or `pending.json` if present) under
-   `archive/s2-2027/`, and leaves `README.md` in place. Nothing is rewritten.
-   From here on, GitHub stays authoritative and staging writes come only
-   through CI.
-3. **R2.** This uses Wrangler with the owner's login, not a publisher token.
-   - Read `dogear-issues-staging/publication.json`, write it to
-     `archive/s2-2027/publication.json`, and read that back, checking that
-     the SHA-256 matches.
+**`launch`, exactly as implemented.**
+- `launch` first reconciles any pending transaction. It then refuses if
+  history.jsonl has any **committed** line ("launch happens once") or if
+  the store already has a registry.
+- **Aborted lines do not block it.** After an attempt that aborted (nothing
+  published), launch can be retried.
+- **A retry after an uncertain write settles that write first.** If the
+  earlier attempt left a pending transaction whose registry write *did*
+  land, the retry's reconcile records it as committed, and launch then
+  refuses. That is the correct forward state: the launch happened. The next
+  operation is a promotion, not a second launch.
+- **What the reset must leave.** No committed *live* history, no pending
+  transaction, and no registry in the store. The archived S2 files under
+  `archive/` are not read by the publisher.
+
+#### The reset: preflight, transition, launch
+
+Each step runs only after Codex has reviewed this change and the owner has
+approved the transition.
+
+1. **Quiescence gate.** Any failure here means **STOP**: reconcile first, and
+   never archive unresolved state. All of these must hold:
+   - **No writer is running:**
+     - `DOGEAR stage`, `DOGEAR promote` and `DOGEAR operate` and the
+       reusable job are all disabled, with no run queued or in progress:
+       `gh api repos/archievalmariano/dogear/actions/runs?status=in_progress`
+       and `?status=queued` both report 0.
+     - No local publisher is running. The Mac's S2 runner and local
+       staging-data repository are retired and refuse writes.
+   - **The read-only preflight passes.** It runs locally against a fresh
+     clone of `dogear-publication-data-staging`:
+     `python3 -m dogear.cli publish --target staging --pubdata <fresh clone> reset-preflight --expect-current 2027-03-29`.
+     It never reconciles, verifies or saves anything, and it isn't
+     reachable from any workflow. It reports PASS only if all of these hold:
+     - the clone is exactly the remote `main`, with no local changes;
+     - no `pending.json`;
+     - `unverified.json` is empty and every committed transaction is in
+       `verified.jsonl`;
+     - the live R2 registry exists and is byte-identical to the
+       publication-data mirror;
+     - its current week is 2027-03-29, with no hold;
+     - its transaction is the last committed one, so no write is unresolved;
+     - every visible revision has its committed record;
+     - the host serves exactly that registry's manifest.
+
+     Anything else is **HOLD**, with every reason listed.
+2. **Snapshot.** Record `dogear-publication-data-staging` `main` (`128f44c`
+   when written) and the SHA-256 of the live registry.
+3. **Publication data.** Make one ordinary fast-forward commit that moves
+   `publication.json`, `history.jsonl`, `verified.jsonl`, `staged/` and
+   `published/` under `archive/s2-2027/`.
+   - The preflight has already proven there is no `pending.json` and that
+     `unverified.json` is empty. Recovery state is never moved aside: if
+     either holds anything, step 1 failed.
+   - `README.md` stays. Nothing is rewritten.
+   - From here on, GitHub stays authoritative and staging writes come only
+     through CI.
+4. **R2.** This uses Wrangler with the owner's login, not a publisher token.
+   - Read `dogear-issues-staging/publication.json` and check it matches the
+     snapshot's SHA-256.
+   - Write it to `archive/s2-2027/publication.json`, read that back, and
+     compare the SHA-256.
    - Only then delete the live `publication.json`.
    - Issue, page and font objects stay. The Worker serves only what a
      registry names, so `archive/` is never served.
-   - Afterwards `/current.json` returns 503 ("nothing published") and devices
-     keep their cached issue.
-4. **Workflows.** Enable only `dogear publish (reusable)` and
-   `DOGEAR operate`. `DOGEAR operate` is manual-only and has no schedule.
-   `DOGEAR stage`, `DOGEAR promote`, `DOGEAR certificate chain` and
-   `DOGEAR deploy-key check` stay disabled, and so do production
-   publication and the scheduled dispatch. The `dogear-scheduler` Worker
-   has never been deployed.
-5. **Launch.** Run `DOGEAR operate` with `staging` / `launch`. Launch
-   requires an empty publication history and no registry in the store, and
-   publishes the current real Manila week from the fixture. Staging checks
-   out no editorial repository.
-6. **Verify.**
+   - Afterwards `/current.json` returns 503 ("nothing published") and
+     devices keep their cached issue.
+5. **Workflows.** Enable only `dogear publish (reusable)` and
+   `DOGEAR operate`. Keep `DOGEAR stage`, `DOGEAR promote`,
+   `DOGEAR certificate chain` and `DOGEAR deploy-key check` disabled. Leave
+   `PUBLICATION_ENABLED` unset. Production stays reachable only through the
+   confirmed operate path and its reviewer, and nobody dispatches it in this
+   step. The `dogear-scheduler` Worker has never been deployed.
+6. **Launch.** Run `DOGEAR operate` with target `staging`, op `launch`, and
+   no confirmation. It publishes the current real Manila week from the
+   fixture, with no editorial checkout.
+7. **Verify.**
    - The issue and page are served and hash-match.
    - `/current.json` names the new immutable issue.
    - `dogear-publication-data-staging` records the transaction once and
      verifies it.
-   - The run log shows only the result, op, week and transaction.
+   - The log shows only the result, op, week and transaction.
    - `dogear-issues` and the production Environment are untouched.
 
-**Undo, before any launch.** Put `archive/s2-2027/publication.json` back as
-`publication.json` and `git revert` the archive commit; S2's state is then
-back as it was. After a launch, staging carries on from its new history, and
-S2 stays in `archive/`.
+#### If something fails
+
+**A. Before any launch attempt.** Recognise this case by: `operate launch`
+was never dispatched, and the publication data has no new `pending.json`,
+`history.jsonl` or `staged/`. Undo only what was done:
+
+| Point reached | Undo |
+|---|---|
+| Archive commit pushed, R2 not yet changed | `git revert` the archive commit (fast-forward) |
+| R2 archive copy written, live registry not yet deleted | Nothing live changed; leave the archive copy (never served) and `git revert` the archive commit |
+| Live registry deleted | Put `archive/s2-2027/publication.json` back as `publication.json`, checking the SHA-256 against the snapshot, then `git revert` the archive commit |
+
+Afterwards, rerun the preflight: it must PASS against 2027-03-29 again.
+
+**B. After a launch attempt started.** A launch writes in this order:
+1. `staged/`, then `pending.json`;
+2. the registry;
+3. the committed history line and verification.
+
+So once it has started, do **not** restore S2 blindly. First find out what
+happened:
+
+1. **Inspect, read-only.** Run `DOGEAR operate` `staging` / `status`.
+   Locally, read a fresh clone of the publication data and the store's
+   registry.
+2. **Decide which case this is:**
+   - **No registry in the store, and no committed line.** The attempt
+     aborted or failed before the switch: nothing was published. If
+     `pending.json` remains, `DOGEAR operate` `reconcile` closes it as
+     aborted. Then retry `launch`. Its aborted line doesn't block it.
+   - **A registry in the store, and `pending.json` present.** The outcome
+     is uncertain. Run `reconcile`: it records the launch as committed if
+     the store holds the intended registry. If it reports *needs a human*,
+     inspect the pending transaction against the store, then either let
+     `reconcile` / `resume` complete it, or `abandon` it after inspection.
+     Never delete `pending.json` by hand.
+   - **A committed launch, possibly unverified (exit 8).** The launch
+     happened. Recover forward: later runs re-check serving until it's
+     verified. Staging continues on the real calendar, and S2 stays in
+     `archive/`.
+3. **Manual restore of S2: last resort, owner-approved, only from a known
+   verified state.** Only if forward recovery is rejected:
+   - archive the attempted launch's state the same way (a fast-forward
+     commit, and R2 copies verified by SHA-256);
+   - put S2's archived registry back as the live `publication.json`;
+   - restore S2's files from `archive/s2-2027/` with a new commit;
+   - rerun the preflight against 2027-03-29.
+
+   The publisher has no operation for this, so it's done by hand.
 
 **Devices.** Both devices have the 29 March 2027 S2 issue cached, and the
 server will offer the real current week, which is earlier. The hardware test

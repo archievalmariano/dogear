@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 from ..week import MANILA, IssueWeek, week_of, week_starting
+from .. import synthetic
 from . import eligibility, routes
 from . import registry as regmod
 from .policy import PublicationPolicy
@@ -87,9 +88,15 @@ class Publisher:
     def __init__(self, store, pubdata: PubData, inputs: StageInputs, policy: PublicationPolicy,
                  checks: Checks = Checks(), clock: Optional[Callable[[], dt.datetime]] = None,
                  mode: str = "production", assets: Optional[dict] = None,
-                 served: Optional[Callable[[str], tuple]] = None, attempts: int = 3) -> None:
+                 served: Optional[Callable[[str], tuple]] = None, attempts: int = 3,
+                 separation: Optional[str] = None) -> None:
         if mode not in ("production", "test"):
             raise ValueError("mode must be production or test")
+        if separation not in (None, "staging", "production") or (mode == "production" and separation == "staging"):
+            raise ValueError("separation must be staging or production, and production mode is production")
+        # Which data this target may show (dogear/synthetic.py): production mode is always
+        # "production" (nothing synthetic); the staging target is "staging" (only synthetic).
+        self.separation = "production" if mode == "production" else separation
         self.store, self.pubdata, self.inputs, self.policy, self.checks = store, pubdata, inputs, policy, checks
         self.clock = clock or (lambda: dt.datetime.now(MANILA))
         self.mode, self.assets, self.attempts = mode, assets or {}, attempts
@@ -143,6 +150,55 @@ class Publisher:
             "weeks": {w: {"active": e["active"], "revisions": len(e["revisions"])} for w, e in sorted(reg["weeks"].items())}}
         return {"registry": summary, "pending": pending and pending["txn"],
                 "unverified": [e["txn"] for e in unverified]}
+
+    def reset_preflight(self, expect_current: str) -> list:
+        """Read-only (PUBLISHING.md §20g): why the live state is NOT quiescent and
+        reconciled enough to archive. [] means PASS. It reconciles nothing, verifies
+        nothing and saves nothing: unresolved state is reported, never moved aside."""
+        problems = []
+        try:
+            pending = self.pubdata.read_pending()
+            if pending is not None:
+                problems.append(f"transaction {pending['txn']} is pending: reconcile it first")
+            if self.pubdata.read_unverified():
+                problems.append("unverified.json is not empty: served output awaits verification")
+            outstanding = self._outstanding()
+            if outstanding:
+                problems.append(f"{len(outstanding)} committed transaction(s) are not verified")
+            history = self.pubdata.history()
+        except (CorruptState, KeyError, TypeError) as err:
+            return problems + [f"the publication data is inconsistent: {err}"]
+        committed = [h for h in history if h["status"] == "committed"]
+        if not committed:
+            problems.append("no committed history: there is no live state to archive")
+        try:
+            reg, obj = self._read_registry()
+        except (Aborted, regmod.CorruptRegistry) as err:
+            return problems + [f"the live registry cannot be read: {err}"]
+        if reg is None:
+            return problems + ["the store has no registry"]
+        mirror = self.pubdata.root / "publication.json"
+        if not mirror.is_file() or regmod.sha256(mirror.read_bytes()) != regmod.sha256(obj.data):
+            problems.append("the publication-data mirror differs from the live registry")
+        if reg["current"] != expect_current:
+            problems.append(f"the live registry's current week is {reg['current']}, not {expect_current}")
+        if reg["hold"] is not None:
+            problems.append("the live registry holds publication")
+        if committed and reg["txn"] != committed[-1]["txn"]:
+            problems.append(f"the live registry's transaction {reg['txn']} is not the last committed one "
+                            f"({committed[-1]['txn']}): an unresolved write outcome")
+        try:
+            self._history(reg, dt.date.max)  # every visible revision has its committed record
+        except NeedsHuman as err:
+            problems.append(str(err))
+        try:
+            status, body = self.served("/current.json")
+        except Exception as err:  # noqa: BLE001 - any failure to read the host is a HOLD
+            problems.append(f"the host could not be read: {type(err).__name__}")
+        else:
+            if status != 200 or regmod.sha256(body) != regmod.sha256(regmod.manifest_bytes(reg)):
+                problems.append("the host does not serve the live registry's manifest")
+        return problems
 
     # Reconciliation.
 
@@ -249,13 +305,22 @@ class Publisher:
     def _week_guard(self, week: IssueWeek) -> Guard:
         return lambda: None if rollover_week(self.clock()) == week else "the Manila week changed before the write"
 
+    def _separation_problem(self, provenance: dict, issue: dict, dataset_text: str) -> Optional[str]:
+        """The target's synthetic/real separation, checked on the revision itself."""
+        if self.separation is None:
+            return None
+        return synthetic.revision_problem(self.separation, provenance, issue, dataset_text)
+
     def _eligibility_guard(self, provenance: dict, issue_bytes: bytes) -> Guard:
         def guard() -> Optional[str]:
             try:
-                problems = eligibility.check(provenance, self._dataset_text(), json.loads(issue_bytes))
+                text, issue = self._dataset_text(), json.loads(issue_bytes)
+                problems = eligibility.check(provenance, text, issue)
             except (OSError, ValueError) as err:
                 return f"cannot re-check eligibility: {err}"
-            return "eligibility changed during publication: " + "; ".join(problems) if problems else None
+            if problems:
+                return "eligibility changed during publication: " + "; ".join(problems)
+            return self._separation_problem(provenance, issue, text)
         return guard
 
     def _visible_revisions_guard(self, before: dict, after: dict) -> Guard:
@@ -278,11 +343,17 @@ class Publisher:
                 if issue is None or regmod.sha256(issue.data) != rev["issueSha256"]:
                     return f"{week} revision {rev_no}: its issue object is missing or altered"
                 try:
-                    problems = eligibility.check(json.loads(prov), self._dataset_text(), json.loads(issue.data))
+                    text, prov_obj, issue_obj = self._dataset_text(), json.loads(prov), json.loads(issue.data)
+                    problems = eligibility.check(prov_obj, text, issue_obj)
                 except (OSError, ValueError) as err:
                     return f"cannot re-check eligibility: {err}"
                 if problems:
                     return f"{week} revision {rev_no} is no longer publishable: " + "; ".join(problems)
+                # Checked on the stored revision itself, not only by rebuilding it: an old
+                # revision can never cross between the staging and production hosts.
+                separated = self._separation_problem(prov_obj, issue_obj, text)
+                if separated:
+                    return f"{week} revision {rev_no} may not be shown here: {separated}"
             return None
         return guard
 

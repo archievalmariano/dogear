@@ -169,3 +169,39 @@ class RealCalendarTests(unittest.TestCase):
                 self.assertFalse(any(a.startswith(flag) for a in argv), (op, flag, argv))
         for wf in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
             self.assertNotRegex(wf.read_text(encoding="utf-8"), r"--now|DOGEAR_NOW|--drill", wf.name)
+
+
+class OperateTargetTests(unittest.TestCase):
+    """Codex review of 7f8fe9e, item 6: production through DOGEAR operate is never one click."""
+    TEXT = (ROOT / ".github" / "workflows" / "dogear-operate.yml").read_text(encoding="utf-8")
+
+    def script(self) -> str:
+        block = self.TEXT.split("name: Confirm the target", 1)[1].split("run: |\n", 1)[1].split("\n\n", 1)[0]
+        return "\n".join(line[10:] for line in block.splitlines())
+
+    def ok(self, target: str, confirm: str) -> bool:
+        import subprocess
+        return subprocess.run(["bash", "-c", self.script()], env={"TARGET": target, "CONFIRM": confirm,
+                                                                   "PATH": "/usr/bin:/bin"},
+                              capture_output=True).returncode == 0
+
+    def test_production_needs_the_typed_confirmation(self):
+        self.assertTrue(self.ok("staging", ""))
+        self.assertTrue(self.ok("staging", "anything"))
+        self.assertTrue(self.ok("production", "production"))
+        for confirm in ("", "yes", "Production", " production", "production "):
+            self.assertFalse(self.ok("production", confirm), repr(confirm))
+        self.assertFalse(self.ok("prod", "production"))
+
+    def test_the_guard_comes_first_and_holds_nothing(self):
+        on = self.TEXT.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
+        self.assertIn("workflow_dispatch:", on)
+        self.assertNotIn("schedule:", on)
+        confirm = self.TEXT.split("\n  confirm:\n", 1)[1].split("\n  operate:\n", 1)[0]
+        for absent in ("secrets", "environment:", "uses: actions/checkout"):
+            self.assertNotIn(absent, confirm)
+        operate = self.TEXT.split("\n  operate:\n", 1)[1]
+        self.assertIn("needs: confirm", operate)
+        self.assertIn("uses: ./.github/workflows/_dogear-publish.yml", operate)
+        reusable = (ROOT / ".github" / "workflows" / "_dogear-publish.yml").read_text(encoding="utf-8")
+        self.assertIn("environment: ${{ inputs.target }}", reusable)  # the reviewer still decides production

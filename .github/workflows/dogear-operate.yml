@@ -1,5 +1,7 @@
-# Manual operations (PUBLISHING.md §4, §12): never scheduled. Production runs wait
-# for the required reviewer on the `production` Environment.
+# Manual operations (PUBLISHING.md §4, §12): never scheduled. Production is a
+# deliberate choice, twice: the `confirm_production` input must be typed exactly as
+# "production" (a one-click mistake stops here, before any Environment or secret),
+# and the run then waits for the required reviewer on the `production` Environment.
 name: DOGEAR operate
 
 on:
@@ -18,12 +20,31 @@ on:
       expect_rev: { description: "The week's active revision now (correct)", type: string, default: "" }
       reason: { description: "One line (correct, rollback)", type: string, default: "" }
       txn: { description: "Transaction id (abandon, after inspection)", type: string, default: "" }
+      confirm_production: { description: "Production only: type production to confirm", type: string, default: "" }
 
 permissions:
   contents: read
 
 jobs:
+  # No Environment, no secrets: refuses production unless it was confirmed by typing it.
+  confirm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confirm the target
+        env:
+          TARGET: ${{ inputs.target }}
+          CONFIRM: ${{ inputs.confirm_production }}
+        run: |
+          case "$TARGET" in
+            staging) echo "target: staging" ;;
+            production) [ "$CONFIRM" = production ] || { echo "::error::production needs confirm_production = production"; exit 1; }
+                        echo "target: production (confirmed; the production Environment's reviewer decides next)" ;;
+            *) echo "::error::target must be staging or production"; exit 1 ;;
+          esac
+
   operate:
+    needs: confirm
     uses: ./.github/workflows/_dogear-publish.yml
     secrets: inherit
     with:

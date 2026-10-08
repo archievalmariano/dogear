@@ -100,6 +100,8 @@ def add_parser(sub) -> None:
     s = ops.add_parser("restore")
     s.add_argument("--week", required=True)
     s.add_argument("--rev", type=int, required=True)
+    s = ops.add_parser("reset-preflight", help="read-only: may the live state be archived? (PUBLISHING §20g)")
+    s.add_argument("--expect-current", required=True, help="the week the live registry must show (YYYY-MM-DD)")
     s = ops.add_parser("abandon")
     s.add_argument("txn")
     p.set_defaults(fn=run)
@@ -227,7 +229,53 @@ def _public_status(status: dict) -> dict:
     return status
 
 
+def _pubdata_git_problems(root: Path) -> list:
+    """The publication-data checkout must be exactly the remote's main, unmodified."""
+    if not (root / ".git").exists():
+        return ["the publication data is not a git checkout of its remote"]
+    def git(*a):
+        return subprocess.run(["git", "-C", str(root), *a], capture_output=True, text=True)
+    problems = []
+    if git("status", "--porcelain").stdout.strip():
+        problems.append("the publication-data checkout has local changes")
+    head = git("rev-parse", "HEAD").stdout.strip()
+    remote = git("ls-remote", "origin", "refs/heads/main")
+    if remote.returncode != 0 or not remote.stdout.strip():
+        problems.append("the publication-data remote main could not be read")
+    elif remote.stdout.split()[0] != head:
+        problems.append("the publication-data checkout is not the remote's current main")
+    return problems
+
+
+def _reset_preflight_refusal(args) -> Optional[str]:
+    """Checked before anything is built: the preflight is local and read-only."""
+    if args.git or args.public_log or args.drill:
+        return "reset-preflight is read-only and local: no --git, --public-log or --drill"
+    try:
+        dt.date.fromisoformat(args.expect_current)
+    except ValueError:
+        return "--expect-current must be YYYY-MM-DD"
+    return None
+
+
+def _reset_preflight(args, pub) -> int:
+    """PASS (0) or HOLD (3), with every reason. Local and read-only: never in CI."""
+    problems = _pubdata_git_problems(args.pubdata) + pub.reset_preflight(args.expect_current)
+    if not problems:
+        print("reset preflight: PASS (quiescent, reconciled, verified; registry and mirror agree)")
+        return 0
+    print("reset preflight: HOLD (do not archive; reconcile first)")
+    for problem in problems:
+        print(f"  - {problem}")
+    return 3
+
+
 def run(args) -> int:
+    if args.op == "reset-preflight":
+        refusal = _reset_preflight_refusal(args)
+        if refusal:
+            print(f"error: {refusal}", file=sys.stderr)
+            return 4
     problem = _apply_target(args)
     if problem:
         print(f"error: {problem}", file=sys.stderr)
@@ -256,13 +304,16 @@ def run(args) -> int:
         store = DrillStore(store, args.drill)
     pub = Publisher(store, PubData(args.pubdata, committer),
                     StageInputs(args.dataset, args.affinity, args.base_url, _generator()), policy, checks, clock,
-                    mode=args.mode, assets=assets, served=served)
+                    mode=args.mode, assets=assets, served=served,
+                    separation="staging" if args.target == "staging" else None)
     week = dt.date.fromisoformat(args.week) if getattr(args, "week", None) else None
     report = _Report(args, pub.pubdata)
     try:
         if args.op == "status":
             print(json.dumps(_public_status(pub.status()) if args.public_log else pub.status(), indent=2))
             return 0
+        if args.op == "reset-preflight":
+            return _reset_preflight(args, pub)
         out = {
             "reconcile": lambda: pub.reconcile(),
             "stage-next": pub.stage_next,

@@ -49,7 +49,7 @@ def rec(rid, month, day, year=1900, approved=True, **kw):
         "seaRelevance": 0,
         "domain": "literature",
         "status": "verified",
-        "sources": [{"title": "S", "url": "https://example.org/s", "kind": "institutional"}],
+        "sources": [{"title": "S", "url": "https://library.test/s", "kind": "institutional"}],
         "links": [],
         "notes": None,
         "area": "europe",

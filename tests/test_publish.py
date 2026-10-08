@@ -44,7 +44,7 @@ def at(day: dt.date, hh: int = 6, mm: int = 2) -> dt.datetime:
 
 def week_records(monday: dt.date, tag: str, n: int = 3) -> list:
     return [rec(f"{tag}-{i}", monday.month, monday.day + i, significance=4,
-                links=[{"type": "read-more", "url": f"https://example.org/{tag}/{i}", "title": "T", "provider": "P"}])
+                links=[{"type": "read-more", "url": f"https://library.test/{tag}/{i}", "title": "T", "provider": "P"}])
             for i in range(n)]
 
 
