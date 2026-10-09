@@ -2024,8 +2024,12 @@ existing issue and provenance hashes.
 
   `mock/render_dogear.py` draws it (`draw_quiet_contents`, `QUIET_LADDER`,
   `QUIET_MIN_MARGIN`). `--fitcheck` requires the tallest possible quiet cover
-  (5 items, a two-line lead kicker, a two-line lead title, long titles) to keep
-  12px and list at least 3 supporting rows; today it lists 3 with 31px spare.
+  (5 items, its one lead with a two-line kicker and a two-line title, long
+  titles) to keep 12px and list at least 3 supporting rows; today it lists 3
+  with 31px spare. A quiet issue has **exactly one** featured item, first, and
+  every other item is standard (owner, 9 October 2026): the selector never
+  makes a second quiet lead, and the date/edition invariant and the firmware
+  both refuse any other arrangement.
   Regular screens render byte-identically.
 - DOGEAR is compiled only into dev firmware today. Which CrossPoint release
   includes it is an open owner decision. Until that release is installed and

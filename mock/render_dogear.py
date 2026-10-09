@@ -714,7 +714,7 @@ def fitcheck(dataset_path: Path) -> int:
         print(f"{r.id:<40} {len(r.digest.split()):>5}  {res[0]:<13} {res[1]:<13}{flag}")
     print(f"\n{problems} record(s) overflow one screen without permission for a second, or use a glyph the device lacks.")
     spare, listed, left_off = quiet_cover_worst_case()
-    print(f"quiet cover worst case (5 items, 2-line lead kicker, long titles): {listed} supporting row(s) "
+    print(f"quiet cover worst case (5 items; its one lead with a 2-line kicker and title; long titles): {listed} supporting row(s) "
           f"listed, {left_off} on their own pages only, {spare}px spare")
     if spare < QUIET_MIN_MARGIN or listed < QUIET_MIN_WORST_ROWS:
         print(f"  << the tallest quiet cover must keep {QUIET_MIN_MARGIN}px and list at least "
@@ -725,15 +725,15 @@ def fitcheck(dataset_path: Path) -> int:
 
 def quiet_cover_worst_case() -> int:
     """Spare px of the tallest quiet cover the publisher can produce: QUIET_MAX items,
-    a lead whose kicker wraps to two lines, every title far over two lines, the
-    approved copy, the tallest dateline."""
+    of which exactly QUIET_FEATURED (one) is the lead, its kicker two lines, every
+    title far over two lines, the approved copy, the tallest dateline."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from dogear.quiet import QUIET_MAX, quiet_object  # noqa: E402
+    from dogear.quiet import QUIET_FEATURED, QUIET_MAX, quiet_object  # noqa: E402
     # The device draws at most two kicker lines (DogearActivity: wrap(kMeta, ..., 2)); a
     # real label such as NATIONAL ARTIST AWARDEE already takes two.
     LONGEST_KICKER = "NATIONAL ARTIST AWARDEE 2026"
     long_title = "An Exceedingly Long Title That Runs Well Past Two Lines On The Device Cover At Any Size"
-    entries = [{"role": "featured" if i == 0 else "standard", "dateLabel": "Wed 30 Sep",
+    entries = [{"role": "featured" if i < QUIET_FEATURED else "standard", "dateLabel": "Wed 30 Sep",
                 "kicker": LONGEST_KICKER if i == 0 else "PUBLISHED 1950",
                 "title": long_title, "contentsLabel": None} for i in range(QUIET_MAX)]
     issue = {"issueId": "dogear-worst-case", "quiet": quiet_object(), "entries": entries}

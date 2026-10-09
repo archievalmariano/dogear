@@ -17,6 +17,7 @@ from typing import Optional
 
 QUIET_MIN = 3
 QUIET_MAX = 5
+QUIET_FEATURED = 1         # exactly one lead, first; every other item is standard (owner, 9 October 2026)
 QUIET_POOL_DAYS = 182      # "Also this week" mentions from the previous 26 weeks
 QUIET_UPCOMING_DAYS = 35   # leave out a record whose anniversary falls in [W, W + 35 days)
 QUIET_SUBJECT_DAYS = 365   # leave out a person or work featured in full within 365 days

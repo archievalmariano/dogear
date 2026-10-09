@@ -230,6 +230,23 @@ class QuietSelectorTests(unittest.TestCase):
         self.assertIn("pool-1", ids(self.quiet(ds, QuietSource(pool=src.pool, retainable=("pool-1",),
                                                                same_week_identities=(person,)))))
 
+    def test_a_quiet_issue_has_exactly_one_lead_first(self):
+        """Every pool record is significance 5 on a centenary: a regular week would make
+        a second lead (MAX_FEATURED = 2); a quiet issue never does (owner, Option B)."""
+        records, pool = [], []
+        for i in range(5):
+            day = dt.date(2026, 10, 5) + dt.timedelta(days=i * 3)
+            records.append(strong(f"cent-{i}", day, i, sig=5, year=1926))
+            pool.append((f"cent-{i}", week_of(day).start.isoformat()))
+        ds = parse_dataset(json.dumps({"schemaVersion": 3, "records": records}))
+        sel = self.quiet(ds, QuietSource(pool=tuple(pool)))
+        self.assertGreaterEqual(len(sel.picked), 3)
+        self.assertEqual([c.role for c in sel.picked], ["featured"] + ["standard"] * (len(sel.picked) - 1))
+        from dogear.select import MAX_FEATURED, _assign_roles
+        regular = copy.deepcopy(sel.picked)
+        _assign_roles(regular, MAX_FEATURED)
+        self.assertEqual(sum(c.role == "featured" for c in regular), 2)  # the rule is what holds it to one
+
     def test_a_record_without_stable_identity_is_dropped(self):
         ds, src = pool_dataset(4)
         raw = json.loads(json.dumps({"schemaVersion": 3, "records": []}))
@@ -624,6 +641,26 @@ class EditionInvariantTests(unittest.TestCase):
         for name, kw in cases.items():
             with self.subTest(name):
                 self.assertTrue(self.broken(W2, **kw), name)
+
+    def test_quiet_roles_are_one_lead_first_then_standard(self):
+        issue = self.issue
+        self.assertEqual([e["role"] for e in issue["entries"]][0], "featured")
+        def roles(*rs):
+            return dict(issue, entries=[dict(e, role=r) for e, r in zip(issue["entries"], rs)])
+        n = len(issue["entries"])
+        cases = {
+            "no lead": roles(*["standard"] * n),
+            "two leads": roles("featured", "featured", *["standard"] * (n - 2)),
+            "lead not first": roles("standard", "featured", *["standard"] * (n - 2)),
+            "unknown role": roles("featured", "lead", *["standard"] * (n - 2)),
+            "missing role": dict(issue, entries=[{k: v for k, v in e.items() if k != "role"} if i == 1 else e
+                                                 for i, e in enumerate(issue["entries"])]),
+        }
+        for name, broken in cases.items():
+            with self.subTest(name):
+                self.assertTrue(any("exactly one featured" in p for p in revision_problems(W2, broken, self.prov)),
+                                name)
+        self.assertEqual(revision_problems(W2, roles("featured", *["standard"] * (n - 1)), self.prov, self.line), [])
 
     def test_regular_violations(self):
         issue, prov = self.regular_issue, self.regular_prov

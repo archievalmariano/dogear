@@ -66,7 +66,7 @@ from dataclasses import dataclass, field
 
 from .affinity import EMPTY, Affinity
 from .dataset import Dataset, Record
-from .quiet import QUIET_MAX, QuietSource, anniversary_imminent
+from .quiet import QUIET_FEATURED, QUIET_MAX, QuietSource, anniversary_imminent
 from .week import IssueWeek, is_leap, week_starting
 
 # Shape. MAX is a ceiling, not a target: nothing pads an issue.
@@ -435,9 +435,9 @@ def _compose(candidates: list[Candidate], slot_bars: tuple[tuple[int, int], ...]
     return picked
 
 
-def _finish(picked: list[Candidate]) -> list[Candidate]:
+def _finish(picked: list[Candidate], max_featured: int = MAX_FEATURED) -> list[Candidate]:
     """Roles, QR, and issue order: featured by strength, then standard by date."""
-    _assign_roles(picked)
+    _assign_roles(picked, max_featured)
     _assign_qr(picked)
     featured = sorted((c for c in picked if c.role == "featured"), key=lambda c: (-c.intrinsic, -c.score, c.record.id))
     standard = sorted((c for c in picked if c.role == "standard"), key=lambda c: (c.date, -c.score, c.record.id))
@@ -496,11 +496,14 @@ def select_quiet_issue(
         candidates.append(cand)
     candidates.sort(key=lambda c: (-c.score, c.date, c.record.id))
     picked = _compose(candidates, slot_bars, QUIET_MAX)
-    return Selection(week=week, picked=_finish(picked), candidates=candidates, dataset_sha256=dataset.sha256,
+    # A quiet issue has exactly one lead (owner, 9 October 2026: the Quiet A cover is
+    # one lead over its contents rows), whatever a regular week would feature.
+    return Selection(week=week, picked=_finish(picked, QUIET_FEATURED), candidates=candidates,
+                     dataset_sha256=dataset.sha256,
                      preview=False, edition="quiet")
 
 
-def _assign_roles(picked: list[Candidate]) -> None:
+def _assign_roles(picked: list[Candidate], max_featured: int = MAX_FEATURED) -> None:
     """Lead with the intrinsically strongest item (what it is, not DOGEAR's lifts);
     on a tie, literature leads over adjacent domains.
 
@@ -514,7 +517,7 @@ def _assign_roles(picked: list[Candidate]) -> None:
     ranked = sorted(picked, key=lambda c: (-c.intrinsic, c.record.domain != "literature", -c.score, c.date, c.record.id))
     ranked[0].role = "featured"
     for c in ranked[1:]:
-        if sum(x.role == "featured" for x in picked) >= MAX_FEATURED:
+        if sum(x.role == "featured" for x in picked) >= max_featured:
             break
         if c.record.significance == 5 and anniversary_bonus(c.years):
             c.role = "featured"

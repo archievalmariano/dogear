@@ -6,7 +6,8 @@ history before it feeds a quiet pool, and by the read-only reset preflight.
 
 A regular issue (schema 2, no ``quiet``) holds only entries whose anniversary falls
 in its own Monday-Sunday week. A quiet issue (schema 3, the exact ``quiet`` copy)
-holds 3-5 earlier-dated entries, each on exactly the occurrence its provenance
+holds 3-5 earlier-dated entries (exactly one featured, first; the rest standard),
+each on exactly the occurrence its provenance
 pinned (``quietOccurrences``: the record's anniversary in the week whose "Also
 this week" recorded it), and nothing in "Also this week". The edition must agree
 across the issue, its provenance and its history line.
@@ -18,7 +19,7 @@ import datetime as dt
 from typing import Optional
 
 from ..dataset import SUBJECT_ID_RE, fingerprint
-from ..quiet import (EDITIONS, QUIET_MAX, QUIET_MIN, QUIET_SCHEMA_VERSION, REGULAR_SCHEMA_VERSION, QuietSource,
+from ..quiet import (EDITIONS, QUIET_FEATURED, QUIET_MAX, QUIET_MIN, QUIET_SCHEMA_VERSION, REGULAR_SCHEMA_VERSION, QuietSource,
                      quiet_object)
 from ..select import MAX_ENTRIES
 
@@ -143,6 +144,9 @@ def revision_problems(monday: dt.date, issue: object, provenance: object, line: 
             problems.append(f"a quiet issue holds {QUIET_MIN}-{QUIET_MAX} entries, not {len(entries)}")
         if also:
             problems.append("a quiet issue has no Also this week")
+        roles = [e.get("role") if isinstance(e, dict) else None for e in entries]
+        if roles and roles != ["featured"] * QUIET_FEATURED + ["standard"] * (len(roles) - QUIET_FEATURED):
+            problems.append("a quiet issue has exactly one featured item, first; every other item is standard")
         try:
             source = QuietSource.from_json((provenance.get("inputs") or {}).get("quietSource"))
         except ValueError as err:
