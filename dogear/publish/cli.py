@@ -354,7 +354,7 @@ def run(args) -> int:
         if args.op == "attest-subjects":
             return _attest_subjects(args, pub)
         out = {
-            "reconcile": lambda: pub.reconcile(),
+            "reconcile": lambda: pub.reconcile(detect=True),
             "stage-next": pub.stage_next,
             "stage": lambda: pub.stage(week),
             "promote": pub.promote,

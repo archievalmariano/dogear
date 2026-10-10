@@ -1,0 +1,145 @@
+{
+ "comment": "Annotated-tag acceptance fields (crosspoint-reader scripts/release/candidate.py parse_tag_message). DOGEAR's firmware.parse_tag_message and the firmware's own parser must agree on every case.",
+ "packages": [
+  "x4-g",
+  "x4-gd",
+  "x4pro-g",
+  "x4pro-gd",
+  "x4pro-p",
+  "x4pro-pd",
+  "x4pro-gp",
+  "x4pro-gpd"
+ ],
+ "cases": [
+  {
+   "name": "good",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": true
+  },
+  {
+   "name": "free-text title",
+   "message": "CrossPoint Apps 1.2.0, physically accepted 2026-10-21.\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": true
+  },
+  {
+   "name": "trailing spaces",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd  \nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": true
+  },
+  {
+   "name": "missing candidate-run",
+   "message": "v1.2.0\n\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "missing candidate-commit",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "missing acceptance-sha256",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\n",
+   "ok": false
+  },
+  {
+   "name": "missing physically-accepted",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "repeated field",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\ncandidate-run: 7\n",
+   "ok": false
+  },
+  {
+   "name": "unknown field",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\nnotes: fine\n",
+   "ok": false
+  },
+  {
+   "name": "unknown similar field",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\nphysically-tested: x4-g\n",
+   "ok": false
+  },
+  {
+   "name": "run not a number",
+   "message": "v1.2.0\n\ncandidate-run: 12ab\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "run zero",
+   "message": "v1.2.0\n\ncandidate-run: 0\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "commit uppercase",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "commit short",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "commit sha256-length",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "sums uppercase",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "sums short",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "acceptance short",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "acceptance empty",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: \n",
+   "ok": false
+  },
+  {
+   "name": "seven packages",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "nine packages",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd x4pro-d\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "repeated package",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd x4pro-gp\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "out of order",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-gd x4-g x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-gpd\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "non-canonical name",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4-gd x4pro-g x4pro-gd x4pro-p x4pro-pd x4pro-gp x4pro-dgp\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "v1.1.1 package set",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: x4-g x4pro-g x4pro-p x4pro-gp\nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  },
+  {
+   "name": "empty package list",
+   "message": "v1.2.0\n\ncandidate-run: 123456\ncandidate-commit: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\ncandidate-sums-sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nphysically-accepted: \nacceptance-sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\n",
+   "ok": false
+  }
+ ]
+}

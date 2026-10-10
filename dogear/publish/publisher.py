@@ -30,13 +30,12 @@ import datetime as dt
 import json
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Callable, Optional
 
 from ..week import MANILA, IssueWeek, week_of, week_starting
 from .. import synthetic
 from ..quiet import QUIET_SCHEMA_VERSION, QuietSource
-from . import quiet_history
+from . import firmware, quiet_history
 from .edition import revision_problems
 from . import eligibility, routes
 from . import registry as regmod
@@ -45,10 +44,6 @@ from .pubdata import CorruptState, PubData, SaveFailed, targets_problem
 from .registry import REGISTRY_KEY, NoOp, Refused
 from .staging import Checks, Staged, StageInputs, WeekHeld, provenance_bytes, verify_staged
 from .staging import stage as stage_week
-
-# The firmware contract (tools/firmware_contract.py --sync): quiet issues need
-# limits.kIssueSchemaMax >= 3 there before production may select quiet-week.
-FIRMWARE_CONTRACT = Path(__file__).resolve().parents[2] / "data" / "firmware-contract.json"
 from .store import PreconditionFailed, StoreError
 
 ROLLOVER = dt.time(6, 0)  # Monday, Asia/Manila
@@ -106,6 +101,8 @@ class Publisher:
             raise ValueError("mode must be production or test")
         if separation not in (None, "staging", "production") or (mode == "production" and separation == "staging"):
             raise ValueError("separation must be staging or production, and production mode is production")
+        if mode == "production" and quiet_supported is not None:
+            raise ValueError("quiet_supported is for test mode only: production reads the synced firmware contract")
         # Which data this target may show (dogear/synthetic.py): production mode is always
         # "production" (nothing synthetic); the staging target is "staging" (only synthetic).
         self.separation = "production" if mode == "production" else separation
@@ -113,8 +110,10 @@ class Publisher:
         self.clock = clock or (lambda: dt.datetime.now(MANILA))
         self.mode, self.assets, self.attempts = mode, assets or {}, attempts
         self.served = served or (lambda path: routes.fetch(self.store, path))
-        # Whether DOGEAR firmware presents quiet issues (None: read the firmware contract).
+        # Test mode only: whether DOGEAR firmware presents quiet issues (None: read
+        # the firmware contract, as production always does).
         self.quiet_supported = quiet_supported
+        self._presentation_checked: Optional[str] = None  # the registry bytes the last guard pass allowed
 
     # Readiness and state.
 
@@ -128,19 +127,20 @@ class Publisher:
             missing.append("fit checker")
         if missing:
             raise NotReady("production publishing refused; unset: " + ", ".join(missing))
-        if self.policy.empty_week == "quiet-week" and not self._firmware_presents_quiet():
+        if self.policy.empty_week == "quiet-week":
             # The switch is the owner's, after presentation firmware is released and
             # verified on devices; this only refuses it while the firmware cannot.
-            raise NotReady("production publishing refused; quiet-week needs firmware that presents quiet issues")
+            capable = self._quiet_capability()
+            if not capable.ok:
+                raise NotReady("production publishing refused; quiet-week needs firmware that presents quiet "
+                               f"issues ({capable.reason})")
 
-    def _firmware_presents_quiet(self) -> bool:
-        if self.quiet_supported is not None:
-            return self.quiet_supported
-        try:
-            limits = json.loads(FIRMWARE_CONTRACT.read_text(encoding="utf-8")).get("limits", {})
-        except (OSError, ValueError, AttributeError):
-            return False
-        return isinstance(limits.get("kIssueSchemaMax"), int) and limits["kIssueSchemaMax"] >= QUIET_SCHEMA_VERSION
+    def _quiet_capability(self) -> firmware.Capability:
+        """Whether released firmware presents quiet issues: the synced firmware
+        contract and its verification record (local files, no network)."""
+        if self.quiet_supported is not None:  # test mode only (refused in production)
+            return firmware.Capability(self.quiet_supported, None if self.quiet_supported else "test override")
+        return firmware.capability()
 
     def _read_registry(self) -> tuple:
         try:
@@ -175,8 +175,13 @@ class Publisher:
         summary = None if reg is None else {
             "current": reg["current"], "hold": reg["hold"], "txn": reg["txn"],
             "weeks": {w: {"active": e["active"], "revisions": len(e["revisions"])} for w, e in sorted(reg["weeks"].items())}}
-        return {"registry": summary, "pending": pending and pending["txn"],
-                "unverified": [e["txn"] for e in unverified]}
+        out = {"registry": summary, "pending": pending and pending["txn"],
+               "unverified": [e["txn"] for e in unverified]}
+        if self.mode == "production":
+            capable = self._quiet_capability()
+            out["firmware"] = {"quietCapable": capable.ok, "reason": capable.reason,
+                               "quietShownWithoutCapability": self._quiet_shown_without_capability(reg)}
+        return out
 
     def reset_preflight(self, expect_current: str) -> list:
         """Read-only (PUBLISHING.md §20g): why the live state is NOT quiescent and
@@ -224,6 +229,9 @@ class Publisher:
             line = lines.get(rev["txn"])
             if line is not None:
                 problems += quiet_history.line_problems(line, reg, self.pubdata, self.store)
+        shown = self._quiet_shown_without_capability(reg)
+        if shown:
+            problems.append(shown)
         return problems + self._hosted_problems(reg)
 
     def _fetch(self, path: str) -> tuple:
@@ -316,8 +324,11 @@ class Publisher:
 
     # Reconciliation.
 
-    def reconcile(self, require_verified: bool = True) -> Optional[Outcome]:
-        """Settle what earlier runs left: a pending transaction, then unverified serving."""
+    def reconcile(self, require_verified: bool = True, detect: bool = False) -> Optional[Outcome]:
+        """Settle what earlier runs left: a pending transaction, then unverified serving.
+        With `detect` (the reconcile operation itself), then also stop for a human if
+        production currently shows a quiet issue that the firmware contract does not
+        authorise. It never writes the registry."""
         messages = []
         pending = self.pubdata.read_pending()
         if pending is not None:
@@ -330,6 +341,10 @@ class Publisher:
                 if require_verified:
                     raise PublishedUnverified("the host does not yet serve: " + "; ".join(failures))
                 messages.append("still unverified: " + "; ".join(failures))
+        if detect:
+            shown = self._quiet_shown_without_capability()
+            if shown:
+                raise NeedsHuman(shown + ("; " + "; ".join(messages) if messages else ""))
         return Outcome("reconciled", "; ".join(messages)) if messages else None
 
     def _settle_pending(self, pending: dict) -> str:
@@ -450,6 +465,91 @@ class Publisher:
             return None
         return guard
 
+    def _revision_is_quiet(self, week: str, rev: dict, fresh: Optional[dict], objects: dict) -> tuple:
+        """(quiet, problem) for one revision, from its provenance's edition and its
+        issue's schema, both read and hash-checked; they must agree. `fresh` and
+        `objects` are the provenance and uploads of the revision this write adds."""
+        if fresh is not None and rev.get("txn") == fresh.get("txn"):
+            prov = provenance_bytes(fresh["provenance"])
+        else:
+            prov = self.pubdata.read_published_provenance(week, rev["rev"])
+        if prov is None or regmod.sha256(prov) != rev["provenanceSha256"]:
+            return False, f"{week} revision {rev['rev']}: no matching provenance to tell its edition"
+        issue = objects.get(rev["issueKey"])
+        if issue is None:
+            try:
+                obj = self.store.get(rev["issueKey"])
+            except StoreError as err:
+                return False, f"{week} revision {rev['rev']}: cannot read its issue ({err})"
+            issue = obj.data if obj is not None else None
+        if issue is None or regmod.sha256(issue) != rev["issueSha256"]:
+            return False, f"{week} revision {rev['rev']}: its issue object is missing or altered"
+        try:
+            edition = json.loads(prov).get("edition")
+            schema = json.loads(issue).get("schemaVersion")
+        except (ValueError, AttributeError) as err:
+            return False, f"{week} revision {rev['rev']}: unreadable ({err})"
+        by_schema = isinstance(schema, int) and not isinstance(schema, bool) and schema >= QUIET_SCHEMA_VERSION
+        if (edition == "quiet") != by_schema:
+            return False, f"{week} revision {rev['rev']}: its provenance and issue disagree on whether it is quiet"
+        return by_schema, None
+
+    def _quiet_presentation_guard(self, before: Optional[dict], after: dict, fresh: Optional[dict] = None,
+                                  uploads: list = ()) -> Guard:
+        """Production: a registry write may make a quiet (schema-3) revision visible
+        or current only while released firmware presents quiet issues (the synced
+        firmware contract), whatever the policy says. What a write shows: the new
+        current week's active revision and every week whose active revision changes.
+        Moving away from a quiet revision is always allowed."""
+        shown = sorted(shown_revisions(before, after))
+        objects = {key: data for key, data, _ctype in uploads}
+        intended = regmod.sha256(regmod.dumps(after))
+
+        def guard() -> Optional[str]:
+            self._presentation_checked = None
+            if self.mode == "production":
+                quiet = []
+                for week, rev_no in shown:
+                    is_quiet, problem = self._revision_is_quiet(week, after["weeks"][week]["revisions"][rev_no],
+                                                                fresh, objects)
+                    if problem:
+                        return problem
+                    if is_quiet:
+                        quiet.append(f"{week} revision {rev_no}")
+                if quiet:
+                    capable = self._quiet_capability()
+                    if not capable.ok:
+                        return (f"this would show a quiet issue ({', '.join(quiet)}), but released firmware is not "
+                                f"verified to present quiet issues: {capable.reason}")
+            self._presentation_checked = intended
+            return None
+        return guard
+
+    def _quiet_shown_without_capability(self, reg: Optional[dict] = None) -> Optional[str]:
+        """Production: a description if the live current revision is quiet (or cannot
+        be told) while the firmware contract does not authorise quiet issues."""
+        if self.mode != "production":
+            return None
+        try:
+            if reg is None:
+                reg, _obj = self._read_registry()
+        except (Aborted, regmod.CorruptRegistry) as err:
+            return f"cannot read the registry to check quiet presentation: {err}"
+        if reg is None:
+            return None
+        capable = self._quiet_capability()
+        if capable.ok:
+            return None
+        week = reg["current"]
+        rev = regmod.active_revision(reg, week)
+        is_quiet, problem = self._revision_is_quiet(week, rev, None, {})
+        if problem:
+            return f"cannot tell whether the current issue is quiet ({problem}) and quiet issues are not authorised"
+        if is_quiet:
+            return (f"production shows a quiet issue ({week} revision {rev['rev']}) that released firmware is not "
+                    f"verified to present: {capable.reason}; roll back to a regular issue")
+        return None
+
     def _visible_revisions_guard(self, before: dict, after: dict) -> Guard:
         """For rollback and restore: every revision the change makes visible must still be publishable."""
         shown = [(w, e["active"]) for w, e in after["weeks"].items()
@@ -525,6 +625,9 @@ class Publisher:
         txn = new_reg["txn"]
         new_bytes = regmod.dumps(new_reg)
         intended = regmod.sha256(new_bytes)
+        # Every registry write, whatever the operation: the firmware gate on quiet issues.
+        fresh = {"txn": txn, "provenance": provenance} if provenance is not None else None
+        guard = self._all(self._quiet_presentation_guard(reg, new_reg, fresh, uploads), guard)
         for key, data, ctype in uploads:
             try:
                 self._upload(key, data, ctype)
@@ -889,8 +992,8 @@ class Publisher:
             new_reg = plan(reg, txn)
         except NoOp as noop:
             return Outcome("noop", str(noop))
-        guard = self._visible_revisions_guard(reg, new_reg)
-        reason = guard()
+        guard = self._all(self._quiet_presentation_guard(reg, new_reg), self._visible_revisions_guard(reg, new_reg))
+        reason = guard()  # preflight: refused before anything is recorded
         if reason:
             raise Refused(reason)
         line = dict(detail, txn=txn, op=op, week=week, at=now.isoformat())
@@ -909,6 +1012,16 @@ class Publisher:
         reg, _ = self._read_registry()
         week = reg["current"] if reg else ""
         return self._control("resume", lambda reg, txn: regmod.resume(reg, txn), [], week, {})
+
+
+def shown_revisions(before: Optional[dict], after: dict) -> set:
+    """(week, rev) pairs a write makes visible: the new current week's active
+    revision, and every week whose active revision changes."""
+    out = {(after["current"], after["weeks"][after["current"]]["active"])}
+    for week, entry in after["weeks"].items():
+        if before is None or week not in before["weeks"] or before["weeks"][week]["active"] != entry["active"]:
+            out.add((week, entry["active"]))
+    return out
 
 
 def _expected_targets_problem(pending: dict) -> Optional[str]:

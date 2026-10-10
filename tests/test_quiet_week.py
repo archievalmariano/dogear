@@ -760,21 +760,32 @@ class IdentityTests(unittest.TestCase):
 
 
 class ProductionGateTests(unittest.TestCase):
-    def pub(self, f, supported):
-        p = Publisher(f.store, f.remote.checkout(), f.pub.inputs, QUIET, f.checks, f.clock, mode="production",
-                      quiet_supported=supported)
-        return p
+    """Production reads the synced firmware contract only (test_firmware_capability)."""
+
+    def pub(self, f):
+        return Publisher(f.store, f.remote.checkout(), f.pub.inputs, QUIET, f.checks, f.clock, mode="production")
 
     def test_quiet_week_needs_firmware_support_in_production(self):
+        import tempfile
+        from unittest import mock
+        from dogear.publish import firmware
+        try:
+            from tests.firmware_fixture import SyncedTree
+        except ImportError:
+            from firmware_fixture import SyncedTree
         f = Fixture(self, regular_week(W0, "a"), at(W0, 9), policy=QUIET)
         with self.assertRaises(NotReady) as caught:
-            self.pub(f, False)._ready()
+            self.pub(f)._ready()  # this repository's contract: not synced from a verified release yet
         self.assertIn("firmware", str(caught.exception))
-        self.pub(f, True)._ready()
         contract = json.loads((ROOT / "data" / "firmware-contract.json").read_text())
-        self.assertNotIn("kIssueSchemaMax", contract["limits"])  # firmware has not shipped it yet
-        with self.assertRaises(NotReady):
-            self.pub(f, None)._ready()
+        self.assertNotIn("release", contract)
+        with tempfile.TemporaryDirectory() as d:
+            SyncedTree(Path(d)).write()
+            with mock.patch.object(firmware, "ROOT", Path(d)):
+                self.pub(f)._ready()
+        with self.assertRaises(ValueError):  # no override in production
+            Publisher(f.store, f.remote.checkout(), f.pub.inputs, QUIET, f.checks, f.clock, mode="production",
+                      quiet_supported=True)
         Publisher(f.store, f.remote.checkout(), f.pub.inputs, QUIET, f.checks, f.clock, mode="test")._ready()
 
 
