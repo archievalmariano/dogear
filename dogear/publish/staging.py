@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import html
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
@@ -357,7 +359,40 @@ def artifact_problems(week: IssueWeek, base_url: str, selection, issue: dict, is
             problems.append(f"entry {e['id']}: CTA label {label!r} not allowed")
     if b"READ FREE" in issue_bytes.upper() or b"READ FREE" in web_bytes.upper():
         problems.append("'READ FREE' appears in the artifacts")
-    return problems + device_limit_problems(issue, issue_bytes)
+    return problems + shown_link_problems(base_url, selection, issue, web_bytes) + \
+        device_limit_problems(issue, issue_bytes)
+
+
+_HREF = re.compile(rb'(?:href|src)\s*=\s*"([^"]*)"', re.IGNORECASE)
+
+
+def shown_link_problems(base_url: str, selection, issue: dict, web_bytes: bytes) -> list:
+    """Every outside URL the artifacts show is one the link check was given
+    (external_links), a source the rendered record itself carries (listed for
+    provenance, not link-checked by design), or DOGEAR's own: so no rendering
+    can show a reading link the link check never saw."""
+    checked = set(external_links(selection))
+    sources = {src.url for c in selection.rendered for src in c.record.sources}
+    own = base_url.rstrip("/")
+
+    def outside(url: str) -> bool:
+        if not url.lower().startswith(("http://", "https://", "//")):
+            return False  # relative: the page's own assets and anchors
+        return url not in checked and url not in sources and url != own and not url.startswith(own + "/")
+
+    def strings(value):
+        if isinstance(value, dict):
+            for v in value.values():
+                yield from strings(v)
+        elif isinstance(value, list):
+            for v in value:
+                yield from strings(v)
+        elif isinstance(value, str):
+            yield value
+
+    shown = [v for v in strings(issue) if v.lower().startswith(("http://", "https://", "//"))]
+    shown += [html.unescape(m.decode("utf-8", "replace")) for m in _HREF.findall(web_bytes)]
+    return [f"shows a link the link check was not given: {u}" for u in sorted(set(shown)) if outside(u)]
 
 
 def verify_staged(staged: Staged, inputs: StageInputs, policy: PublicationPolicy, history: list,

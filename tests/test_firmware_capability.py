@@ -37,7 +37,11 @@ from dogear.publish.registry import REGISTRY_KEY, Refused
 from dogear.publish import quiet_history
 from dogear.publish.edition import quiet_exclusion_problems, revision_problems
 from dogear.publish.pubdata import CorruptState, PubData
-from dogear.publish.store import MemoryStore
+from dogear.publish.policy import TEST_POLICY
+from dogear.publish.staging import Checks, LinkReport, StageInputs, StageRefused, shown_link_problems
+from dogear.publish.staging import stage as stage_week
+from dogear.publish.store import MemoryStore, StoreError
+from dogear.week import MANILA, week_starting
 from dogear.quiet import QuietSource
 
 try:
@@ -1258,6 +1262,155 @@ class QuietVerificationSurfaceTests(unittest.TestCase):
         with mock.patch.object(PubData, "history", lambda _self: [h for h in lines if h is not regular]):
             with self.assertRaisesRegex(CorruptState, "without exactly one content line"):
                 quiet_history.validated_lines(reg, pubdata, self.f.store)
+
+
+class PublicationInvariantTests(unittest.TestCase):
+    """What the system says stays true: "published" only when the live registry is
+    affirmatively the intended bytes (and only then is history committed);
+    "verified" only after every required check ran on the real result; a quiet
+    issue only as the reviewed selector composes it."""
+
+    PUBLISHER, STAGING, SELECT = "dogear/publish/publisher.py", "dogear/publish/staging.py", "dogear/select.py"
+
+    def changed(self, rel: str, old: str, new: str) -> str:
+        source = (REPO / rel).read_text(encoding="utf-8")
+        self.assertEqual(source.count(old), 1, old)
+        return changed_regions(surface({rel: source.replace(old, new)}), PROTECTED)
+
+    def lose_registry_writes(self, f, raise_error: bool):
+        """Every registry write is lost before it lands: with a connection error, or
+        (silently) with a put that reports success."""
+        real = f.store.put
+
+        def put(key, data, **kw):
+            if key == REGISTRY_KEY:
+                if raise_error:
+                    raise StoreError("connection reset before the request was sent")
+                return "etag-of-a-write-that-never-landed"
+            return real(key, data, **kw)
+        f.store.put = put
+
+    def committed_txns(self, f) -> set:
+        return {h["txn"] for h in f.history() if h.get("status") == "committed"}
+
+    def test_codexs_lost_write_is_never_recorded_as_published(self):
+        for raise_error in (True, False):
+            with self.subTest(lost="with an error" if raise_error else "silently"):
+                f = published(self, [regular_week(W0, "a"), regular_week(W1, "b")])
+                before, committed = f.store.objects[REGISTRY_KEY].data, self.committed_txns(f)
+                self.lose_registry_writes(f, raise_error)
+                with self.assertRaises(Aborted):  # never "published"
+                    promote(f, W1)
+                self.assertEqual(f.store.objects[REGISTRY_KEY].data, before)  # still the previous revision
+                self.assertEqual(self.committed_txns(f), committed)  # and no history commit
+                self.assertIsNotNone(PubData(f.remote.remote).read_pending())  # kept for the next run
+        # Codex's mutation (_registry_state answers "ours") needs review...
+        self.assertIn(repr((self.PUBLISHER, "Publisher._registry_state")),
+                      self.changed(self.PUBLISHER, "        if cur is not None and regmod.sha256(cur.data) == intended:",
+                                   "        if True:"))
+        # ... because, unreviewed, it would record the lost write as published:
+        f = published(self, [regular_week(W0, "a"), regular_week(W1, "b")])
+        before, committed = f.store.objects[REGISTRY_KEY].data, self.committed_txns(f)
+        self.lose_registry_writes(f, True)
+        with mock.patch.object(Publisher, "_registry_state", lambda *a, **k: "ours"):
+            with contextlib.suppress(Exception):
+                promote(f, W1)
+        self.assertEqual(f.store.objects[REGISTRY_KEY].data, before)
+        self.assertNotEqual(self.committed_txns(f), committed)  # the false record the guard prevents
+
+    def test_the_history_commit_and_publication_result_need_review(self):
+        probes = {
+            "Publisher._finalize": ('        problem = _expected_targets_problem(pending)\n', '        problem = None\n'),
+            "Publisher._committed": ("        if failures:\n            raise PublishedUnverified(",
+                                     "        if False:\n            raise PublishedUnverified("),
+            "Publisher._settle_pending": ('        if obj is not None and regmod.sha256(obj.data) == pending["intendedRegistrySha"]:',
+                                          "        if obj is not None:"),
+            "Publisher._transact": ("            state = self._registry_state(intended, expected)\n            if state == \"ours\":\n                break\n            if state == \"other\":",
+                                    "            state = \"ours\"\n            if state == \"ours\":\n                break\n            if state == \"other\":"),
+            "Publisher._check_target": ('    def _check_target(self, reg: dict, t: dict) -> Optional[str]:\n',
+                                        '    def _check_target(self, reg: dict, t: dict) -> Optional[str]:\n        return None\n'),
+        }
+        for region, (old, new) in probes.items():
+            with self.subTest(region=region):
+                self.assertIn(repr((self.PUBLISHER, region)), self.changed(self.PUBLISHER, old, new))
+
+    def test_every_required_check_needs_review_to_change(self):
+        checks_py = "dogear/publish/checks.py"
+        probes = (
+            (self.STAGING, '    problems, warnings = [], []\n    if checks.link_checker is not None:',
+             '    return [], []\n    problems, warnings = [], []\n    if checks.link_checker is not None:', "run_checks"),
+            (checks_py, "        report = LinkReport()\n        for url in urls:", "        report = LinkReport()\n        for url in []:", ""),
+            (checks_py, "        if run.returncode != 0:", "        if False:", ""),
+            (checks_py, "                return resp.status, resp.read(MAX_SERVED_BYTES + 1)  # longer cannot match",
+             "                return 200, resp.read(MAX_SERVED_BYTES + 1)", ""),
+            ("mock/render_dogear.py", "def ", "def _unused():\n    pass\n\n\ndef ", ""),
+            ("dogear/issue.py", "def typeset(", "def _typeset_old(", ""),
+            (self.STAGING, "    return problems + shown_link_problems(base_url, selection, issue, web_bytes) + \\",
+             "    return problems + [] + \\", "artifact_problems"),
+            (self.STAGING, "    blocking, warnings = run_checks(frozen, selection, checks)\n    problems += blocking",
+             "    blocking, warnings = [], []\n    problems += blocking", "stage"),
+        )
+        for rel, old, new, region in probes:
+            with self.subTest(change=f"{rel} {region}"):
+                source = (REPO / rel).read_text(encoding="utf-8")
+                self.assertGreaterEqual(source.count(old), 1, old)
+                probe = source.replace(old, new, 1)
+                self.assertIn(repr((rel, region)), changed_regions(surface({rel: probe}), PROTECTED))
+
+    def test_a_failed_check_stops_staging(self):
+        golden = REPO / "tests" / "golden"
+        inputs = StageInputs(golden / "regular-dataset.json", Path("/nonexistent.json"), "https://dogear.example.org",
+                             "dogear@golden")
+        week, now = week_starting(dt.date(2026, 11, 2)), dt.datetime(2026, 10, 30, 10, 2, tzinfo=MANILA)
+        self.assertTrue(stage_week(week, inputs, TEST_POLICY, [], now, Checks(), "test"))
+        failing = {
+            "link": Checks(link_checker=lambda urls: LinkReport(blocking=[f"{u}: HTTP 404" for u in urls] or ["x"])),
+            "fit": Checks(fit_checker=lambda dataset, ids: ["entry does not fit"]),
+        }
+        for name, checks in failing.items():
+            with self.subTest(check=name), self.assertRaises(StageRefused) as refused:
+                stage_week(week, inputs, TEST_POLICY, [], now, checks, "test")
+            self.assertTrue(any(p.startswith(f"{name}:") for p in refused.exception.problems))
+
+    def test_every_link_shown_is_one_the_link_check_was_given(self):
+        golden = REPO / "tests" / "golden"
+        inputs = StageInputs(golden / "regular-dataset.json", Path("/nonexistent.json"), "https://dogear.example.org",
+                             "dogear@golden")
+        week, now = week_starting(dt.date(2026, 11, 2)), dt.datetime(2026, 10, 30, 10, 2, tzinfo=MANILA)
+        seen = []
+        staged = stage_week(week, inputs, TEST_POLICY, [], now,
+                            Checks(link_checker=lambda urls: seen.extend(urls) or LinkReport()), "test")
+        issue = json.loads(staged.issue_bytes)
+        from dogear.publish.staging import freeze, generate
+        selection = generate(week, freeze(inputs, TEST_POLICY, [], now, None))[0]
+        self.assertEqual(shown_link_problems(inputs.base_url, selection, issue, staged.web_bytes), [])
+        extra = staged.web_bytes.replace(b"</body>", b'<a class="cta" href="https://unchecked.example.net/x">x</a></body>')
+        self.assertEqual(shown_link_problems(inputs.base_url, selection, issue, extra),
+                         ["shows a link the link check was not given: https://unchecked.example.net/x"])
+        self.assertEqual(shown_link_problems(inputs.base_url, selection, dict(issue, extra="https://unchecked.example.net/y"),
+                                             staged.web_bytes),
+                         ["shows a link the link check was not given: https://unchecked.example.net/y"])
+
+    def test_codexs_zero_slot_bars_need_review(self):
+        # Codex's probe: generate hands the quiet selector zero slot bars; regeneration
+        # would faithfully reproduce the wrong bytes, so the source must not change unreviewed.
+        quiet_call = "                                       slot_bars=frozen.policy.slot_bars())"
+        self.assertIn(repr((self.STAGING, "generate")), self.changed(
+            self.STAGING, quiet_call,
+            "                                       slot_bars=tuple((slot, 0) for slot, _bar in frozen.policy.slot_bars()))"))
+        self.assertIn(repr((self.STAGING, "generate")), self.changed(
+            self.STAGING, "        selection = select_quiet_issue(dataset, week, hist, source, affinity=affinity,",
+            "        selection = select_issue(dataset, week, hist, source, affinity=affinity,"))
+        for old, new in (("SLOT_BARS = ((4, 30), (6, 42), (8, 52))", "SLOT_BARS = ((4, 0), (6, 0), (8, 0))"),
+                         ('RECOGNITION_LIFT = {"anchor": 5, "core": 2, "discovery": 0}',
+                          'RECOGNITION_LIFT = {"anchor": 0, "core": 0, "discovery": 0}'),
+                         ("        if cand.excluded is None and any(i in blocked_ids for i in identities):",
+                          "        if False:")):
+            with self.subTest(select=new):
+                self.assertIn(repr((self.SELECT, "")), self.changed(self.SELECT, old, new))
+        self.assertIn(repr(("dogear/publish/policy.py", "")), self.changed(
+            "dogear/publish/policy.py", "        return ((4, 30), (6, self.slot5_bar), (8, 52))",
+            "        return ((4, 0), (6, 0), (8, 0))"))
 
 
 if __name__ == "__main__":

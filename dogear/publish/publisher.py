@@ -721,7 +721,6 @@ class Publisher:
             try:
                 self.store.put(REGISTRY_KEY, new_bytes, content_type="application/json",
                                if_match=expected, if_none_match=expected is None)
-                break
             except PreconditionFailed:
                 state = self._registry_state(intended, expected)
                 if state == "ours":
@@ -732,12 +731,15 @@ class Publisher:
                 self._abandon(pending, "another writer changed the registry (precondition failed)")
                 raise Aborted(f"{txn}: the registry changed under us; nothing published by this run")
             except StoreError:
-                state = self._registry_state(intended, expected)
-                if state == "ours":
-                    break
-                if state == "other":
-                    return self._unresolved(pending, "the registry changed while our write was in doubt")
-                uncertain = state == "unknown"  # "expected": definitely not applied; retry after the guards
+                pass  # in doubt: settled by reading the registry back, below
+            # Published only when the live registry is affirmatively these bytes: a write
+            # that reported success but did not land is not published.
+            state = self._registry_state(intended, expected)
+            if state == "ours":
+                break
+            if state == "other":
+                return self._unresolved(pending, "the registry changed while our write was in doubt")
+            uncertain = state == "unknown"  # "expected": definitely not applied; retry after the guards
         else:
             raise Aborted(f"{txn}: registry write not confirmed after {self.attempts} attempts; "
                           "pending kept for the next run")
