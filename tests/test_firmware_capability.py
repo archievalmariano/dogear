@@ -16,7 +16,9 @@ import json
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
+import types
 import unittest
 import urllib.request
 from pathlib import Path
@@ -34,16 +36,16 @@ from dogear.publish.store import MemoryStore
 
 try:
     from tests.firmware_fixture import FIXTURES, SCHEMA, SyncedTree
-    from tests.write_boundary import (REPO, SCANNED, STATEMENTS, changed_regions, discover, regions, scan_repo,
-                                      scan_source, surface, unreviewed)
-    from tests.write_boundary_review import PROTECTED, REVIEWED
+    from tests.write_boundary import (REPO, SCANNED, STATEMENTS, changed_regions, covered, dependencies, discover,
+                                      regions, scan_repo, scan_source, surface, unreviewed)
+    from tests.write_boundary_review import NOT_CRITICAL, PROTECTED, REVIEWED
     from tests.test_publish import W0, W1, W2, W3, Fixture, at
     from tests.test_quiet_week import QUIET, regular_week, stored_issue
 except ImportError:
     from firmware_fixture import FIXTURES, SCHEMA, SyncedTree
-    from write_boundary import (REPO, SCANNED, STATEMENTS, changed_regions, discover, regions, scan_repo,
-                                scan_source, surface, unreviewed)
-    from write_boundary_review import PROTECTED, REVIEWED
+    from write_boundary import (REPO, SCANNED, STATEMENTS, changed_regions, covered, dependencies, discover,
+                                regions, scan_repo, scan_source, surface, unreviewed)
+    from write_boundary_review import NOT_CRITICAL, PROTECTED, REVIEWED
     from test_publish import W0, W1, W2, W3, Fixture, at
     from test_quiet_week import QUIET, regular_week, stored_issue
 
@@ -493,6 +495,13 @@ def sneak(pub, data):
     writer = builtins.getattr(raw, "p" + "ut")
     writer("publication" + ".json", data, content_type="application/json")
 """
+# Codex's third probe, appended to publisher.py: a protected name rebound inside a
+# top-level compound statement. At run time it disables registry-key recognition.
+NESTED_REBINDING = """
+if True:
+    def is_registry_key(key):
+        return False
+"""
 # A prohibited writer in a nested tools module.
 NESTED_WRITER = """from dogear.publish.registry import REGISTRY_KEY
 
@@ -585,7 +594,7 @@ class RegistryWriteBoundaryTests(GuardBase):
                       {(f.scope, f.kind, f.detail, f.at) for f in new})
         self.assertEqual({f.scope for f in new}, {"RegistryGate.put"})
         # Ordinary movement elsewhere in the module does not disturb any approval.
-        moved = ("import json  # an unrelated import\n\n\ndef unrelated():\n    return 1\n\n\n"
+        moved = ("import hmac  # an unrelated import (one the protected code does not use)\n\n\ndef unrelated():\n    return 1\n\n\n"
                  + source.replace(api, "UNRELATED = 1\n" + api).replace(
                      "    __slots__ = (", "    ALSO_UNRELATED = 2\n    __slots__ = ("))
         self.assert_reviewed(scan_repo({path: moved}))
@@ -802,7 +811,7 @@ class SourceReviewGuardTests(unittest.TestCase):
              '_GATE_API = frozenset({"get", "put", "allow_once", "_st" + "ore"})', "_GATE_API"),
             ("dogear/publish/firmware.py", '        require(not failed, f"{name}: {failed} not PASS")\n', "", ""),
             ("dogear/publish/registry.py", 'REGISTRY_KEY = "publication.json"', 'REGISTRY_KEY = "publication.JSON"',
-             "REGISTRY_KEY"),
+             ""),
         )
         for rel, old, new, region in probes:
             with self.subTest(region=f"{rel} {region}"):
@@ -856,6 +865,166 @@ class SourceReviewGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "Publisher._upload is gone"):
             surface({self.PUBLISHER: gone})
         self.assertIn("UnguardedRegistryWrite", regions(source)[0])
+
+
+class BindingAndSurfaceTests(unittest.TestCase):
+    """A name the protected code depends on is bound once, directly; any other
+    binding of it anywhere in a protected module's execution flow (however
+    nested, in whatever form) is a scan finding and changes the module's
+    "<bindings>" fingerprint. And everything the surface uses is on it or
+    reviewed as not critical."""
+
+    PUBLISHER = "dogear/publish/publisher.py"
+    CLASS_END = "\n\ndef shown_revisions("  # the end of the Publisher class body
+
+    def setUp(self):
+        self.source = (REPO / self.PUBLISHER).read_text(encoding="utf-8")
+        self.assertEqual(self.source.count(self.CLASS_END), 1)
+
+    def in_publisher_class(self, code: str) -> str:
+        return self.source.replace(self.CLASS_END, "\n" + code + self.CLASS_END)
+
+    def assert_rebinding(self, probe: str, name: str, scope: str = "") -> None:
+        new = scan_repo({self.PUBLISHER: probe}) - REVIEWED
+        self.assertIn((scope, "rebinding", name), {(f.scope, f.kind, f.detail.split(" ")[0]) for f in new})
+        self.assertTrue(unreviewed(scan_repo({self.PUBLISHER: probe}), REVIEWED))
+        try:
+            differs = changed_regions(surface({self.PUBLISHER: probe}), PROTECTED)
+        except AssertionError as refused:  # a second plain definition: the regions refuse it outright
+            self.assertIn("defined more than once", str(refused))
+        else:
+            self.assertIn(repr((self.PUBLISHER, "<bindings>")), differs)
+
+    def load(self, source: str):
+        """The publisher module built from `source`, as a separate module."""
+        module = types.ModuleType("dogear.publish._probe")
+        module.__package__ = "dogear.publish"
+        sys.modules[module.__name__] = module
+        try:
+            exec(compile(source, "publisher-probe", "exec"), module.__dict__)  # noqa: S102 -- the probe, in the test only
+        finally:
+            del sys.modules[module.__name__]
+        return module
+
+    def test_codexs_nested_rebinding_is_found_and_would_bypass_the_gate(self):
+        probe = self.source + NESTED_REBINDING
+        new = scan_repo({self.PUBLISHER: probe}) - REVIEWED
+        self.assertEqual({(f.file, f.scope, f.kind, f.detail, f.at) for f in new},
+                         {(self.PUBLISHER, "", "rebinding", "is_registry_key (def)", "-/body[0]")})
+        self.assertTrue(unreviewed(scan_repo({self.PUBLISHER: probe}), REVIEWED))  # the review fails
+        self.assertIn(repr((self.PUBLISHER, "<bindings>")), changed_regions(surface({self.PUBLISHER: probe}), PROTECTED))
+        # Without the checks it would work: the probed module's gate lets a forged registry through.
+        for source, refused in ((self.source, True), (probe, False)):
+            gate_module = self.load(source)
+            raw = MemoryStore()
+            raw.put(REGISTRY_KEY, b"{}", content_type="application/json")
+            gate = gate_module.RegistryGate(raw)
+            if refused:
+                with self.assertRaises(gate_module.UnguardedRegistryWrite):
+                    gate.put(REGISTRY_KEY, b"forged", content_type="application/json")
+                self.assertEqual(raw.objects[REGISTRY_KEY].data, b"{}")
+            else:
+                gate.put(REGISTRY_KEY, b"forged", content_type="application/json")
+                self.assertEqual(raw.objects[REGISTRY_KEY].data, b"forged")
+
+    def test_every_binding_form_is_found_however_nested(self):
+        forms = {
+            "def in try": ("try:\n    def is_registry_key(key):\n        return False\nexcept Exception:\n    pass\n",
+                           "is_registry_key"),
+            "def in an except handler": ("try:\n    pass\nexcept Exception:\n    def shown_revisions(b, a):\n"
+                                         "        return set()\n", "shown_revisions"),
+            "with ... as": ("import contextlib\nwith contextlib.nullcontext(len) as is_registry_key:\n    pass\n",
+                            "is_registry_key"),
+            "for target": ("for is_registry_key in (len,):\n    pass\n", "is_registry_key"),
+            "while body": ("while True:\n    is_registry_key = len\n    break\n", "is_registry_key"),
+            "import alias": ("if True:\n    from os.path import isabs as is_registry_key\n", "is_registry_key"),
+            "star import": ("if True:\n    from os.path import *\n", "*"),
+            "destructuring": ("_x, is_registry_key = 1, len\n", "is_registry_key"),
+            "walrus in a comprehension": ("_y = [is_registry_key := f for f in (len,)]\n", "is_registry_key"),
+            "augmented assignment": ("REGISTRY_KEY += '.bak'\n", "REGISTRY_KEY"),
+            "annotated, nested": ("if True:\n    REGISTRY_KEY: str = 'x'\n", "REGISTRY_KEY"),
+            "del": ("if False:\n    del shown_revisions\n", "shown_revisions"),
+            "global in a function": ("def _sneak():\n    global shown_revisions\n    shown_revisions = None\n",
+                                     "shown_revisions"),
+            "a builtin the gate uses": ("if True:\n    frozenset = set\n", "frozenset"),
+            "a module the gate uses": ("if True:\n    import os.path as posixpath\n", "posixpath"),
+            "a class with the gate's name": ("if True:\n    class RegistryGate:\n        pass\n", "RegistryGate"),
+        }
+        if sys.version_info >= (3, 10):
+            forms["match capture"] = ("match len:\n    case is_registry_key:\n        pass\n", "is_registry_key")
+        for form, (code, name) in forms.items():
+            with self.subTest(form=form):
+                self.assert_rebinding(self.source + "\n" + code, name)
+        # Inside the Publisher class body: a protected method replaced, however nested.
+        members = {
+            "a guard redefined in a nested block": ("    if True:\n        def _week_guard(self, week):\n"
+                                                    "            return lambda: None\n", "_week_guard"),
+            "a guard bound again": ("    _eligibility_guard = None\n", "_eligibility_guard"),
+            "an attribute the protected methods use": ("    try:\n        store = None\n    finally:\n"
+                                                       "        pass\n", "store"),
+        }
+        for form, (code, name) in members.items():
+            with self.subTest(form=form):
+                self.assert_rebinding(self.in_publisher_class(code), name, "Publisher")
+
+    def test_unrelated_nested_bindings_are_not_findings(self):
+        unrelated = ("if True:\n    def unrelated_helper(x):\n        return x\n"
+                     "try:\n    from os.path import isabs as unrelated_isabs\nexcept ImportError:\n"
+                     "    unrelated_isabs = None\nfor unrelated_i in range(1):\n    pass\n")
+        for probe in (self.source + "\n" + unrelated,
+                      self.in_publisher_class("    if True:\n        def unrelated_method(self):\n"
+                                              "            return 1\n")):
+            self.assertEqual(unreviewed(scan_repo({self.PUBLISHER: probe}), REVIEWED), "")
+            self.assertEqual(changed_regions(surface({self.PUBLISHER: probe}), PROTECTED), "")
+
+    def test_the_publication_guards_are_on_the_surface(self):
+        # Codex's second probe and its siblings: each weakens what a write checks, with no scan finding.
+        doc_end = '    revision, and every week whose active revision changes."""\n'
+        probes = {
+            "shown_revisions": (doc_end, doc_end + "    return set()\n"),
+            "Publisher._eligibility_guard": ("                problems = eligibility.check(provenance, text, issue)",
+                                             "                problems = []"),
+            "Publisher._visible_revisions_guard": ("            for week, rev_no in sorted(set(shown)):",
+                                                   "            for week, rev_no in []:"),
+        }
+        for region, (old, new) in probes.items():
+            with self.subTest(region=region):
+                self.assertEqual(self.source.count(old), 1, old)
+                probe = self.source.replace(old, new)
+                self.assertEqual(unreviewed(scan_repo({self.PUBLISHER: probe}), REVIEWED), "")  # the scan cannot see it
+                self.assertIn(repr((self.PUBLISHER, region)),
+                              changed_regions(surface({self.PUBLISHER: probe}), PROTECTED))
+
+    def test_rebinding_each_publication_guard_is_found(self):
+        cli = "dogear/publish/cli.py"
+        cli_source = (REPO / cli).read_text(encoding="utf-8")
+        for name in ("shown_revisions", "_eligibility_guard", "_visible_revisions_guard"):
+            with self.subTest(name=name, where="from the CLI"):
+                probe = cli_source + f"\n\ndef _sneak(target, fake):\n    target.{name} = fake\n"
+                new = scan_repo({cli: probe}) - REVIEWED
+                self.assertIn(("rebind", f"target.{name}"), {(f.kind, f.detail) for f in new})
+        self.assert_rebinding(self.source + "\nif True:\n    def shown_revisions(before, after):\n"
+                                            "        return set()\n", "shown_revisions")
+        for name in ("_eligibility_guard", "_visible_revisions_guard"):
+            with self.subTest(name=name, where="in the class body"):
+                self.assert_rebinding(self.in_publisher_class(f"    if True:\n        def {name}(self, *a, **k):\n"
+                                                              "            return lambda: None\n"), name, "Publisher")
+
+    def test_every_dependency_of_the_surface_is_protected_or_reviewed(self):
+        deps = dependencies()
+        self.assertEqual(sorted(d for d in deps if not covered(d) and d not in NOT_CRITICAL), [],
+                         "the surface uses these: protect them or review them into NOT_CRITICAL")
+        self.assertEqual(sorted(d for d in NOT_CRITICAL if d not in deps), [], "stale NOT_CRITICAL entries")
+        for dep in ((self.PUBLISHER, "shown_revisions"), (self.PUBLISHER, "Publisher._eligibility_guard"),
+                    ("dogear/publish/eligibility.py", "check"), ("dogear/publish/registry.py", "promote")):
+            self.assertTrue(covered(dep), dep)
+        # A new helper the surface starts to use is uncovered until reviewed.
+        doc_end = '    revision, and every week whose active revision changes."""\n'
+        probe = self.source.replace(doc_end, doc_end + "    after = _new_helper(after)\n") + \
+            "\n\ndef _new_helper(after):\n    return after\n"
+        uncovered = [d for d in dependencies(overrides={self.PUBLISHER: probe})
+                     if not covered(d) and d not in NOT_CRITICAL]
+        self.assertEqual(uncovered, [(self.PUBLISHER, "_new_helper")])
 
 
 if __name__ == "__main__":

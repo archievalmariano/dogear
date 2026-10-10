@@ -67,10 +67,14 @@ KNOWN_MODULES = frozenset({"__future__", "argparse", "collections", "copy", "dat
                            "shutil", "tempfile", "typing", "unicodedata", "zoneinfo"})
 # The critical surface: (file, region). A region is a module-level class,
 # function or assigned name, "Class.method", "<imports>" (every module-level
-# import of that file) or "" (the whole module). Its fingerprint is in
-# write_boundary_review.PROTECTED.
+# import of that file), "<bindings>" (every binding of a name the file's
+# protected code uses, however nested: see binding_table) or "" (the whole
+# module). Its fingerprint is in write_boundary_review.PROTECTED, and every
+# package name a region uses is itself on the surface or reviewed as not
+# critical (write_boundary_review.NOT_CRITICAL; see dependencies).
 SURFACE = (
     ("dogear/publish/publisher.py", "<imports>"),
+    ("dogear/publish/publisher.py", "<bindings>"),
     ("dogear/publish/publisher.py", "UnguardedRegistryWrite"),
     ("dogear/publish/publisher.py", "is_registry_key"),
     ("dogear/publish/publisher.py", "_GATE_API"),
@@ -84,13 +88,59 @@ SURFACE = (
     ("dogear/publish/publisher.py", "Publisher._upload"),
     ("dogear/publish/publisher.py", "Publisher._transact"),
     ("dogear/publish/publisher.py", "Publisher._control"),
-    ("dogear/publish/registry.py", "REGISTRY_KEY"),
-    ("dogear/publish/registry.py", "sha256"),
+    # what a write makes visible, and the guards every write re-runs (eligibility,
+    # separation, the Manila week, visible revisions), and the operations that
+    # choose which guards a write gets
+    ("dogear/publish/publisher.py", "shown_revisions"),
+    ("dogear/publish/publisher.py", "Publisher._read_registry"),
+    ("dogear/publish/publisher.py", "Publisher._dataset_text"),
+    ("dogear/publish/publisher.py", "Publisher._week_guard"),
+    ("dogear/publish/publisher.py", "Publisher._separation_problem"),
+    ("dogear/publish/publisher.py", "Publisher._eligibility_guard"),
+    ("dogear/publish/publisher.py", "Publisher._visible_revisions_guard"),
+    ("dogear/publish/publisher.py", "Publisher.promote"),
+    ("dogear/publish/publisher.py", "Publisher.launch"),
+    ("dogear/publish/publisher.py", "Publisher.correct"),
+    ("dogear/publish/publisher.py", "Publisher.rollback"),
+    ("dogear/publish/publisher.py", "Publisher.restore"),
+    ("dogear/publish/publisher.py", "Publisher.resume"),
+    # production readiness: refused while the policy is unset, and quiet-week
+    # refused while the firmware cannot present quiet issues
+    ("dogear/publish/publisher.py", "Publisher._ready"),
+    ("dogear/publish/publisher.py", "NotReady"),
+    ("dogear/publish/publisher.py", "Aborted"),
+    ("dogear/publish/publisher.py", "NeedsHuman"),
+    ("dogear/publish/policy.py", ""),
+    ("dogear/publish/publisher.py", "rollover_week"),
+    ("dogear/publish/publisher.py", "ROLLOVER"),
+    # the registry model (which revision is active, which week current), eligibility,
+    # the week arithmetic, and the checks the guards call in other modules
+    ("dogear/publish/registry.py", ""),
+    ("dogear/publish/eligibility.py", ""),
+    ("dogear/week.py", ""),
+    ("dogear/dataset.py", ""),  # records and their approvals, which eligibility compares
+    ("dogear/affinity.py", "<bindings>"),
+    ("dogear/affinity.py", "normalize"),
+    ("dogear/publish/edition.py", ""),
+    ("dogear/synthetic.py", ""),
+    ("dogear/quiet.py", ""),
+    ("dogear/select.py", "<bindings>"),
+    ("dogear/select.py", "MAX_ENTRIES"),
+    ("dogear/publish/quiet_history.py", "<bindings>"),
+    ("dogear/publish/quiet_history.py", "CONTENT_OPS"),
+    ("dogear/publish/quiet_history.py", "content_lines"),
+    ("dogear/publish/quiet_history.py", "line_problems"),
+    ("dogear/publish/staging.py", "<bindings>"),
+    ("dogear/publish/staging.py", "provenance_bytes"),
+    ("dogear/publish/staging.py", "Checks"),  # production needs its link and fit checkers
     ("dogear/publish/firmware.py", ""),
+    ("dogear/publish/drills.py", "<bindings>"),
     ("dogear/publish/drills.py", "DrillStore.put"),
     ("tests/write_boundary.py", ""),
     ("tests/test_firmware_capability.py", "RegistryWriteBoundaryTests"),
     ("tests/test_firmware_capability.py", "SourceReviewGuardTests"),
+    ("tests/test_firmware_capability.py", "BindingAndSurfaceTests"),
+    ("tests/test_firmware_capability.py", "NESTED_REBINDING"),
     ("tests/test_firmware_capability.py", "BYPASS"),
     ("tests/test_firmware_capability.py", "QUALIFIED_BYPASS"),
     ("tests/test_firmware_capability.py", "BYPASS_VARIANTS"),
@@ -146,7 +196,8 @@ def _statement_id(stmt) -> str:
 def _bound_name(stmt):
     if isinstance(stmt, SCOPES):
         return stmt.name
-    targets = stmt.targets if isinstance(stmt, ast.Assign) else [getattr(stmt, "target", None)]
+    targets = stmt.targets if isinstance(stmt, ast.Assign) else \
+        [stmt.target] if isinstance(stmt, ast.AnnAssign) else []
     if len(targets) == 1 and isinstance(targets[0], ast.Name):
         return targets[0].id
     return None
@@ -213,6 +264,9 @@ def scan_source(rel: str, source: str, protected: frozenset = None) -> set:
       rebind                  assigning or deleting a protected name as an attribute
                               (publisher.is_registry_key = ..., Publisher._transact = ...)
       subclass                a subclass of Publisher, RegistryGate or DrillStore
+      rebinding               in a module on the surface, a second binding of a name its
+                              protected code depends on, in any form and however deeply
+                              nested in its execution flow (see rebindings)
 
     Each finding is one occurrence, identified structurally: file, enclosing
     class/function, kind, detail, `at` (its statement's position inside that
@@ -283,7 +337,10 @@ def scan_source(rel: str, source: str, protected: frozenset = None) -> set:
                 elif top not in KNOWN_MODULES:
                     note(scope, at, stmt, "module", name)
 
-    walk(ast.parse(source), [], [], None)
+    tree = ast.parse(source)
+    walk(tree, [], [], None)
+    for scope, name, kind, at, stmt in rebindings(rel, tree):
+        raw.append((rel, scope, "rebinding", f"{name} ({kind})", at, _statement_id(stmt)))
     seen = collections.Counter()
     found = set()
     for key in raw:
@@ -371,6 +428,10 @@ def surface(overrides: dict = None, root: Path = REPO) -> dict:
         if rel not in cache:
             source = overrides[rel] if rel in overrides else (root / rel).read_text(encoding="utf-8")
             cache[rel] = regions(source)[0]
+        if region == "<bindings>":
+            source = overrides[rel] if rel in overrides else (root / rel).read_text(encoding="utf-8")
+            out[(rel, region)] = digest(binding_table(rel, source))
+            continue
         if region not in cache[rel]:
             raise AssertionError(f"{rel}: {region} is gone; the critical surface must be reviewed again")
         out[(rel, region)] = digest(cache[rel][region])
@@ -394,3 +455,340 @@ def changed_regions(current: dict, protected: dict) -> str:
         if current.get(key) != protected.get(key):
             lines.append(f"  {key}: reviewed {protected.get(key)}, now {current.get(key)}\n")
     return "".join(lines)
+
+
+# ---- bindings: a protected name rebound anywhere in a module's execution flow --
+
+SIMPLE_BINDINGS = frozenset({"def", "class", "assign", "destructure", "annassign", "import"})
+
+
+def _target_names(node):
+    if isinstance(node, ast.Name):
+        yield node.id
+    elif isinstance(node, (ast.Tuple, ast.List)):
+        for element in node.elts:
+            yield from _target_names(element)
+    elif isinstance(node, ast.Starred):
+        yield from _target_names(node.value)
+
+
+def _walrus_names(node):
+    """Names an expression binds with :=, comprehensions included (they bind in
+    the enclosing scope); a lambda is its own scope."""
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, ast.Lambda):
+            continue
+        if isinstance(current, ast.NamedExpr):
+            yield from _target_names(current.target)
+        stack.extend(ast.iter_child_nodes(current))
+
+
+def _pattern_names(pattern):
+    for node in ast.walk(pattern):
+        kind = type(node).__name__
+        if kind in ("MatchAs", "MatchStar") and node.name:
+            yield node.name
+        elif kind == "MatchMapping" and node.rest:
+            yield node.rest
+
+
+def flow_bindings(body: list, top=None) -> list:
+    """Every binding in one scope's execution flow (a module or a class body):
+    [(name, kind, nested, at, stmt)], however deeply it sits inside if / try /
+    with / for / while / match blocks. Kinds: def, class, assign, destructure,
+    augassign, annassign, for, with, except, match, import, star-import, del,
+    walrus, type. A def or class body is its own scope and is not entered (its
+    decorators, defaults and bases are)."""
+    out = []
+
+    def bind(name, kind, nested, steps, stmt):
+        out.append((name, kind, nested, "/".join(steps), stmt))
+
+    def header_walrus(node, nested, steps, stmt):
+        for field, value in ast.iter_fields(node):
+            if field in BLOCKS:
+                continue
+            for item in value if isinstance(value, list) else [value]:
+                if isinstance(item, ast.AST):
+                    for name in _walrus_names(item):
+                        bind(name, "walrus", nested, steps, stmt)
+
+    def visit(stmt, steps, nested):
+        if isinstance(stmt, SCOPES):
+            bind(stmt.name, "class" if isinstance(stmt, ast.ClassDef) else "def", nested, steps, stmt)
+            for expr in stmt.decorator_list + getattr(stmt, "bases", []) + \
+                    [k.value for k in getattr(stmt, "keywords", [])]:
+                for name in _walrus_names(expr):
+                    bind(name, "walrus", nested, steps, stmt)
+            if not isinstance(stmt, ast.ClassDef):
+                for expr in stmt.args.defaults + [d for d in stmt.args.kw_defaults if d is not None]:
+                    for name in _walrus_names(expr):
+                        bind(name, "walrus", nested, steps, stmt)
+            return
+        if isinstance(stmt, ast.Assign):
+            for target in stmt.targets:
+                kind = "assign" if isinstance(target, ast.Name) else "destructure"
+                for name in _target_names(target):
+                    bind(name, kind, nested, steps, stmt)
+        elif isinstance(stmt, (ast.AugAssign, ast.AnnAssign)):
+            for name in _target_names(stmt.target):
+                bind(name, "augassign" if isinstance(stmt, ast.AugAssign) else "annassign", nested, steps, stmt)
+        elif isinstance(stmt, (ast.For, ast.AsyncFor)):
+            for name in _target_names(stmt.target):
+                bind(name, "for", nested, steps, stmt)
+        elif isinstance(stmt, (ast.With, ast.AsyncWith)):
+            for item in stmt.items:
+                if item.optional_vars is not None:
+                    for name in _target_names(item.optional_vars):
+                        bind(name, "with", nested, steps, stmt)
+        elif isinstance(stmt, ast.Import):
+            for alias in stmt.names:
+                bind(alias.asname or alias.name.split(".")[0], "import", nested, steps, stmt)
+        elif isinstance(stmt, ast.ImportFrom):
+            for alias in stmt.names:
+                if alias.name == "*":
+                    bind("*", "star-import", nested, steps, stmt)
+                else:
+                    bind(alias.asname or alias.name, "import", nested, steps, stmt)
+        elif isinstance(stmt, ast.Delete):
+            for target in stmt.targets:
+                for name in _target_names(target):
+                    bind(name, "del", nested, steps, stmt)
+        elif type(stmt).__name__ == "TypeAlias":  # 3.12+
+            bind(stmt.name.id, "type", nested, steps, stmt)
+        header_walrus(stmt, nested, steps, stmt)
+        for field in BLOCKS:
+            for index, child in enumerate(getattr(stmt, field, None) or []):
+                here = steps + [f"{field}[{index}]"]
+                if isinstance(child, ast.ExceptHandler):
+                    if child.name:
+                        bind(child.name, "except", True, here, stmt)
+                    if child.type is not None:
+                        for name in _walrus_names(child.type):
+                            bind(name, "walrus", True, here, stmt)
+                    for j, inner in enumerate(child.body):
+                        visit(inner, here + [f"body[{j}]"], True)
+                elif type(child).__name__ == "match_case":
+                    for name in _pattern_names(child.pattern):
+                        bind(name, "match", True, here, stmt)
+                    if child.guard is not None:
+                        for name in _walrus_names(child.guard):
+                            bind(name, "walrus", True, here, stmt)
+                    for j, inner in enumerate(child.body):
+                        visit(inner, here + [f"body[{j}]"], True)
+                else:
+                    visit(child, here, True)
+
+    for index, stmt in enumerate(body):
+        visit(stmt, [_step(top, "body", index, stmt) if top is not None else f"body[{index}]"], False)
+    return out
+
+
+def _classes_in_flow(body: list) -> list:
+    """Every class defined in a module's execution flow, nested blocks included."""
+    found = []
+
+    def walk(stmts):
+        for stmt in stmts:
+            if isinstance(stmt, ast.ClassDef):
+                found.append(stmt)
+            elif not isinstance(stmt, SCOPES):
+                for field in BLOCKS:
+                    for child in getattr(stmt, field, None) or []:
+                        walk([child] if isinstance(child, ast.stmt) else child.body)
+    walk(body)
+    return found
+
+
+def _region_nodes(tree) -> dict:
+    """{region name: node} for module-level definitions and class members."""
+    out = {}
+    for stmt in tree.body:
+        name = _bound_name(stmt)
+        if name is None:
+            continue
+        out.setdefault(name, stmt)
+        if isinstance(stmt, ast.ClassDef):
+            for inner in stmt.body:
+                inner_name = _bound_name(inner)
+                if inner_name is not None:
+                    out.setdefault(f"{name}.{inner_name}", inner)
+    return out
+
+
+def protected_in(rel: str) -> list:
+    return [region for path, region in SURFACE if path == rel]
+
+
+def guarded_names(rel: str, tree) -> dict:
+    """{scope: names} that must be bound once, directly, in each execution flow
+    of a protected module: in the module, every name its protected regions
+    define or mention (builtins included: rebinding `object` would change the
+    gate); in a class, its protected members and every self.X they use."""
+    regions_here = protected_in(rel)
+    nodes = _region_nodes(tree)
+    whole = "" in regions_here
+    module, classes = set(), collections.defaultdict(set)
+    for region in regions_here:
+        if region.startswith("<"):
+            if region == "<imports>":
+                for stmt in tree.body:
+                    if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+                        module.update(a.asname or a.name.split(".")[0] for a in stmt.names)
+            continue
+        node = tree if region == "" else nodes.get(region)
+        if node is None:
+            continue
+        top = region.split(".")[0]
+        if top:
+            module.add(top)
+        if "." in region:
+            classes[top].add(region.split(".", 1)[1])
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.Name):
+                module.add(inner.id)
+            elif "." in region and isinstance(inner, ast.Attribute) and isinstance(inner.value, ast.Name) \
+                    and inner.value.id == "self":
+                classes[top].add(inner.attr)
+    if whole:
+        for cls in _classes_in_flow(tree.body):
+            classes[cls.name].update(name for name, *_ in flow_bindings(cls.body, cls))
+    out = {"": module}
+    out.update(classes)
+    return out
+
+
+def rebindings(rel: str, tree) -> list:
+    """[(scope, name, kind, at, stmt)] for every binding of a guarded name other
+    than its one original, direct, simple binding (the first), in the module's
+    flow and in each class body's flow; and every `global` naming one."""
+    if rel.startswith("tests/") or not protected_in(rel):
+        return []
+    guarded = guarded_names(rel, tree)
+    out = []
+
+    def check(scope, bindings, names):
+        original = set()
+        for name, kind, nested, at, stmt in bindings:
+            if name == "*":
+                out.append((scope, name, kind, at, stmt))
+            elif name in names:
+                if not nested and kind in SIMPLE_BINDINGS and name not in original:
+                    original.add(name)
+                else:
+                    out.append((scope, name, kind, at, stmt))
+
+    check("", flow_bindings(tree.body, tree), guarded[""])
+    for cls in _classes_in_flow(tree.body):
+        if cls.name in guarded:
+            check(cls.name, flow_bindings(cls.body, cls), guarded[cls.name])
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            for name in node.names:
+                if name in guarded[""]:
+                    out.append(("", name, "global", "-", node))
+    return out
+
+
+def binding_table(rel: str, source: str) -> str:
+    """The guarded names' bindings, canonically: the "<bindings>" region."""
+    tree = ast.parse(source)
+    guarded = guarded_names(rel, tree)
+    rows = []
+    for name, kind, nested, at, stmt in flow_bindings(tree.body, tree):
+        if name in guarded[""] or name == "*":
+            rows.append(("", name, kind, nested, at, canon(_header(stmt))))
+    for cls in _classes_in_flow(tree.body):
+        for name, kind, nested, at, stmt in flow_bindings(cls.body, cls):
+            if name in guarded.get(cls.name, ()):
+                rows.append((cls.name, name, kind, nested, at, canon(_header(stmt))))
+    rows += [("", "global", ",".join(n.names), True, "-", "") for n in ast.walk(tree)
+             if isinstance(n, (ast.Global, ast.Nonlocal))]
+    return repr(sorted(rows))
+
+
+# ---- the surface's dependencies: every one protected or reviewed as not critical
+
+def _resolve(rel: str, level: int, module, root: Path):
+    """The package file a (relative) import names, or None outside the package."""
+    if level:
+        base = Path(rel).parent
+        for _ in range(level - 1):
+            base = base.parent
+    else:
+        base = Path()
+    target = base / module.replace(".", "/") if module else base
+    for candidate in (target.with_suffix(".py"), target / "__init__.py"):
+        if (root / candidate).is_file():
+            return candidate.as_posix()
+    return None
+
+
+def _imports(rel: str, tree, root: Path) -> dict:
+    """{local name: (package file, name in it or None for a module alias)}."""
+    out = {}
+    for stmt in ast.walk(tree):
+        if isinstance(stmt, ast.ImportFrom):
+            source = _resolve(rel, stmt.level, stmt.module, root)
+            for alias in stmt.names:
+                local = alias.asname or alias.name
+                sub = _resolve(rel, stmt.level, f"{stmt.module}.{alias.name}" if stmt.module else alias.name, root)
+                if sub and (source is None or source.endswith("__init__.py")):
+                    out[local] = (sub, None)
+                elif source:
+                    out[local] = (source, alias.name)
+        elif isinstance(stmt, ast.Import):
+            for alias in stmt.names:
+                target = _resolve(rel, 0, alias.name, root)
+                if target and alias.asname:
+                    out[alias.asname] = (target, None)
+    return out
+
+
+def dependencies(root: Path = REPO, overrides: dict = None) -> dict:
+    """{(file, region): {protected regions using it}}: each package-level name a
+    protected region uses: a module-level definition of its own file, a
+    method it calls as self.X, a name imported from another package module or
+    an attribute of an imported package module. A whole-module region counts
+    its imports from the package."""
+    overrides = overrides or {}
+    out = collections.defaultdict(set)
+    trees = {}
+
+    def tree_of(rel):
+        if rel not in trees:
+            trees[rel] = ast.parse(overrides[rel] if rel in overrides else (root / rel).read_text(encoding="utf-8"))
+        return trees[rel]
+
+    for rel, region in SURFACE:
+        if rel.startswith("tests/") or region.startswith("<"):
+            continue
+        tree = tree_of(rel)
+        nodes, imported = _region_nodes(tree), _imports(rel, tree, root)
+        node = tree if region == "" else nodes[region]
+        cls = region.split(".")[0] if "." in region else None
+        for inner in ast.walk(node):
+            dep = None
+            if isinstance(inner, ast.Name) and isinstance(inner.ctx, ast.Load):
+                if inner.id in imported and imported[inner.id][1] is not None:
+                    dep = imported[inner.id]
+                elif region != "" and inner.id in nodes and inner.id != (cls or region):
+                    dep = (rel, inner.id)
+            elif isinstance(inner, ast.Attribute) and isinstance(inner.value, ast.Name):
+                base = inner.value.id
+                if base == "self" and cls and f"{cls}.{inner.attr}" in nodes:
+                    dep = (rel, f"{cls}.{inner.attr}")
+                elif base in imported and imported[base][1] is None:
+                    target = imported[base][0]
+                    if inner.attr in _region_nodes(tree_of(target)):
+                        dep = (target, inner.attr)
+            if dep is not None and dep != (rel, region):
+                out[dep].add((rel, region))
+    return dict(out)
+
+
+def covered(dep: tuple) -> bool:
+    rel, region = dep
+    return dep in SURFACE or (rel, "") in SURFACE or ("." in region and (rel, region.split(".")[0]) in SURFACE)

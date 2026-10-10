@@ -2163,16 +2163,45 @@ new finding, while unrelated code moving elsewhere changes nothing. Positions
 inside a function are block indices (order is reviewed there); at the top of a
 module or class they are the name the statement binds.
 
-The source-change guard fingerprints the critical surface: the gate, the
-registry key test, the guarded write and its guards (`_transact`,
-`_quiet_presentation_guard` and the helpers they use, `_control`, `_upload`,
-`Publisher.__init__`), the publisher's imports, `REGISTRY_KEY` and
-`registry.sha256`, all of `firmware.py`, the drill writer, the scanner itself
-and its regression tests. Any change there fails until the new fingerprint is
-recorded, even one that uses a trick the scan does not know. Comments,
-formatting and code outside the surface do not affect it. Both checks use a
-canonical form of the syntax tree, the same on Python 3.9 to 3.14, and read
-local files only.
+In a module on the surface, a name its protected code depends on (its
+definitions, the names they mention, builtins included, and in a class the
+protected methods and the `self.` attributes they use) is bound once,
+directly. Any other binding of it in the module's execution flow is a
+finding, however deeply nested (`if`, `try`, `with`, loops, `match`) and in
+whatever form: `def`/`class`, assignment, destructuring, augmented or
+annotated assignment, `for`/`with`/`except`/`match` targets, an import or
+alias, `del`, `:=` (in comprehensions too), a star import, or `global`. That
+binding table is fingerprinted too, so `if True: def is_registry_key(...)`
+appended to the publisher fails both checks.
+
+The source-change guard fingerprints the critical surface:
+- the gate, the registry key test, the guarded write and its guards
+  (`_transact`, `_quiet_presentation_guard` and its helpers, `_all`,
+  `_upload`, `_control`, `Publisher.__init__`), the publisher's imports and
+  binding table;
+- what a write makes visible and what every write re-checks: `shown_revisions`,
+  `_read_registry`, `_eligibility_guard`, `_visible_revisions_guard`,
+  `_week_guard`, `_separation_problem`, `_dataset_text`, `rollover_week`, and
+  the operations that choose a write's guards (promote, launch, correct,
+  rollback, restore, resume);
+- production readiness (`_ready`, the policy, the checkers) and the
+  exceptions the protected code raises;
+- whole modules: `registry.py`, `eligibility.py`, `dataset.py`, `edition.py`,
+  `synthetic.py`, `quiet.py`, `week.py`, `policy.py`, `firmware.py`; and the
+  quiet-history checks, `provenance_bytes`, `MAX_ENTRIES`, `normalize`;
+- the drill writer, the scanner itself and its regression tests.
+
+Every package name a protected region uses (a definition in its module, a
+`self.` method, a name imported from another package module) must be on the
+surface or reviewed as not critical, with the reason, in
+`write_boundary_review.NOT_CRITICAL` (bookkeeping after the write, the
+staging pipeline whose bytes the guards re-check, types and error classes).
+A new dependency fails until it is placed.
+
+Any change to the surface fails until the new fingerprint is recorded, even
+one that uses a trick the scan does not know. Comments, formatting and code
+outside the surface do not affect it. Both checks use a canonical form of the
+syntax tree, the same on Python 3.9 to 3.14, and read local files only.
 
 A new writer, reflection or surface change fails until it is reviewed. At run
 time, the first demonstrated bypass (private `getattr` of the raw store, then a
