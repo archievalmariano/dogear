@@ -461,68 +461,192 @@ class OperationClassificationTests(unittest.TestCase):
 # ---- the registry-write boundary ------------------------------------------------
 
 REPO = Path(firmware.__file__).resolve().parents[2]
-# Every call in the package and tools that can write storage, reviewed: (file,
-# enclosing function, call). A new writer, however it spells the registry key,
-# fails here until it is reviewed and added.
-WRITE_CALLS = {
-    ("dogear/publish/drills.py", "DrillStore.put", "self.store.put"),  # test mode: wraps the store
-    ("dogear/publish/publisher.py", "Publisher._transact", "self.store.allow_once"),  # after the guards
-    ("dogear/publish/publisher.py", "Publisher._transact", "self.store.put"),  # the registry write
-    ("dogear/publish/publisher.py", "Publisher._upload", "self.store.put"),  # artifacts, through the gate
-    ("dogear/publish/publisher.py", "RegistryGate.put", "self.__store.put"),  # the gate itself
-    ("dogear/publish/r2.py", "R2Store.get", "self._request"),
-    ("dogear/publish/r2.py", "R2Store.put", "self._request"),
-    ("tools/route_vectors.py", "build", "store.put"),  # an in-memory store for test vectors
+WRITE_METHODS = frozenset({"put", "allow_once", "_request"})
+# Names that reach the gate's raw store or its authorisation.
+PRIVATE_NAMES = frozenset({"_store", "_allowed", "_RegistryGate__store", "_RegistryGate__allowed", "__store",
+                           "__allowed"})
+# Attributes that reflect past an object's interface.
+REFLECTION_ATTRS = frozenset({"__getattribute__", "__getattr__", "__setattr__", "__dict__", "__class__",
+                              "__slots__", "__closure__", "__func__", "__self__", "cell_contents", "__globals__",
+                              "__code__", "__reduce__", "__reduce_ex__", "__getstate__", "__wrapped__"})
+DYNAMIC_CALLS = frozenset({"getattr", "setattr", "delattr", "hasattr", "vars", "dir", "eval", "exec", "compile",
+                           "__import__", "globals", "locals"})
+REFLECTIVE_MODULES = frozenset({"gc", "inspect", "ctypes", "operator", "importlib", "functools", "copyreg",
+                                "pickle", "marshal"})
+# Every finding in the package and tools, reviewed: (file, enclosing scope, kind, detail).
+# A new one, by any spelling, fails here until it is reviewed and added.
+REVIEWED = {
+    # direct storage writes
+    ("dogear/publish/drills.py", "DrillStore.put", "write-call", "self.store.put"),  # test mode: wraps the store
+    ("dogear/publish/publisher.py", "Publisher._transact", "write-call", "self.store.allow_once"),  # after the guards
+    ("dogear/publish/publisher.py", "Publisher._transact", "write-call", "self.store.put"),  # the registry write
+    ("dogear/publish/publisher.py", "Publisher._upload", "write-call", "self.store.put"),  # artifacts, via the gate
+    ("dogear/publish/r2.py", "R2Store.get", "write-call", "self._request"),
+    ("dogear/publish/r2.py", "R2Store.put", "write-call", "self._request"),
+    ("tools/route_vectors.py", "build", "write-call", "store.put"),  # an in-memory store for test vectors
+    # the gate itself: the only code that touches the raw store
+    ("dogear/publish/publisher.py", "RegistryGate.__init__", "reflection", "object.__setattr__"),
+    ("dogear/publish/publisher.py", "RegistryGate.__init__", "private-name", "_store"),
+    ("dogear/publish/publisher.py", "RegistryGate.__init__", "private-name", "_allowed"),
+    ("dogear/publish/publisher.py", "RegistryGate.__getattribute__", "reflection", "object.__getattribute__"),
+    ("dogear/publish/publisher.py", "RegistryGate.get", "reflection", "object.__getattribute__"),
+    ("dogear/publish/publisher.py", "RegistryGate.get", "private-name", "_store"),
+    ("dogear/publish/publisher.py", "RegistryGate.allow_once", "reflection", "object.__setattr__"),
+    ("dogear/publish/publisher.py", "RegistryGate.allow_once", "private-name", "_allowed"),
+    ("dogear/publish/publisher.py", "RegistryGate.put", "reflection", "object.__getattribute__"),
+    ("dogear/publish/publisher.py", "RegistryGate.put", "reflection", "object.__setattr__"),
+    ("dogear/publish/publisher.py", "RegistryGate.put", "private-name", "_store"),
+    ("dogear/publish/publisher.py", "RegistryGate.put", "private-name", "_allowed"),
+    ("dogear/publish/publisher.py", "RegistryGate.put", "write-call", "object.__getattribute__(self, '_store').put"),
+    ("dogear/publish/publisher.py", "RegistryGate", "private-name", "_store"),  # __slots__
+    ("dogear/publish/publisher.py", "RegistryGate", "private-name", "_allowed"),
+    ("dogear/publish/publisher.py", "RegistryGate", "reflection", "__slots__"),
+    # the in-memory test store names the operation for its fault hook
+    ("dogear/publish/store.py", "MemoryStore.put", "write-name", "put"),
+    # the gate's own API names
+    ("dogear/publish/publisher.py", "", "write-name", "put"),
+    ("dogear/publish/publisher.py", "", "write-name", "allow_once"),
+    # the CLI's own store constructor (a function named _store), not the gate's slot
+    ("dogear/publish/cli.py", "run", "private-name", "_store"),
+    # constant, non-write attribute lookups
+    ("dogear/publish/cli.py", "_Report._line", "dynamic", "getattr(self.args, 'week', None)"),
+    ("tools/chain_check.py", "check", "dynamic", "hasattr(tls, 'get_verified_chain')"),
+    ("dogear/publish/cli.py", "_Report.success", "dynamic", "getattr(out, 'txn', None)"),
+    ("dogear/publish/cli.py", "run", "dynamic", "getattr(args, 'week', None)"),
 }
-WRITE_METHODS = {"put", "allow_once", "_request"}
 
 
-def storage_writes() -> tuple:
-    """(write calls, private-store accesses, dynamic attribute accesses) in every
-    module of the package and tools, from the syntax tree, not source spelling."""
-    writes, private, dynamic = set(), set(), set()
-    for path in sorted(list(REPO.glob("dogear/**/*.py")) + list(REPO.glob("tools/*.py"))):
-        rel = path.relative_to(REPO).as_posix()
+def scan_source(rel: str, source: str) -> set:
+    """Every construct in one module that could write storage or reach the gate's
+    raw store, from its syntax tree (not its spelling):
+      write-call / write-ref  a write method, called directly or only referenced
+                              (`writer = store.put` is a reference; so is partial(store.put))
+      write-name, private-name  those names as strings (methodcaller("put"), getattr(g, "_store"))
+      dynamic                 getattr/setattr/vars/eval/...: reviewed only with a constant, harmless name
+      reflection              __getattribute__, __dict__, __closure__, object.__setattr__, ...
+      import                  gc, inspect, ctypes, operator, functools, importlib, pickle, ..."""
+    found = set()
 
-        def walk(node, scope):
-            for child in ast.iter_child_nodes(node):
-                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                    walk(child, scope + [child.name])
-                    continue
-                where = ".".join(scope)
-                if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute) and \
-                        child.func.attr in WRITE_METHODS:
-                    writes.add((rel, where, ast.unparse(child.func)))
-                if isinstance(child, ast.Attribute) and ("__store" in child.attr or "_RegistryGate" in child.attr):
-                    private.add((rel, where))
-                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and \
-                        child.func.id in ("getattr", "setattr", "vars") and \
-                        not (len(child.args) >= 2 and isinstance(child.args[1], ast.Constant) and
-                             child.args[1].value not in WRITE_METHODS):
-                    dynamic.add((rel, where, ast.unparse(child)))
-                walk(child, scope)
-        walk(ast.parse(path.read_text(encoding="utf-8")), [])
-    return writes, private, dynamic
+    def walk(node, scope, parent):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                walk(child, scope + [child.name], child)
+                continue
+            where = ".".join(scope)
+            if isinstance(child, ast.Attribute):
+                if child.attr in WRITE_METHODS:
+                    called = isinstance(node, ast.Call) and node.func is child
+                    found.add((rel, where, "write-call" if called else "write-ref", ast.unparse(child)))
+                if child.attr in REFLECTION_ATTRS:
+                    found.add((rel, where, "reflection", ast.unparse(child)))
+                if child.attr in PRIVATE_NAMES or "_RegistryGate" in child.attr:
+                    found.add((rel, where, "private-attr", ast.unparse(child)))
+            if isinstance(child, ast.Name) and (child.id in REFLECTION_ATTRS or child.id in PRIVATE_NAMES):
+                found.add((rel, where, "reflection" if child.id in REFLECTION_ATTRS else "private-name", child.id))
+            if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                if child.value in WRITE_METHODS:
+                    found.add((rel, where, "write-name", child.value))
+                if child.value in PRIVATE_NAMES or "_RegistryGate" in child.value:
+                    found.add((rel, where, "private-name", child.value))
+                if child.value in REFLECTION_ATTRS:
+                    found.add((rel, where, "reflection", child.value))
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id in DYNAMIC_CALLS:
+                found.add((rel, where, "dynamic", ast.unparse(child)))
+            if isinstance(child, (ast.Import, ast.ImportFrom)):
+                names = [a.name for a in child.names] if isinstance(child, ast.Import) else [child.module or ""]
+                for name in names:
+                    if name.split(".")[0] in REFLECTIVE_MODULES:
+                        found.add((rel, where, "import", name))
+            walk(child, scope, child)
+    walk(ast.parse(source), [], None)
+    return found
+
+
+def scan_repo(extra: dict = None) -> set:
+    """scan_source over every module of the package and tools (plus `extra`:
+    {path: source}, for proving what a new module would be flagged for)."""
+    sources = {p.relative_to(REPO).as_posix(): p.read_text(encoding="utf-8")
+               for p in sorted(list(REPO.glob("dogear/**/*.py")) + list(REPO.glob("tools/*.py")))}
+    sources.update(extra or {})
+    return set().union(*(scan_source(rel, src) for rel, src in sources.items()))
+
+
+# Codex's demonstrated bypass: reflect the raw store out of the gate, save its
+# put, and write the registry with the saved method.
+BYPASS = """
+from dogear.publish.registry import REGISTRY_KEY
+
+
+def sneak(pub, data):
+    raw = getattr(pub.store, "_RegistryGate__store")
+    writer = raw.put
+    writer(REGISTRY_KEY, data, content_type="application/json")
+"""
+BYPASS_VARIANTS = {
+    "object.__getattribute__": 'def f(g, d):\n    w = object.__getattribute__(g, "_store").put\n    w("publication.json", d)\n',
+    "getattr write method": 'def f(raw, d):\n    w = getattr(raw, "put")\n    w("publication.json", d)\n',
+    "computed getattr": 'def f(raw, d):\n    w = getattr(raw, "p" + "ut")\n    w("publication.json", d)\n',
+    "partial": 'import functools\n\ndef f(raw, d):\n    functools.partial(raw.put, "publication.json")(d)\n',
+    "methodcaller": 'from operator import methodcaller\n\ndef f(raw, d):\n    methodcaller("put", "publication.json", d)(raw)\n',
+    "saved at init": 'class P:\n    def __init__(self, store):\n        self.w = store.put\n',
+    "gc": 'import gc\n\ndef f(g):\n    return gc.get_referents(g)\n',
+    "closure": 'def f(g):\n    return g.put.__func__.__closure__\n',
+    "slot via __class__": 'def f(g):\n    return g.__class__._store.__get__(g)\n',
+}
 
 
 class RegistryWriteBoundaryTests(GuardBase):
     """The registry is written only by _transact, through the gate, right after
     the quiet-presentation guard passed for exactly those bytes: checked on the
-    syntax tree (every write call site) and at run time (any key spelling)."""
+    syntax tree (every write reference and every reflection) and at run time."""
 
-    def test_every_storage_write_call_site_is_reviewed(self):
-        writes, private, dynamic = storage_writes()
-        self.assertEqual(writes, WRITE_CALLS, "a new storage write: review it, then add it to WRITE_CALLS")
-        # Only the gate itself touches the raw store it holds.
-        self.assertTrue(private and all(path == "dogear/publish/publisher.py" and scope.startswith("RegistryGate.")
-                                        for path, scope in private), private)
-        self.assertEqual(dynamic, set(), "dynamic attribute access could reach a write method")
+    def test_every_storage_write_and_reflection_is_reviewed(self):
+        self.assertEqual(scan_repo(), REVIEWED, "a new storage write or reflection: review it, then add it")
+
+    def test_codexs_bypass_is_refused_at_run_time_and_flagged_by_the_scanner(self):
+        pub = self.later(W2, 11)
+        before = self.f.store.objects[REGISTRY_KEY].data
+        # Run time: the private lookup is refused, so the bypass cannot even start.
+        namespace = {}
+        exec(compile(BYPASS, "bypass", "exec"), namespace)  # noqa: S102 -- the probe, in the test only
+        with self.assertRaises(AttributeError):
+            namespace["sneak"](pub, regmod.dumps(dict(self.f.registry(), current=W1.isoformat())))
+        for name in ("_RegistryGate__store", "_store", "_allowed", "__dict__", "__class__", "__slots__",
+                     "__getattribute__", "__reduce_ex__"):
+            with self.subTest(name=name), self.assertRaises(AttributeError):
+                getattr(pub.store, name)
+        with self.assertRaises(AttributeError):
+            pub.store.put = lambda *a, **k: None  # noqa: B010
+        # Nor can the authorisation or the raw store be set from outside (self-authorising).
+        for name, value in (("_allowed", regmod.sha256(before)), ("_store", self.f.store)):
+            with self.subTest(set=name), self.assertRaises(AttributeError):
+                setattr(pub.store, name, value)
+        with self.assertRaises(AttributeError):
+            delattr(pub.store, "_allowed")
+        with self.assertRaises(UnguardedRegistryWrite):  # still unauthorised
+            pub.store.put(REGISTRY_KEY, before, content_type="application/json")
+        self.assertEqual(self.f.store.objects[REGISTRY_KEY].data, before)
+        # Structure: the same code in any module is flagged, on each of its steps.
+        found = scan_source("dogear/publish/sneaky.py", BYPASS)
+        self.assertIn(("dogear/publish/sneaky.py", "sneak", "dynamic",
+                       "getattr(pub.store, '_RegistryGate__store')"), found)
+        self.assertIn(("dogear/publish/sneaky.py", "sneak", "private-name", "_RegistryGate__store"), found)
+        self.assertIn(("dogear/publish/sneaky.py", "sneak", "write-ref", "raw.put"), found)  # saved, not called
+        self.assertNotEqual(scan_repo({"dogear/publish/sneaky.py": BYPASS}), REVIEWED)
+
+    def test_every_variant_of_the_bypass_is_flagged(self):
+        for name, source in BYPASS_VARIANTS.items():
+            with self.subTest(variant=name):
+                found = scan_source("dogear/publish/sneaky.py", source)
+                self.assertTrue(found, f"{name} was not flagged")
+                self.assertNotEqual(scan_repo({"dogear/publish/sneaky.py": source}), REVIEWED)
 
     def test_the_publisher_holds_the_store_only_through_the_gate(self):
         pub = self.later(W2, 11)
         self.assertIsInstance(pub.store, RegistryGate)
         for name, value in vars(pub).items():
             self.assertIsNot(value, self.f.store, f"Publisher.{name} is the raw store")
+            self.assertIsNot(getattr(value, "__self__", None), self.f.store, f"Publisher.{name} is a raw store method")
         with self.assertRaises(AttributeError):
             pub.store._request  # noqa: B018 -- nothing else of the store is reachable
         with self.assertRaises(TypeError):

@@ -62,34 +62,54 @@ def is_registry_key(key: object) -> bool:
     return posixpath.normpath(str(key).strip().lstrip("/")).lower() == REGISTRY_KEY.lower()
 
 
+_GATE_API = frozenset({"get", "put", "allow_once"})
+
+
 class RegistryGate:
     """The publisher's only handle on storage (the registry-write boundary).
 
     Reads pass through. A write whose key is the registry's, however it is
     spelled or computed, is refused unless `_transact` has just authorised
     exactly those bytes for exactly one write, after its guards (the
-    quiet-presentation guard first) passed. Nothing else of the store is
-    reachable through it."""
+    quiet-presentation guard first) passed.
 
-    __slots__ = ("__store", "__allowed")
+    Only get, put and allow_once are reachable: every other attribute lookup is
+    refused (the raw store's slot by any name, __dict__, __class__, __slots__),
+    and attributes cannot be set or deleted. Reflection that steps around this
+    (object.__getattribute__, gc, closures) is refused by the structural tests,
+    which allow no such construct outside this class."""
+
+    __slots__ = ("_store", "_allowed")
 
     def __init__(self, store) -> None:
-        self.__store = store
-        self.__allowed: Optional[str] = None
+        object.__setattr__(self, "_store", store)
+        object.__setattr__(self, "_allowed", None)
+
+    def __getattribute__(self, name: str):
+        if name not in _GATE_API:
+            raise AttributeError(f"RegistryGate exposes only get, put and allow_once; {name!r} is refused")
+        return object.__getattribute__(self, name)
+
+    def __setattr__(self, name: str, value) -> None:
+        raise AttributeError("RegistryGate cannot be changed")
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError("RegistryGate cannot be changed")
 
     def get(self, key: str):
-        return self.__store.get(key)
+        return object.__getattribute__(self, "_store").get(key)
 
     def allow_once(self, registry_sha: str) -> None:
-        self.__allowed = registry_sha
+        object.__setattr__(self, "_allowed", registry_sha)
 
     def put(self, key: str, data: bytes, **kwargs):
         if is_registry_key(key):
-            allowed, self.__allowed = self.__allowed, None  # one write per authorisation
+            allowed = object.__getattribute__(self, "_allowed")
+            object.__setattr__(self, "_allowed", None)  # one write per authorisation
             if key != REGISTRY_KEY or allowed is None or allowed != regmod.sha256(data):
                 raise UnguardedRegistryWrite(f"refused a registry write ({key!r}) that no guarded transaction "
                                              "authorised for these bytes")
-        return self.__store.put(key, data, **kwargs)
+        return object.__getattribute__(self, "_store").put(key, data, **kwargs)
 
 
 class Aborted(Exception):

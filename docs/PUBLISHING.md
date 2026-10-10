@@ -2125,11 +2125,23 @@ replaced last. `--check` runs exactly the production decision, locally.
 **The gate on every write.** The publisher holds storage only through a
 `RegistryGate`. It refuses a write to the registry key, in any spelling
 (leading slash, `./`, case), unless `_transact` has just authorised exactly
-those bytes, once, after the guards passed. So `_transact` is the only path
-that can write `publication.json`. The tests enumerate every storage-write
-call site in the package and tools from the syntax tree, so a new writer
-fails until reviewed, whatever it calls the key. They also refuse dynamic
-attribute access, and check at run time that an alias writer is refused.
+those bytes, once, after the guards passed. Only its `get`, `put` and
+`allow_once` are reachable: any other attribute lookup (its raw store by any
+name, `__dict__`, `__class__`) is refused, and nothing on it can be set. So
+`_transact` is the only path that can write `publication.json`.
+
+The tests scan every module of the package and tools from the syntax tree,
+and every finding must be on a reviewed list:
+- every reference to a write method, called or not (`writer = store.put`,
+  `partial(store.put)`);
+- write-method and private names as strings;
+- dynamic attribute access (`getattr`, `vars`, `eval`, …);
+- reflection attributes (`__getattribute__`, `__dict__`, `__closure__`, …);
+- reflective imports (`gc`, `inspect`, `operator`, `functools`, …).
+
+A new writer or reflection fails until it is reviewed. At run time, the exact
+bypass (private `getattr` of the raw store, then a saved `put`), alias
+spellings and alias writers are all refused, with the registry unchanged.
 Before every write attempt (retries included) it runs the
 quiet-presentation guard in production: if the write shows a quiet revision
 (the new current week's active revision, and every week whose active revision
