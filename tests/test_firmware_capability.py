@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime as dt
+import io
 import json
 import shutil
 import socket
@@ -32,7 +34,11 @@ from dogear.publish.policy import PublicationPolicy
 from dogear.publish.publisher import (Aborted, NeedsHuman, NotReady, Publisher, RegistryGate,
                                       UnguardedRegistryWrite, shown_revisions)
 from dogear.publish.registry import REGISTRY_KEY, Refused
+from dogear.publish import quiet_history
+from dogear.publish.edition import quiet_exclusion_problems, revision_problems
+from dogear.publish.pubdata import CorruptState, PubData
 from dogear.publish.store import MemoryStore
+from dogear.quiet import QuietSource
 
 try:
     from tests.firmware_fixture import FIXTURES, SCHEMA, SyncedTree
@@ -40,14 +46,14 @@ try:
                                       regions, scan_repo, scan_source, surface, unreviewed)
     from tests.write_boundary_review import NOT_CRITICAL, PROTECTED, REVIEWED
     from tests.test_publish import W0, W1, W2, W3, Fixture, at
-    from tests.test_quiet_week import QUIET, regular_week, stored_issue
+    from tests.test_quiet_week import QUIET, line_for, promote, published, regular_week, stored_issue
 except ImportError:
     from firmware_fixture import FIXTURES, SCHEMA, SyncedTree
     from write_boundary import (REPO, SCANNED, STATEMENTS, changed_regions, covered, dependencies, discover,
                                 regions, scan_repo, scan_source, surface, unreviewed)
     from write_boundary_review import NOT_CRITICAL, PROTECTED, REVIEWED
     from test_publish import W0, W1, W2, W3, Fixture, at
-    from test_quiet_week import QUIET, regular_week, stored_issue
+    from test_quiet_week import QUIET, line_for, promote, published, regular_week, stored_issue
 
 HOLD_PREVIOUS = PublicationPolicy(slot5_bar=42, sparse_week="publish", empty_week="hold-previous")
 
@@ -502,6 +508,11 @@ if True:
     def is_registry_key(key):
         return False
 """
+# Codex's fourth probe, appended to publisher.py: a walrus in a lambda default runs
+# in the module scope and rebinds a protected name.
+LAMBDA_REBINDING = """
+_probe = (lambda x=(is_registry_key := lambda key: False): None)
+"""
 # A prohibited writer in a nested tools module.
 NESTED_WRITER = """from dogear.publish.registry import REGISTRY_KEY
 
@@ -927,6 +938,30 @@ class BindingAndSurfaceTests(unittest.TestCase):
                 gate.put(REGISTRY_KEY, b"forged", content_type="application/json")
                 self.assertEqual(raw.objects[REGISTRY_KEY].data, b"forged")
 
+    def test_codexs_lambda_default_rebinding_is_found_and_would_bypass_the_gate(self):
+        probe = self.source + LAMBDA_REBINDING
+        new = scan_repo({self.PUBLISHER: probe}) - REVIEWED
+        self.assertIn(("", "rebinding", "is_registry_key (walrus)"), {(f.scope, f.kind, f.detail) for f in new})
+        self.assertTrue(unreviewed(scan_repo({self.PUBLISHER: probe}), REVIEWED))  # the review fails
+        self.assertIn(repr((self.PUBLISHER, "<bindings>")), changed_regions(surface({self.PUBLISHER: probe}), PROTECTED))
+        # Without the checks it would work: the default ran at import and replaced the key test.
+        gate_module = self.load(probe)
+        raw = MemoryStore()
+        raw.put(REGISTRY_KEY, b"{}", content_type="application/json")
+        gate_module.RegistryGate(raw).put(REGISTRY_KEY, b"forged", content_type="application/json")
+        self.assertEqual(raw.objects[REGISTRY_KEY].data, b"forged")
+        # Keyword-only and nested lambda defaults too; a walrus in a lambda's body is its own scope.
+        for code in ("_probe = (lambda *, x=(is_registry_key := lambda key: False): None)\n",
+                     "_probe = (lambda a=(lambda b=(is_registry_key := len): b): a)\n",
+                     "def _f(x=(lambda y=(is_registry_key := len): y)):\n    return x\n"):
+            with self.subTest(code=code):
+                self.assert_rebinding(self.source + "\n" + code, "is_registry_key")
+        body_only = self.source + "\n_probe = (lambda: (is_registry_key := len))\n"
+        self.assertEqual(unreviewed(scan_repo({self.PUBLISHER: body_only}), REVIEWED), "")
+        body_module = self.load(body_only)
+        with self.assertRaises(body_module.UnguardedRegistryWrite):  # and at run time it rebinds nothing
+            body_module.RegistryGate(raw).put(REGISTRY_KEY, b"x", content_type="application/json")
+
     def test_every_binding_form_is_found_however_nested(self):
         forms = {
             "def in try": ("try:\n    def is_registry_key(key):\n        return False\nexcept Exception:\n    pass\n",
@@ -1025,6 +1060,204 @@ class BindingAndSurfaceTests(unittest.TestCase):
         uncovered = [d for d in dependencies(overrides={self.PUBLISHER: probe})
                      if not covered(d) and d not in NOT_CRITICAL]
         self.assertEqual(uncovered, [(self.PUBLISHER, "_new_helper")])
+
+
+class CliHandoffTests(unittest.TestCase):
+    """The production storage is reached only through the CLI's checked handoff:
+    --target -> (store, host, mode, policy, dataset, affinity, separation) ->
+    _pairing_problem -> Publisher, all on the surface; any other reference to
+    Publisher or R2Store is a scan finding."""
+
+    CLI = "dogear/publish/cli.py"
+
+    def setUp(self):
+        self.source = (REPO / self.CLI).read_text(encoding="utf-8")
+        self.prod, self.staging = publish_cli.TARGETS["production"], publish_cli.TARGETS["staging"]
+
+    def pairing(self, **change):
+        p = self.prod
+        args = dict(target="production", store_spec=p["store"], base_url=p["base_url"], mode="production",
+                    separation="production", policy=p["policy"], dataset=p["dataset"], affinity=p["affinity"])
+        args.update(change)
+        return publish_cli._pairing_problem(**args)
+
+    def test_codexs_mode_mutation_needs_review(self):
+        # Codex's probe: production target and storage, but the Publisher gets test mode
+        # (which skips the production quiet-capability guard and the production separation).
+        old = "                     mode=args.mode, assets=assets, served=served, separation=separation), None"
+        self.assertEqual(self.source.count(old), 1)
+        probe = self.source.replace(old, old.replace("mode=args.mode", 'mode="test"'))
+        self.assertIn(repr((self.CLI, "_configure")), changed_regions(surface({self.CLI: probe}), PROTECTED))
+        # The scan sees it too: the Publisher construction it edits is a pinned occurrence.
+        new = scan_repo({self.CLI: probe}) - REVIEWED
+        self.assertEqual({(f.scope, f.kind) for f in new}, {("_configure", "construct")})
+
+    def test_every_part_of_the_handoff_needs_review(self):
+        probes = {
+            "TARGETS": ('"base_url": PRODUCTION_HOST, "mode": "production",', '"base_url": PRODUCTION_HOST, "mode": "test",'),
+            "_apply_target": ('t["store"], t["base_url"], t["mode"], t["policy"]', 't["store"], t["base_url"], "test", t["policy"]'),
+            "_pairing_problem": ('    if target == "production" or production_storage:', '    if False:'),
+            "_configure": ('separation = {"production": "production", "staging": "staging"}.get(args.target)',
+                           'separation = None'),
+            "_store": ("allow_endpoint_override=not fixed", "allow_endpoint_override=True"),
+        }
+        for region, (old, new) in probes.items():
+            with self.subTest(region=region):
+                self.assertEqual(self.source.count(old), 1, old)
+                differs = changed_regions(surface({self.CLI: self.source.replace(old, new)}), PROTECTED)
+                self.assertIn(repr((self.CLI, region)), differs)
+
+    def test_production_storage_only_with_the_whole_production_profile(self):
+        self.assertIsNone(self.pairing())
+        mismatches = {
+            "test mode": dict(mode="test"),
+            "no separation": dict(separation=None),
+            "staging separation": dict(separation="staging"),
+            "the staging policy": dict(policy=self.staging["policy"]),
+            "the staging dataset": dict(dataset=self.staging["dataset"]),
+            "the staging affinity": dict(affinity=self.staging["affinity"]),
+            "no --target (explicit bucket)": dict(target=None, mode="test", separation=None),
+            "the staging target": dict(target="staging"),
+            "another bucket at the production host": dict(store_spec="r2:other"),
+            "the production bucket at another host": dict(base_url="https://example.org"),
+        }
+        for name, change in mismatches.items():
+            with self.subTest(name):
+                self.assertIsNotNone(self.pairing(**change), name)
+        s = self.staging
+        self.assertIsNone(publish_cli._pairing_problem("staging", s["store"], s["base_url"], "test", "staging",
+                                                       s["policy"], s["dataset"], s["affinity"]))
+        self.assertIsNotNone(publish_cli._pairing_problem("staging", s["store"], s["base_url"], "test", None,
+                                                          s["policy"], s["dataset"], s["affinity"]))
+        # A local directory may carry the production host (its rehearsal URLs); an explicit
+        # staging bucket in test mode stays allowed (the drills, against a local server).
+        self.assertIsNone(publish_cli._pairing_problem(None, "/tmp/store", self.prod["base_url"], "test", None,
+                                                       Path("p"), Path("d"), Path("a")))
+        self.assertIsNone(publish_cli._pairing_problem(None, s["store"], "http://127.0.0.1:1", "test", None,
+                                                       Path("p"), Path("d"), Path("a")))
+
+    def test_the_cli_refuses_the_production_bucket_outside_the_production_profile(self):
+        from dogear.cli import main
+        with tempfile.TemporaryDirectory() as tmp:
+            policy = Path(tmp) / "policy.json"
+            policy.write_text(json.dumps(HOLD_PREVIOUS.as_json()))
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                code = main(["publish", "--store", self.prod["store"], "--mode", "test", "--policy", str(policy),
+                             "--pubdata", tmp, "status"])
+            self.assertEqual(code, 4)
+            self.assertIn("production storage and host go only with --target production", err.getvalue())
+
+    def test_another_route_to_a_publisher_or_production_storage_is_a_finding(self):
+        routes_ = {
+            "dogear/publish/cli.py": self.source + "\n\ndef _other(*a, **k):\n    return Publisher(*a, mode='test', **k)\n",
+            "tools/sub/publish_direct.py": "from dogear.publish.r2 import R2Store\n\n\ndef store():\n"
+                                           "    return R2Store.from_env('dogear-issues')\n",
+            "tools/alias.py": "from dogear.publish import publisher\n\nP = publisher.Publisher\n",
+        }
+        for path, source in routes_.items():
+            with self.subTest(path=path):
+                new = scan_repo({path: source}) - REVIEWED
+                self.assertIn("construct", {f.kind for f in new})
+
+
+class QuietVerificationSurfaceTests(unittest.TestCase):
+    """The quiet source (from complete, validated history), the pre-promotion
+    verification of a staged week, and every quiet exclusion re-checked on the
+    revision's own bytes."""
+
+    def test_codexs_quiet_probes_need_review(self):
+        qh, staging, publisher = ("dogear/publish/quiet_history.py", "dogear/publish/staging.py",
+                                  "dogear/publish/publisher.py")
+        probes = (
+            # Codex: the exclusion set derived empty, so a featured item can enter the quiet pool.
+            (qh, '            excluded.update(line["recordIds"])', "            pass", ""),
+            # Codex: verify_staged always passes.
+            (staging, '    prov, problems = staged.provenance, []\n', "    return []\n", "verify_staged"),
+            (publisher, "        attested = quiet_history.attested_subjects(lines, reg, self.pubdata)",
+             "        attested = {}", "Publisher._quiet_source"),
+            (qh, "    if unrecorded or set(recorded) - set(revisions):", "    if False:", ""),
+            ("dogear/publish/edition.py", "        if any(i in blocked for i in identities):", "        if False:", ""),
+            ("dogear/publish/pubdata.py", "    def history(self) -> list[dict]:",
+             "    def history(self) -> list[dict]:\n        return []", ""),
+        )
+        for rel, old, new, region in probes:
+            with self.subTest(region=f"{rel} {region}"):
+                source = (REPO / rel).read_text(encoding="utf-8")
+                self.assertEqual(source.count(old), 1, old)
+                probe = source.replace(old, new)
+                self.assertIn(repr((rel, region)), changed_regions(surface({rel: probe}), PROTECTED))
+
+    def test_rebinding_the_quiet_source_or_verification_is_found(self):
+        cli = "dogear/publish/cli.py"
+        cli_source = (REPO / cli).read_text(encoding="utf-8")
+        for target, name in (("staging", "verify_staged"), ("quiet_history", "build_source"),
+                             ("quiet_history", "validated_lines"), ("Publisher", "_quiet_source")):
+            with self.subTest(name=name):
+                probe = cli_source + f"\n\ndef _sneak({target}, fake):\n    {target}.{name} = fake\n"
+                self.assertIn(("rebind", f"{target}.{name}"), {(f.kind, f.detail) for f in scan_repo({cli: probe}) - REVIEWED})
+        staging = "dogear/publish/staging.py"
+        source = (REPO / staging).read_text(encoding="utf-8")
+        nested = source + "\nif True:\n    def verify_staged(*a, **k):\n        return []\n"
+        self.assertIn(("", "rebinding", "verify_staged (def)"),
+                      {(f.scope, f.kind, f.detail) for f in scan_repo({staging: nested}) - REVIEWED})
+        publisher = "dogear/publish/publisher.py"
+        source = (REPO / publisher).read_text(encoding="utf-8")
+        nested = source.replace("\n\ndef shown_revisions(", "\n    if True:\n        def _quiet_source(self, monday):\n"
+                                "            return None\n\n\ndef shown_revisions(")
+        self.assertIn(("Publisher", "rebinding", "_quiet_source (def)"),
+                      {(f.scope, f.kind, f.detail) for f in scan_repo({publisher: nested}) - REVIEWED})
+
+    def setUp(self):
+        f = published(self, [regular_week(W0, "a"), regular_week(W1, "b")])
+        promote(f, W1)
+        promote(f, W2)  # W2 is empty: a quiet issue
+        self.f, self.issue, self.line = f, stored_issue(f, W2), line_for(f, W2)
+        self.prov = json.loads((f.remote.remote / "published" / W2.isoformat() / "rev0.provenance.json").read_bytes())
+        self.source = QuietSource.from_json(self.prov["inputs"]["quietSource"])
+
+    def with_source(self, **sets) -> dict:
+        raw = dict(self.prov["inputs"]["quietSource"], **sets)
+        return dict(self.prov, inputs=dict(self.prov["inputs"], quietSource=raw))
+
+    def test_every_quiet_exclusion_is_rechecked_on_the_revision(self):
+        self.assertEqual(revision_problems(W2, self.issue, self.prov, self.line), [])
+        subject = next(s for s in self.prov["subjects"] if s["personId"] or s["workId"])
+        identity = subject["personId"] or subject["workId"]
+        cases = {
+            "subject featured within 365 days": (self.with_source(subjectIdentities=[identity]), "within 365 days"),
+            "subject of this week's earlier quiet pick": (self.with_source(sameWeekQuietIdentities=[identity]),
+                                                          "earlier quiet pick"),
+            "no subjects": ({k: v for k, v in self.prov.items() if k != "subjects"}, "subject identities"),
+            "published as a full item": (self.with_source(excluded=[subject["recordId"]]), "as a full item"),
+        }
+        for name, (prov, message) in cases.items():
+            with self.subTest(name):
+                problems = revision_problems(W2, self.issue, prov)
+                self.assertTrue(any(message in p for p in problems), problems)
+        retained = self.with_source(sameWeekQuietIdentities=[identity], retainable=[subject["recordId"]])
+        self.assertFalse([p for p in revision_problems(W2, self.issue, retained) if "earlier quiet pick" in p])
+        # Its own anniversary within five weeks, and (with the frozen record) a non-anniversary or a minor one.
+        o = next(x for x in self.prov["quietOccurrences"] if x["recordId"] == subject["recordId"])
+        soon = W2 + dt.timedelta(days=7)
+        prov = dict(self.prov, quietOccurrences=[dict(x, month=soon.month, day=soon.day) if x is o else x
+                                                 for x in self.prov["quietOccurrences"]])
+        self.assertTrue(any("within the next five weeks" in p for p in
+                            quiet_exclusion_problems(W2, prov, self.source, None)))
+        frozen = {subject["recordId"]: {"personId": subject["personId"], "workId": subject["workId"],
+                                        "year": int(o["date"][:4]), "significance": 1}}
+        problems = quiet_exclusion_problems(W2, self.prov, self.source, frozen)
+        self.assertTrue(any("not yet an anniversary" in p for p in problems), problems)
+        self.assertTrue(any("significance below" in p for p in problems), problems)
+
+    def test_history_must_be_complete_before_it_feeds_a_quiet_pool(self):
+        pubdata, reg = PubData(self.f.remote.remote), self.f.registry()
+        self.assertTrue(quiet_history.validated_lines(reg, pubdata, self.f.store))
+        lines = pubdata.history()
+        regular = next(h for h in lines if h.get("op") in ("launch", "promote") and h.get("edition", "regular") == "regular")
+        with mock.patch.object(PubData, "history", lambda _self: [h for h in lines if h is not regular]):
+            with self.assertRaisesRegex(CorruptState, "without exactly one content line"):
+                quiet_history.validated_lines(reg, pubdata, self.f.store)
 
 
 if __name__ == "__main__":

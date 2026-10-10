@@ -164,6 +164,62 @@ def _apply_target(args) -> Optional[str]:
     return None
 
 
+def _pairing_problem(target: Optional[str], store_spec: str, base_url: str, mode: str, separation: Optional[str],
+                     policy: Path, dataset: Path, affinity: Path) -> Optional[str]:
+    """The production bucket (or R2 verified at the production host) only as the whole
+    production profile, and the staging profile only whole: never production storage
+    with another mode, policy, dataset or separation (or none). A local directory may
+    name the production host: that is only the URL its rehearsal issues carry.
+    An error, or None."""
+    prod, staging = TARGETS["production"], TARGETS["staging"]
+    production_storage = store_spec == prod["store"] or (store_spec.startswith("r2:") and base_url == prod["base_url"])
+    if target == "production" or production_storage:
+        if (target, store_spec, base_url, mode, separation, Path(policy), Path(dataset), Path(affinity)) != (
+                "production", prod["store"], prod["base_url"], "production", "production",
+                prod["policy"], prod["dataset"], prod["affinity"]):
+            return "production storage and host go only with --target production, whole: production mode, " \
+                   "policy, dataset and separation"
+    if target == "staging" and (store_spec, base_url, mode, separation) != (
+            staging["store"], staging["base_url"], staging["mode"], "staging"):
+        return "--target staging goes only with its own storage, host, test mode and staging separation"
+    return None
+
+
+def _configure(args) -> tuple:
+    """(Publisher, None), or (None, error): the one place the settings (from --target,
+    or explicit local ones) become a Publisher, checked as a pair first."""
+    problem = _apply_target(args)
+    if problem:
+        return None, problem
+    try:
+        policy = load_policy(args.policy)
+    except PolicyError as err:
+        return None, str(err)
+    for flag, used in (("--no-network-checks", args.no_network_checks), ("--now", args.now), ("--drill", args.drill)):
+        if used and args.mode != "test":
+            return None, f"{flag} is for --mode test only"
+    separation = {"production": "production", "staging": "staging"}.get(args.target)
+    problem = _pairing_problem(args.target, args.store, args.base_url, args.mode, separation, args.policy,
+                               args.dataset, args.affinity)
+    if problem:
+        return None, problem
+    checks = Checks() if args.no_network_checks else Checks(http_link_checker(), mock_fit_checker())
+    clock = (lambda: dt.datetime.fromisoformat(args.now)) if args.now else (lambda: dt.datetime.now(MANILA))
+    assets = {f.name: f.read_bytes() for f in sorted(FONTS.iterdir()) if f.is_file()} if FONTS.is_dir() else {}
+    try:
+        store, served = _store(args.store, args.base_url, fixed=bool(args.target))
+    except ValueError as err:
+        return None, str(err)
+    committer = git_committer(args.pubdata) if args.git else None
+    if args.drill == "unsaved-record":
+        committer = failing_once(committer)
+    elif args.drill:
+        store = DrillStore(store, args.drill)
+    return Publisher(store, PubData(args.pubdata, committer),
+                     StageInputs(args.dataset, args.affinity, args.base_url, _generator()), policy, checks, clock,
+                     mode=args.mode, assets=assets, served=served, separation=separation), None
+
+
 _TXN_ID = re.compile(r"\b[0-9]{8}T[0-9]{6}-[a-z]+-[0-9a-f]{12}\b")
 _SAVED = (4, 6, 7)  # refusals that published nothing: their detail is kept privately
 
@@ -313,36 +369,10 @@ def run(args) -> int:
     if args.op == "attest-subjects" and (args.public_log or args.drill):
         print("error: attest-subjects is local and explicit: no --public-log or --drill", file=sys.stderr)
         return 4
-    problem = _apply_target(args)
+    pub, problem = _configure(args)
     if problem:
         print(f"error: {problem}", file=sys.stderr)
         return 4
-    try:
-        policy = load_policy(args.policy)
-    except PolicyError as err:
-        print(f"error: {err}", file=sys.stderr)
-        return 4
-    for flag, used in (("--no-network-checks", args.no_network_checks), ("--now", args.now), ("--drill", args.drill)):
-        if used and args.mode != "test":
-            print(f"error: {flag} is for --mode test only", file=sys.stderr)
-            return 4
-    checks = Checks() if args.no_network_checks else Checks(http_link_checker(), mock_fit_checker())
-    clock = (lambda: dt.datetime.fromisoformat(args.now)) if args.now else (lambda: dt.datetime.now(MANILA))
-    assets = {f.name: f.read_bytes() for f in sorted(FONTS.iterdir()) if f.is_file()} if FONTS.is_dir() else {}
-    try:
-        store, served = _store(args.store, args.base_url, fixed=bool(args.target))
-    except ValueError as err:
-        print(f"error: {err}", file=sys.stderr)
-        return 4
-    committer = git_committer(args.pubdata) if args.git else None
-    if args.drill == "unsaved-record":
-        committer = failing_once(committer)
-    elif args.drill:
-        store = DrillStore(store, args.drill)
-    pub = Publisher(store, PubData(args.pubdata, committer),
-                    StageInputs(args.dataset, args.affinity, args.base_url, _generator()), policy, checks, clock,
-                    mode=args.mode, assets=assets, served=served,
-                    separation="staging" if args.target == "staging" else None)
     week = dt.date.fromisoformat(args.week) if getattr(args, "week", None) else None
     report = _Report(args, pub.pubdata)
     try:

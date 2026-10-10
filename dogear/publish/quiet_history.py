@@ -18,6 +18,7 @@ quiet pass holds.
 
 from __future__ import annotations
 
+import collections
 import datetime as dt
 import hashlib
 import json
@@ -100,6 +101,14 @@ def validated_lines(reg: Optional[dict], pubdata, store) -> list:
         problems = line_problems(line, reg, pubdata, store)
         if problems:
             raise CorruptState("history cannot be used for a quiet week: " + "; ".join(problems))
+    # Complete as well as valid: every revision the registry holds has exactly one
+    # content line, so no published item can drop out of the exclusions.
+    revisions = [rev["txn"] for entry in (reg or {}).get("weeks", {}).values() for rev in entry["revisions"]]
+    recorded = collections.Counter(line["txn"] for line in lines)
+    unrecorded = sorted(t for t in revisions if recorded[t] != 1)
+    if unrecorded or set(recorded) - set(revisions):
+        raise CorruptState("history cannot be used for a quiet week: registry revisions without exactly one "
+                           f"content line ({', '.join(unrecorded) or 'none'}), or lines for no revision")
     return lines
 
 

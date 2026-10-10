@@ -2170,7 +2170,8 @@ directly. Any other binding of it in the module's execution flow is a
 finding, however deeply nested (`if`, `try`, `with`, loops, `match`) and in
 whatever form: `def`/`class`, assignment, destructuring, augmented or
 annotated assignment, `for`/`with`/`except`/`match` targets, an import or
-alias, `del`, `:=` (in comprehensions too), a star import, or `global`. That
+alias, `del`, `:=` (in comprehensions and in lambda defaults too, which run in
+the enclosing scope), a star import, or `global`. That
 binding table is fingerprinted too, so `if True: def is_registry_key(...)`
 appended to the publisher fails both checks.
 
@@ -2184,18 +2185,41 @@ The source-change guard fingerprints the critical surface:
   `_week_guard`, `_separation_problem`, `_dataset_text`, `rollover_week`, and
   the operations that choose a write's guards (promote, launch, correct,
   rollback, restore, resume);
+- the quiet source and the pre-promotion verification: `_quiet_source`, all of
+  `quiet_history.py` and `pubdata.py`, `verify_staged` and the staging types
+  and checks it relies on (`Staged`, `StageInputs`, `Frozen`, `StageRefused`,
+  `WeekHeld`, `artifact_problems`, `device_limit_problems`, `provenance_bytes`);
 - production readiness (`_ready`, the policy, the checkers) and the
   exceptions the protected code raises;
+- where a write goes: all of `r2.py`, `store.py` and `drills.py`, and the
+  CLI's handoff from `--target` to the `Publisher` (`TARGETS`,
+  `PRODUCTION_HOST`, `_apply_target`, `_store`, `_generator`,
+  `_pairing_problem`, `_configure`, and its binding table). `_configure` is the
+  one place settings become a `Publisher`, and `_pairing_problem` refuses the
+  production bucket (or R2 verified at the production host) unless the whole
+  production profile comes with it: `--target production`, production mode,
+  the production policy, dataset and affinity, and `production` separation.
+  Every other reference to `Publisher` or `R2Store` is a scan finding;
 - whole modules: `registry.py`, `eligibility.py`, `dataset.py`, `edition.py`,
-  `synthetic.py`, `quiet.py`, `week.py`, `policy.py`, `firmware.py`; and the
-  quiet-history checks, `provenance_bytes`, `MAX_ENTRIES`, `normalize`;
-- the drill writer, the scanner itself and its regression tests.
+  `synthetic.py`, `quiet.py`, `week.py`, `policy.py`, `firmware.py`; and
+  `MAX_ENTRIES`, `MIN_SIGNIFICANCE`, `CTA_LABELS`, `normalize`;
+- the scanner itself and its regression tests.
+
+The generator is not on the surface, because nothing it produces is trusted:
+every quiet exclusion is re-checked on the revision's own bytes against its
+frozen quiet source (`edition.quiet_exclusion_problems`, besides the pool,
+full-item and occurrence checks), and the quiet source is derived only from
+history that is complete as well as valid: every registry revision has
+exactly one content line.
 
 Every package name a protected region uses (a definition in its module, a
 `self.` method, a name imported from another package module) must be on the
 surface or reviewed as not critical, with the reason, in
-`write_boundary_review.NOT_CRITICAL` (bookkeeping after the write, the
-staging pipeline whose bytes the guards re-check, types and error classes).
+`write_boundary_review.NOT_CRITICAL`. Each reason must show that changing it
+cannot affect whether a quiet revision is eligible, verified,
+capability-authorised, made visible or current, or written to production:
+bookkeeping after the write, builders whose bytes are re-checked, quality
+checks that can only add problems, readers of what is served, type aliases.
 A new dependency fails until it is placed.
 
 Any change to the surface fails until the new fingerprint is recorded, even

@@ -126,26 +126,58 @@ SURFACE = (
     ("dogear/quiet.py", ""),
     ("dogear/select.py", "<bindings>"),
     ("dogear/select.py", "MAX_ENTRIES"),
-    ("dogear/publish/quiet_history.py", "<bindings>"),
-    ("dogear/publish/quiet_history.py", "CONTENT_OPS"),
-    ("dogear/publish/quiet_history.py", "content_lines"),
-    ("dogear/publish/quiet_history.py", "line_problems"),
+    ("dogear/select.py", "MIN_SIGNIFICANCE"),
+    ("dogear/select.py", "CTA_LABELS"),
+    # the quiet source (pool, full-item and subject exclusions) from complete,
+    # validated history, and the pre-promotion verification of a staged week
+    ("dogear/publish/publisher.py", "Publisher._quiet_source"),
+    ("dogear/publish/quiet_history.py", ""),
+    ("dogear/publish/pubdata.py", ""),
     ("dogear/publish/staging.py", "<bindings>"),
+    ("dogear/publish/staging.py", "verify_staged"),
+    ("dogear/publish/staging.py", "Staged"),
+    ("dogear/publish/staging.py", "StageInputs"),
+    ("dogear/publish/staging.py", "Frozen"),
+    ("dogear/publish/staging.py", "StageRefused"),
+    ("dogear/publish/staging.py", "WeekHeld"),
+    ("dogear/publish/staging.py", "_raw_records"),
+    ("dogear/publish/staging.py", "artifact_problems"),
+    ("dogear/publish/staging.py", "device_limit_problems"),
+    ("dogear/publish/staging.py", "ALLOWED_CTA"),
+    ("dogear/publish/staging.py", "MAX_ENTRIES"),
     ("dogear/publish/staging.py", "provenance_bytes"),
     ("dogear/publish/staging.py", "Checks"),  # production needs its link and fit checkers
     ("dogear/publish/firmware.py", ""),
-    ("dogear/publish/drills.py", "<bindings>"),
-    ("dogear/publish/drills.py", "DrillStore.put"),
+    # where a write goes: the storage clients, the drill wrapper, and the CLI's
+    # target -> (store, host, mode, policy, dataset, separation) -> Publisher handoff
+    ("dogear/publish/r2.py", ""),
+    ("dogear/publish/store.py", ""),
+    ("dogear/publish/drills.py", ""),
+    ("dogear/publish/cli.py", "<bindings>"),
+    ("dogear/publish/cli.py", "ROOT"),
+    ("dogear/publish/cli.py", "PRODUCTION_HOST"),
+    ("dogear/publish/cli.py", "TARGETS"),
+    ("dogear/publish/cli.py", "_generator"),
+    ("dogear/publish/cli.py", "_store"),
+    ("dogear/publish/cli.py", "_apply_target"),
+    ("dogear/publish/cli.py", "_pairing_problem"),
+    ("dogear/publish/cli.py", "_configure"),
     ("tests/write_boundary.py", ""),
     ("tests/test_firmware_capability.py", "RegistryWriteBoundaryTests"),
     ("tests/test_firmware_capability.py", "SourceReviewGuardTests"),
     ("tests/test_firmware_capability.py", "BindingAndSurfaceTests"),
     ("tests/test_firmware_capability.py", "NESTED_REBINDING"),
+    ("tests/test_firmware_capability.py", "LAMBDA_REBINDING"),
+    ("tests/test_firmware_capability.py", "CliHandoffTests"),
+    ("tests/test_firmware_capability.py", "QuietVerificationSurfaceTests"),
     ("tests/test_firmware_capability.py", "BYPASS"),
     ("tests/test_firmware_capability.py", "QUALIFIED_BYPASS"),
     ("tests/test_firmware_capability.py", "BYPASS_VARIANTS"),
     ("tests/test_firmware_capability.py", "NESTED_WRITER"),
 )
+# What reaches storage or a publisher: every reference (import, call, alias) is a
+# finding, so the CLI's checked handoff (_configure) stays the only route to them.
+CONSTRUCTORS = frozenset({"Publisher", "R2Store"})
 # Classes whose behaviour the surface fixes: a subclass anywhere could override it.
 FINAL_CLASSES = frozenset({"Publisher", "RegistryGate", "DrillStore"})
 # Attributes that, rebound or deleted from anywhere (module.name = ..., Class.method = ...,
@@ -264,6 +296,8 @@ def scan_source(rel: str, source: str, protected: frozenset = None) -> set:
       rebind                  assigning or deleting a protected name as an attribute
                               (publisher.is_registry_key = ..., Publisher._transact = ...)
       subclass                a subclass of Publisher, RegistryGate or DrillStore
+      construct               any reference to Publisher or R2Store (the routes to a publisher
+                              and to production storage)
       rebinding               in a module on the surface, a second binding of a name its
                               protected code depends on, in any form and however deeply
                               nested in its execution flow (see rebindings)
@@ -316,6 +350,8 @@ def scan_source(rel: str, source: str, protected: frozenset = None) -> set:
             if text in REFLECTIVE_BUILTINS and not (role == "attr" and text in ORDINARY_ATTRS) \
                     and role != "keyword":
                 note(scope, at, stmt, "dynamic", shown)
+            if text in CONSTRUCTORS and role in ("attr", "name", "import-name", "string"):
+                note(scope, at, stmt, "construct", shown)
             if role == "attr" and text in protected and isinstance(child.ctx, (ast.Store, ast.Del)):
                 note(scope, at, stmt, "rebind", ast.unparse(child))
         if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id == "type" \
@@ -474,11 +510,14 @@ def _target_names(node):
 
 def _walrus_names(node):
     """Names an expression binds with :=, comprehensions included (they bind in
-    the enclosing scope); a lambda is its own scope."""
+    the enclosing scope). A lambda's body is its own scope, but its defaults
+    (positional and keyword-only) run in the enclosing one, so they are walked."""
     stack = [node]
     while stack:
         current = stack.pop()
         if isinstance(current, ast.Lambda):
+            stack.extend(current.args.defaults)
+            stack.extend(d for d in current.args.kw_defaults if d is not None)
             continue
         if isinstance(current, ast.NamedExpr):
             yield from _target_names(current.target)
@@ -790,5 +829,8 @@ def dependencies(root: Path = REPO, overrides: dict = None) -> dict:
 
 
 def covered(dep: tuple) -> bool:
+    """On the surface: itself, its whole module or class, or (for a class used to
+    construct one) its __init__, the class name itself being pinned by "<bindings>"."""
     rel, region = dep
-    return dep in SURFACE or (rel, "") in SURFACE or ("." in region and (rel, region.split(".")[0]) in SURFACE)
+    return dep in SURFACE or (rel, "") in SURFACE or ("." in region and (rel, region.split(".")[0]) in SURFACE) \
+        or ("." not in region and (rel, f"{region}.__init__") in SURFACE)

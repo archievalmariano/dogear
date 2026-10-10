@@ -20,8 +20,8 @@ from typing import Optional
 
 from ..dataset import SUBJECT_ID_RE, fingerprint
 from ..quiet import (EDITIONS, QUIET_FEATURED, QUIET_MAX, QUIET_MIN, QUIET_SCHEMA_VERSION, REGULAR_SCHEMA_VERSION, QuietSource,
-                     quiet_object)
-from ..select import MAX_ENTRIES
+                     anniversary_imminent, quiet_object)
+from ..select import MAX_ENTRIES, MIN_SIGNIFICANCE
 
 
 def _ids(provenance: dict, section: str) -> list:
@@ -101,6 +101,55 @@ def occurrence_problems(monday: dt.date, entries: list, provenance: dict, source
     return problems
 
 
+def quiet_exclusion_problems(monday: dt.date, provenance: dict, source: QuietSource,
+                             frozen_records: Optional[dict]) -> list:
+    """The selector's quiet exclusions (PUBLISHING.md §21), re-checked on the revision
+    itself so that no change to the generator can admit an excluded item: every
+    digest record has stable subject identities (``subjects``), none about a person
+    or work featured within 365 days, none sharing a subject with this week's
+    earlier quiet pick unless it is that pick (retainable), and none whose own
+    anniversary falls in [W, W + 35 days). With ``frozen_records``, the subjects are
+    the frozen record's own, named people and works have identities, and the record
+    is a real anniversary (not in the future, at least one year) of significance at
+    least MIN_SIGNIFICANCE. (The pool and the full-item exclusion are checked by
+    revision_problems; approval and sourcing by eligibility.check.)"""
+    subjects, digest = provenance.get("subjects"), _ids(provenance, "digest")
+    if subjects_problem(subjects, digest):
+        return ["a quiet issue's provenance must name every digest record's subject identities"]
+    occurrences = {o.get("recordId"): o for o in provenance.get("quietOccurrences") or [] if isinstance(o, dict)}
+    blocked, same_week = set(source.subject_identities), set(source.same_week_identities)
+    retainable = set(source.retainable)
+    problems = []
+    for subject in subjects:
+        rid = subject["recordId"]
+        identities = [i for i in (subject["personId"], subject["workId"]) if i]
+        if any(i in blocked for i in identities):
+            problems.append(f"{rid}: its subject was featured within 365 days")
+        if rid not in retainable and any(i in same_week for i in identities):
+            problems.append(f"{rid}: its subject is this week's earlier quiet pick")
+        o = occurrences.get(rid) or {}
+        try:
+            if anniversary_imminent(o["month"], o["day"], monday):
+                problems.append(f"{rid}: its own anniversary is within the next five weeks")
+            date = dt.date.fromisoformat(o["date"])
+        except (KeyError, TypeError, ValueError):
+            problems.append(f"{rid}: its pinned occurrence is unreadable")
+            continue
+        if frozen_records is not None:
+            raw = frozen_records.get(rid) or {}
+            for name, key in (("person", "personId"), ("work", "workId")):
+                if raw.get(key) != subject[key]:
+                    problems.append(f"{rid}: its {key} is not the frozen record's")
+                if raw.get(name) and not raw.get(key):
+                    problems.append(f"{rid}: its {name} has no stable identity")
+            year, significance = raw.get("year"), raw.get("significance")
+            if isinstance(year, int) and not isinstance(year, bool) and year >= date.year:
+                problems.append(f"{rid}: not yet an anniversary on its pinned date")
+            if not isinstance(significance, int) or isinstance(significance, bool) or significance < MIN_SIGNIFICANCE:
+                problems.append(f"{rid}: significance below {MIN_SIGNIFICANCE}")
+    return problems
+
+
 def revision_problems(monday: dt.date, issue: object, provenance: object, line: Optional[dict] = None,
                       frozen_records: Optional[dict] = None) -> list:
     """Every way this revision breaks the date/edition invariant. [] means it holds.
@@ -160,6 +209,7 @@ def revision_problems(monday: dt.date, issue: object, provenance: object, line: 
                 if rid in source.excluded:
                     problems.append(f"{rid}: was published as a full item")
             problems += occurrence_problems(monday, entries, provenance, source, frozen_records)
+            problems += quiet_exclusion_problems(monday, provenance, source, frozen_records)
     else:
         if (provenance.get("inputs") or {}).get("quietSource") is not None:
             problems.append("a regular issue's provenance carries a quiet source")
