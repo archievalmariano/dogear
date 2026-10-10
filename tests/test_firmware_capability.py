@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import argparse
 import ast
+import collections
 import contextlib
+import copy
 import json
+import os
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -473,47 +477,121 @@ DYNAMIC_CALLS = frozenset({"getattr", "setattr", "delattr", "hasattr", "vars", "
                            "__import__", "globals", "locals"})
 REFLECTIVE_MODULES = frozenset({"gc", "inspect", "ctypes", "operator", "importlib", "functools", "copyreg",
                                 "pickle", "marshal"})
-# Every finding in the package and tools, reviewed: (file, enclosing scope, kind, detail).
-# A new one, by any spelling, fails here until it is reviewed and added.
+
+SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+BLOCKS = ("body", "orelse", "finalbody", "handlers", "cases")
+Finding = collections.namedtuple("Finding", "file scope kind detail at statement n")
+
+# Every finding in the package and tools, reviewed, one entry per occurrence (see scan_source).
+# A new one, by any spelling and wherever it is, fails here until it is reviewed and added.
 REVIEWED = {
-    # direct storage writes
-    ("dogear/publish/drills.py", "DrillStore.put", "write-call", "self.store.put"),  # test mode: wraps the store
-    ("dogear/publish/publisher.py", "Publisher._transact", "write-call", "self.store.allow_once"),  # after the guards
-    ("dogear/publish/publisher.py", "Publisher._transact", "write-call", "self.store.put"),  # the registry write
-    ("dogear/publish/publisher.py", "Publisher._upload", "write-call", "self.store.put"),  # artifacts, via the gate
-    ("dogear/publish/r2.py", "R2Store.get", "write-call", "self._request"),
-    ("dogear/publish/r2.py", "R2Store.put", "write-call", "self._request"),
-    ("tools/route_vectors.py", "build", "write-call", "store.put"),  # an in-memory store for test vectors
+    # direct storage writes, each occurrence (DrillStore.put has four)
+    Finding('dogear/publish/drills.py', 'DrillStore.put', 'write-call', 'self.store.put', 'body[0]/body[0]',  # test mode: wraps the store
+            'return self.store.put(key, data, content_type=content_type, if_match=if_match, if_none_match=if_none_match)', 1),
+    Finding('dogear/publish/drills.py', 'DrillStore.put', 'write-call', 'self.store.put', 'body[2]/body[1]/body[0]',  # test mode: wraps the store
+            "self.store.put(REGISTRY_KEY, current.data + b'\\n', content_type=content_type)", 1),
+    Finding('dogear/publish/drills.py', 'DrillStore.put', 'write-call', 'self.store.put', 'body[2]/body[2]',  # test mode: wraps the store
+            'return self.store.put(key, data, content_type=content_type, if_match=if_match, if_none_match=if_none_match)', 1),
+    Finding('dogear/publish/drills.py', 'DrillStore.put', 'write-call', 'self.store.put', 'body[4]',  # test mode: wraps the store
+            'etag = self.store.put(key, data, content_type=content_type, if_match=if_match, if_none_match=if_none_match)', 1),
+    Finding('dogear/publish/publisher.py', 'Publisher._transact', 'write-call', 'self.store.allow_once', 'body[11]/body[3]',  # after the guards
+            'self.store.allow_once(intended)', 1),
+    Finding('dogear/publish/publisher.py', 'Publisher._transact', 'write-call', 'self.store.put', 'body[11]/body[4]/body[0]',  # after the guards
+            "self.store.put(REGISTRY_KEY, new_bytes, content_type='application/json', if_match=expected, if_none_match=expected is None)", 1),
+    Finding('dogear/publish/publisher.py', 'Publisher._upload', 'write-call', 'self.store.put', 'body[0]/body[0]/body[2]/body[0]',  # artifacts, via the gate
+            'self.store.put(key, data, content_type=content_type)', 1),
+    Finding('dogear/publish/r2.py', 'R2Store.get', 'write-call', 'self._request', 'body[0]',
+            "status, headers, data = self._request('GET', key)", 1),
+    Finding('dogear/publish/r2.py', 'R2Store.put', 'write-call', 'self._request', 'body[3]',
+            "status, headers, body = self._request('PUT', key, bytes(data), extra)", 1),
+    Finding('tools/route_vectors.py', 'build', 'write-call', 'store.put', 'body[2]/body[1]/body[0]',  # an in-memory store for test vectors
+            "store.put(key, body.encode('utf-8'), content_type='application/octet-stream')", 1),
     # the gate itself: the only code that touches the raw store
-    ("dogear/publish/publisher.py", "RegistryGate.__init__", "reflection", "object.__setattr__"),
-    ("dogear/publish/publisher.py", "RegistryGate.__init__", "private-name", "_store"),
-    ("dogear/publish/publisher.py", "RegistryGate.__init__", "private-name", "_allowed"),
-    ("dogear/publish/publisher.py", "RegistryGate.__getattribute__", "reflection", "object.__getattribute__"),
-    ("dogear/publish/publisher.py", "RegistryGate.get", "reflection", "object.__getattribute__"),
-    ("dogear/publish/publisher.py", "RegistryGate.get", "private-name", "_store"),
-    ("dogear/publish/publisher.py", "RegistryGate.allow_once", "reflection", "object.__setattr__"),
-    ("dogear/publish/publisher.py", "RegistryGate.allow_once", "private-name", "_allowed"),
-    ("dogear/publish/publisher.py", "RegistryGate.put", "reflection", "object.__getattribute__"),
-    ("dogear/publish/publisher.py", "RegistryGate.put", "reflection", "object.__setattr__"),
-    ("dogear/publish/publisher.py", "RegistryGate.put", "private-name", "_store"),
-    ("dogear/publish/publisher.py", "RegistryGate.put", "private-name", "_allowed"),
-    ("dogear/publish/publisher.py", "RegistryGate.put", "write-call", "object.__getattribute__(self, '_store').put"),
-    ("dogear/publish/publisher.py", "RegistryGate", "private-name", "_store"),  # __slots__
-    ("dogear/publish/publisher.py", "RegistryGate", "private-name", "_allowed"),
-    ("dogear/publish/publisher.py", "RegistryGate", "reflection", "__slots__"),
+    Finding('dogear/publish/publisher.py', 'RegistryGate', 'private-name', '_allowed', '__slots__',
+            "__slots__ = ('_store', '_allowed')", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate', 'private-name', '_store', '__slots__',
+            "__slots__ = ('_store', '_allowed')", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate', 'reflection', '__slots__', '__slots__',
+            "__slots__ = ('_store', '_allowed')", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.__getattribute__', 'reflection', 'object.__getattribute__', 'body[1]',
+            'return object.__getattribute__(self, name)', 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.__init__', 'private-name', '_allowed', 'body[1]',
+            "object.__setattr__(self, '_allowed', None)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.__init__', 'private-name', '_store', 'body[0]',
+            "object.__setattr__(self, '_store', store)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.__init__', 'reflection', 'object.__setattr__', 'body[0]',
+            "object.__setattr__(self, '_store', store)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.__init__', 'reflection', 'object.__setattr__', 'body[1]',
+            "object.__setattr__(self, '_allowed', None)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.allow_once', 'private-name', '_allowed', 'body[0]',
+            "object.__setattr__(self, '_allowed', registry_sha)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.allow_once', 'reflection', 'object.__setattr__', 'body[0]',
+            "object.__setattr__(self, '_allowed', registry_sha)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.get', 'private-name', '_store', 'body[0]',
+            "return object.__getattribute__(self, '_store').get(key)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.get', 'reflection', 'object.__getattribute__', 'body[0]',
+            "return object.__getattribute__(self, '_store').get(key)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.put', 'private-name', '_allowed', 'body[0]/body[0]',
+            "allowed = object.__getattribute__(self, '_allowed')", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.put', 'private-name', '_allowed', 'body[0]/body[1]',
+            "object.__setattr__(self, '_allowed', None)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.put', 'private-name', '_store', 'body[1]',
+            "return object.__getattribute__(self, '_store').put(key, data, **kwargs)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.put', 'reflection', 'object.__getattribute__', 'body[0]/body[0]',
+            "allowed = object.__getattribute__(self, '_allowed')", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.put', 'reflection', 'object.__getattribute__', 'body[1]',
+            "return object.__getattribute__(self, '_store').put(key, data, **kwargs)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.put', 'reflection', 'object.__setattr__', 'body[0]/body[1]',
+            "object.__setattr__(self, '_allowed', None)", 1),
+    Finding('dogear/publish/publisher.py', 'RegistryGate.put', 'write-call', "object.__getattribute__(self, '_store').put", 'body[1]',
+            "return object.__getattribute__(self, '_store').put(key, data, **kwargs)", 1),
     # the in-memory test store names the operation for its fault hook
-    ("dogear/publish/store.py", "MemoryStore.put", "write-name", "put"),
+    Finding('dogear/publish/store.py', 'MemoryStore.put', 'write-name', 'put', 'body[1]',
+            "action = self._fault('put', key, data)", 1),
     # the gate's own API names
-    ("dogear/publish/publisher.py", "", "write-name", "put"),
-    ("dogear/publish/publisher.py", "", "write-name", "allow_once"),
+    Finding('dogear/publish/publisher.py', '', 'write-name', 'allow_once', '_GATE_API',
+            "_GATE_API = frozenset({'get', 'put', 'allow_once'})", 1),
+    Finding('dogear/publish/publisher.py', '', 'write-name', 'put', '_GATE_API',
+            "_GATE_API = frozenset({'get', 'put', 'allow_once'})", 1),
     # the CLI's own store constructor (a function named _store), not the gate's slot
-    ("dogear/publish/cli.py", "run", "private-name", "_store"),
+    Finding('dogear/publish/cli.py', 'run', 'private-name', '_store', 'body[9]/body[0]',
+            'store, served = _store(args.store, args.base_url, fixed=bool(args.target))', 1),
     # constant, non-write attribute lookups
-    ("dogear/publish/cli.py", "_Report._line", "dynamic", "getattr(self.args, 'week', None)"),
-    ("tools/chain_check.py", "check", "dynamic", "hasattr(tls, 'get_verified_chain')"),
-    ("dogear/publish/cli.py", "_Report.success", "dynamic", "getattr(out, 'txn', None)"),
-    ("dogear/publish/cli.py", "run", "dynamic", "getattr(args, 'week', None)"),
+    Finding('dogear/publish/cli.py', '_Report._line', 'dynamic', "getattr(self.args, 'week', None)", 'body[0]',
+            "week = getattr(self.args, 'week', None)", 1),
+    Finding('dogear/publish/cli.py', '_Report.success', 'dynamic', "getattr(out, 'txn', None)", 'body[1]',
+            "txns = [out.txn] if getattr(out, 'txn', None) else sorted(set(_TXN_ID.findall(out.message)))", 1),
+    Finding('dogear/publish/cli.py', 'run', 'dynamic', "getattr(args, 'week', None)", 'body[13]',
+            "week = dt.date.fromisoformat(args.week) if getattr(args, 'week', None) else None", 1),
+    Finding('tools/chain_check.py', 'check', 'dynamic', "hasattr(tls, 'get_verified_chain')", 'body[4]/body[0]/body[1]',
+            "chain = tls.get_verified_chain() if hasattr(tls, 'get_verified_chain') else []", 1),
 }
+
+
+def _statement_text(stmt) -> str:
+    """The statement a finding sits in, canonically spelled; a compound
+    statement contributes only its header (its body's statements are their own)."""
+    head = copy.copy(stmt)
+    for name in BLOCKS:
+        if getattr(head, name, None):
+            setattr(head, name, [])
+    return " ".join(ast.unparse(head).split())
+
+
+def _step(parent, field: str, index: int, stmt) -> str:
+    """One step of a finding's position. In a function, the statement's index in
+    its block: order there is reviewed (a write stays after its guards). At the
+    top of a module or class, where order is declarative, the name the statement
+    binds (or "-", leaving its text and n to identify it), so adding an
+    unrelated import or constant above does not move it."""
+    if not isinstance(parent, (ast.Module, ast.ClassDef)):
+        return f"{field}[{index}]"
+    if isinstance(stmt, SCOPES):
+        return stmt.name
+    targets = stmt.targets if isinstance(stmt, ast.Assign) else [getattr(stmt, "target", None)]
+    if len(targets) == 1 and isinstance(targets[0], ast.Name):
+        return targets[0].id
+    return "-"
 
 
 def scan_source(rel: str, source: str) -> set:
@@ -524,49 +602,105 @@ def scan_source(rel: str, source: str) -> set:
       write-name, private-name  those names as strings (methodcaller("put"), getattr(g, "_store"))
       dynamic                 getattr/setattr/vars/eval/...: reviewed only with a constant, harmless name
       reflection              __getattribute__, __dict__, __closure__, object.__setattr__, ...
-      import                  gc, inspect, ctypes, operator, functools, importlib, pickle, ..."""
-    found = set()
+      import                  gc, inspect, ctypes, operator, functools, importlib, pickle, ...
 
-    def walk(node, scope, parent):
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                walk(child, scope + [child.name], child)
-                continue
-            where = ".".join(scope)
-            if isinstance(child, ast.Attribute):
-                if child.attr in WRITE_METHODS:
-                    called = isinstance(node, ast.Call) and node.func is child
-                    found.add((rel, where, "write-call" if called else "write-ref", ast.unparse(child)))
-                if child.attr in REFLECTION_ATTRS:
-                    found.add((rel, where, "reflection", ast.unparse(child)))
-                if child.attr in PRIVATE_NAMES or "_RegistryGate" in child.attr:
-                    found.add((rel, where, "private-attr", ast.unparse(child)))
-            if isinstance(child, ast.Name) and (child.id in REFLECTION_ATTRS or child.id in PRIVATE_NAMES):
-                found.add((rel, where, "reflection" if child.id in REFLECTION_ATTRS else "private-name", child.id))
-            if isinstance(child, ast.Constant) and isinstance(child.value, str):
-                if child.value in WRITE_METHODS:
-                    found.add((rel, where, "write-name", child.value))
-                if child.value in PRIVATE_NAMES or "_RegistryGate" in child.value:
-                    found.add((rel, where, "private-name", child.value))
-                if child.value in REFLECTION_ATTRS:
-                    found.add((rel, where, "reflection", child.value))
-            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id in DYNAMIC_CALLS:
-                found.add((rel, where, "dynamic", ast.unparse(child)))
-            if isinstance(child, (ast.Import, ast.ImportFrom)):
-                names = [a.name for a in child.names] if isinstance(child, ast.Import) else [child.module or ""]
-                for name in names:
-                    if name.split(".")[0] in REFLECTIVE_MODULES:
-                        found.add((rel, where, "import", name))
-            walk(child, scope, child)
-    walk(ast.parse(source), [], None)
+    Each finding is one occurrence, identified structurally: file, enclosing
+    class/function, kind, detail, `at` (its statement's position inside that
+    scope, see _step: unrelated code moving elsewhere does not move it, but
+    reordering the scope's own statements does), the statement's canonical
+    text, and `n` (which identical occurrence at that position). A second
+    occurrence anywhere, even inside an approved scope or statement, is a new
+    finding: nothing collapses into an existing approval."""
+    raw = []
+
+    def note(scope, at, stmt, kind, detail):
+        raw.append((rel, ".".join(scope), kind, detail, "/".join(at), _statement_text(stmt)))
+
+    def walk(node, scope, at, stmt):
+        for field, value in ast.iter_fields(node):
+            children = value if isinstance(value, list) else [value]
+            for index, child in enumerate(children):
+                if not isinstance(child, ast.AST):
+                    continue
+                if isinstance(child, ast.stmt):
+                    child_at = at + [_step(node, field, index, child)]
+                    if isinstance(child, SCOPES):  # a new scope: positions restart inside it
+                        visit(child, node, scope, child_at, child)
+                        walk(child, scope + [child.name], [], child)
+                        continue
+                    visit(child, node, scope, child_at, child)
+                    walk(child, scope, child_at, child)
+                else:
+                    visit(child, node, scope, at, stmt)
+                    walk(child, scope, at, stmt)
+
+    def visit(child, parent, scope, at, stmt):
+        if isinstance(child, ast.Attribute):
+            if child.attr in WRITE_METHODS:
+                called = isinstance(parent, ast.Call) and parent.func is child
+                note(scope, at, stmt, "write-call" if called else "write-ref", ast.unparse(child))
+            if child.attr in REFLECTION_ATTRS:
+                note(scope, at, stmt, "reflection", ast.unparse(child))
+            if child.attr in PRIVATE_NAMES or "_RegistryGate" in child.attr:
+                note(scope, at, stmt, "private-attr", ast.unparse(child))
+        if isinstance(child, ast.Name) and (child.id in REFLECTION_ATTRS or child.id in PRIVATE_NAMES):
+            note(scope, at, stmt, "reflection" if child.id in REFLECTION_ATTRS else "private-name", child.id)
+        if isinstance(child, ast.Constant) and isinstance(child.value, str):
+            if child.value in WRITE_METHODS:
+                note(scope, at, stmt, "write-name", child.value)
+            if child.value in PRIVATE_NAMES or "_RegistryGate" in child.value:
+                note(scope, at, stmt, "private-name", child.value)
+            if child.value in REFLECTION_ATTRS:
+                note(scope, at, stmt, "reflection", child.value)
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id in DYNAMIC_CALLS:
+            note(scope, at, stmt, "dynamic", ast.unparse(child))
+        if isinstance(child, (ast.Import, ast.ImportFrom)):
+            names = [a.name for a in child.names] if isinstance(child, ast.Import) else [child.module or ""]
+            for name in names:
+                if name.split(".")[0] in REFLECTIVE_MODULES:
+                    note(scope, at, stmt, "import", name)
+
+    walk(ast.parse(source), [], [], None)
+    seen = collections.Counter()
+    found = set()
+    for key in raw:
+        seen[key] += 1
+        found.add(Finding(*key, seen[key]))
     return found
 
+# The scanned trees, at any depth. tests/ is not scanned: its probes are the bypasses.
+SCANNED = ("dogear", "tools")
 
-def scan_repo(extra: dict = None) -> set:
-    """scan_source over every module of the package and tools (plus `extra`:
-    {path: source}, for proving what a new module would be flagged for)."""
-    sources = {p.relative_to(REPO).as_posix(): p.read_text(encoding="utf-8")
-               for p in sorted(list(REPO.glob("dogear/**/*.py")) + list(REPO.glob("tools/*.py")))}
+
+def discover(root: Path = REPO) -> dict:
+    """{path: source} for every Python module beneath dogear/ and tools/, however
+    deeply nested: each *.py file, and each extensionless script whose shebang
+    names python. A symlink fails closed: what it points at is not reviewed here."""
+    sources = {}
+    for top in SCANNED:
+        for dirpath, dirnames, filenames in os.walk(root / top):
+            dirnames.sort()
+            for name in dirnames + filenames:
+                if os.path.islink(os.path.join(dirpath, name)):
+                    raise AssertionError(f"{Path(dirpath, name).relative_to(root)} is a symlink; the scan does not "
+                                         "follow it")
+            for name in sorted(filenames):
+                path = Path(dirpath, name)
+                if path.suffix == ".py" or (not path.suffix and _python_script(path)):
+                    sources[path.relative_to(root).as_posix()] = path.read_text(encoding="utf-8")
+    return sources
+
+
+def _python_script(path: Path) -> bool:
+    with path.open("rb") as f:
+        first = f.readline()
+    return first.startswith(b"#!") and b"python" in first
+
+
+def scan_repo(extra: dict = None, root: Path = REPO) -> set:
+    """scan_source over every discovered module (plus `extra`: {path: source},
+    for proving what a new or changed module would be flagged for)."""
+    sources = discover(root)
     sources.update(extra or {})
     return set().union(*(scan_source(rel, src) for rel, src in sources.items()))
 
@@ -581,6 +715,13 @@ def sneak(pub, data):
     raw = getattr(pub.store, "_RegistryGate__store")
     writer = raw.put
     writer(REGISTRY_KEY, data, content_type="application/json")
+"""
+# A prohibited writer in a nested tools module.
+NESTED_WRITER = """from dogear.publish.registry import REGISTRY_KEY
+
+
+def write(store, data):
+    store.put(REGISTRY_KEY, data, content_type="application/json")
 """
 BYPASS_VARIANTS = {
     "object.__getattribute__": 'def f(g, d):\n    w = object.__getattribute__(g, "_store").put\n    w("publication.json", d)\n',
@@ -600,8 +741,80 @@ class RegistryWriteBoundaryTests(GuardBase):
     the quiet-presentation guard passed for exactly those bytes: checked on the
     syntax tree (every write reference and every reflection) and at run time."""
 
+    def assert_reviewed(self, found: set) -> None:
+        unreviewed, stale = sorted(found - REVIEWED), sorted(REVIEWED - found)
+        if unreviewed or stale:
+            self.fail("a storage write or reflection changed: review it, then update REVIEWED\n"
+                      + "".join(f"  new:  {tuple(f)}\n" for f in unreviewed)
+                      + "".join(f"  gone: {tuple(f)}\n" for f in stale))
+
     def test_every_storage_write_and_reflection_is_reviewed(self):
-        self.assertEqual(scan_repo(), REVIEWED, "a new storage write or reflection: review it, then add it")
+        self.assert_reviewed(scan_repo())
+
+    def test_a_second_occurrence_inside_a_reviewed_scope_is_a_new_finding(self):
+        path = "dogear/publish/publisher.py"
+        source = (REPO / path).read_text(encoding="utf-8")
+        gate_put = "    def put(self, key: str, data: bytes, **kwargs):\n"
+        raw_put = '        return object.__getattribute__(self, "_store").put(key, data, **kwargs)\n'
+        api = '_GATE_API = frozenset({"get", "put", "allow_once"})\n'
+        self.assertEqual((source.count(gate_put), source.count(raw_put), source.count(api)), (1, 1, 1))
+        # Codex's probe: a second raw-store .put expression inside RegistryGate.put, an approved scope.
+        codex = source.replace(gate_put, gate_put + '        object.__getattribute__(self, "_store").put(key, data, **kwargs)\n')
+        old_identity = lambda found: {f[:4] for f in found}  # noqa: E731 -- (file, scope, kind, detail)
+        self.assertEqual(old_identity(scan_repo({path: codex})), old_identity(REVIEWED))  # what used to collapse
+        probes = {
+            "Codex: a second raw-store put in RegistryGate.put": codex,
+            "the same statement again, later in the scope": source.replace(raw_put, raw_put + raw_put),
+            "the approved write moved above the gate's check": source.replace(raw_put, "").replace(
+                gate_put, gate_put + raw_put),
+            "the gate's API names bound a second time": source + "\n" + api,
+        }
+        for name, probe in probes.items():
+            with self.subTest(probe=name):
+                found = scan_repo({path: probe})
+                self.assertNotEqual(found, REVIEWED)
+                self.assertTrue(found - REVIEWED, "the new occurrence collapsed into an approval")
+                self.assertEqual({f.file for f in found - REVIEWED}, {path})
+                with self.assertRaises(AssertionError):
+                    self.assert_reviewed(found)
+        new = scan_repo({path: codex}) - REVIEWED
+        self.assertIn(("RegistryGate.put", "write-call", "object.__getattribute__(self, '_store').put", "body[0]"),
+                      {(f.scope, f.kind, f.detail, f.at) for f in new})
+        self.assertEqual({f.scope for f in new}, {"RegistryGate.put"})
+        # Ordinary movement elsewhere in the module does not disturb any approval.
+        moved = ("import itertools  # an unrelated import\n\n\ndef unrelated():\n    return 1\n\n\n"
+                 + source.replace(api, "UNRELATED = 1\n" + api).replace(
+                     "    __slots__ = (", "    ALSO_UNRELATED = 2\n    __slots__ = ("))
+        self.assert_reviewed(scan_repo({path: moved}))
+
+    def test_nested_tools_modules_are_discovered_and_scanned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for top in SCANNED:
+                shutil.copytree(REPO / top, root / top, ignore=shutil.ignore_patterns("__pycache__"))
+            self.assert_reviewed(scan_repo(root=root))  # the copy, unchanged
+            nested = root / "tools" / "subdir" / "example.py"
+            nested.parent.mkdir()
+            nested.write_text(NESTED_WRITER, encoding="utf-8")
+            self.assertIn("tools/subdir/example.py", discover(root))
+            new = scan_repo(root=root) - REVIEWED
+            self.assertEqual({(f.file, f.scope, f.kind, f.detail) for f in new},
+                             {("tools/subdir/example.py", "write", "write-call", "store.put")})
+            with self.assertRaises(AssertionError):
+                self.assert_reviewed(scan_repo(root=root))
+            # Any depth, and a python script without the .py suffix.
+            nested.unlink()
+            deeper = root / "tools" / "subdir" / "deeper" / "again" / "example.py"
+            deeper.parent.mkdir(parents=True)
+            deeper.write_text(NESTED_WRITER, encoding="utf-8")
+            script = root / "tools" / "subdir" / "write-registry"
+            script.write_text("#!/usr/bin/env python3\n" + NESTED_WRITER, encoding="utf-8")
+            self.assertEqual({f.file for f in scan_repo(root=root) - REVIEWED},
+                             {"tools/subdir/deeper/again/example.py", "tools/subdir/write-registry"})
+            # A symlink is not followed silently: the scan refuses.
+            (root / "tools" / "linked").symlink_to(deeper.parent, target_is_directory=True)
+            with self.assertRaisesRegex(AssertionError, "symlink"):
+                scan_repo(root=root)
 
     def test_codexs_bypass_is_refused_at_run_time_and_flagged_by_the_scanner(self):
         pub = self.later(W2, 11)
@@ -627,7 +840,7 @@ class RegistryWriteBoundaryTests(GuardBase):
             pub.store.put(REGISTRY_KEY, before, content_type="application/json")
         self.assertEqual(self.f.store.objects[REGISTRY_KEY].data, before)
         # Structure: the same code in any module is flagged, on each of its steps.
-        found = scan_source("dogear/publish/sneaky.py", BYPASS)
+        found = {f[:4] for f in scan_source("dogear/publish/sneaky.py", BYPASS)}
         self.assertIn(("dogear/publish/sneaky.py", "sneak", "dynamic",
                        "getattr(pub.store, '_RegistryGate__store')"), found)
         self.assertIn(("dogear/publish/sneaky.py", "sneak", "private-name", "_RegistryGate__store"), found)

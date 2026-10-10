@@ -2130,14 +2130,24 @@ those bytes, once, after the guards passed. Only its `get`, `put` and
 name, `__dict__`, `__class__`) is refused, and nothing on it can be set. So
 `_transact` is the only path that can write `publication.json`.
 
-The tests scan every module of the package and tools from the syntax tree,
-and every finding must be on a reviewed list:
+The tests scan every module of the package and of tools, at any depth (each
+`*.py` file and each extensionless python script; a symlink fails the scan),
+from the syntax tree. Every finding must be on a reviewed list, one entry per
+occurrence:
 - every reference to a write method, called or not (`writer = store.put`,
   `partial(store.put)`);
 - write-method and private names as strings;
 - dynamic attribute access (`getattr`, `vars`, `eval`, …);
 - reflection attributes (`__getattribute__`, `__dict__`, `__closure__`, …);
 - reflective imports (`gc`, `inspect`, `operator`, `functools`, …).
+
+An occurrence is identified by its file, enclosing class or function, kind,
+detail, position in that scope, statement text and a count of identical
+occurrences there. So a second write inside an approved function (or the
+approved write moved above the gate's check) is a new finding, while unrelated
+code moving elsewhere changes nothing. Positions inside a function are block
+indices (order is reviewed there); at the top of a module or class they are the
+name the statement binds.
 
 A new writer or reflection fails until it is reviewed. At run time, the exact
 bypass (private `getattr` of the raw store, then a saved `put`), alias
