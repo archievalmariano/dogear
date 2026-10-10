@@ -2031,14 +2031,15 @@ existing issue and provenance hashes.
   makes a second quiet lead, and the date/edition invariant and the firmware
   both refuse any other arrangement.
   Regular screens render byte-identically.
-- DOGEAR is compiled only into dev firmware today. Which CrossPoint release
-  includes it is an open owner decision. Until that release is installed and
-  verified, `data/firmware-contract.json` is not synced, and the production gate
-  stays closed.
+- DOGEAR reaches release firmware in CrossPoint Apps v1.2.0 (the `d`
+  packages). Until that release is published, physically accepted and synced
+  (§22), `data/firmware-contract.json` has no `release` block, and the
+  production gate stays closed.
 
 **Production.**
-- `Publisher._ready()` refuses `emptyWeek: quiet-week` unless the firmware
-  contract records `kIssueSchemaMax >= 3`.
+- Production may show a quiet issue only with the firmware capability of §22,
+  on every path that writes the registry; `Publisher._ready()` also refuses
+  `emptyWeek: quiet-week` without it.
 - The switch itself stays the owner's, after the firmware is released and
   physically verified on both devices.
 
@@ -2069,3 +2070,81 @@ existing issue and provenance hashes.
   (kept compressed as `tests/golden/legacy-staging-dataset.json.gz`). They
   pass the evidence half read-only; no mapping is reviewed and no attestation
   is written yet.
+
+## 22. The firmware contract sync and the quiet-issue gate (v1.2.0 plan §8)
+
+**What authorises quiet issues.** Only a synced firmware contract:
+`data/firmware-contract.json` with a `release` block, which names the
+owner-approved verification record `data/firmware-verifications/<tag>.json`
+(by path and sha256) and the vendored acceptance schema
+`data/acceptance-schema/acceptance-v1.json` (by sha256).
+`dogear.publish.firmware.capability()` reads those files and nothing else: no
+GitHub, no network. It says yes only if every one of these holds:
+- the contract, record and schema parse strictly (no duplicate key) and match
+  their pinned hashes;
+- the record's release block names the tag, tag object, commit, release id,
+  candidate run, `SHA256SUMS.txt` digest and all 17 asset digests, with the
+  legacy copies equal to their sources;
+- its acceptance record holds exactly the 8 packages in order, each with
+  exactly the checks the schema requires of it, each exactly `PASS`, each
+  package digest the release asset's; its canonical sha256 is
+  `acceptanceSha256`;
+- both OTA entries passed;
+- `kIssueSchemaMax >= 3`, both flagship DOGEAR builds passed every quiet and
+  regular-cache check, and `authorizes.quietWeek` says exactly that;
+- the contract's release fields equal the record's.
+
+Anything missing, malformed or mismatched means no. An old-style contract (no
+`release` block, like today's) never authorises quiet issues. The
+`quiet_supported` override is refused in production (test mode only), and the
+CLI has no such flag.
+
+**The sync** (`tools/firmware_contract.py`). A plain `--sync` is refused. The
+only write path is
+`--sync --release vX.Y.Z --verification data/firmware-verifications/vX.Y.Z.json --firmware-clone <dir>`.
+All GitHub checks happen here, once, read-only:
+- the release is published, not a prerelease, **immutable**, the record's
+  release id, with exactly the record's assets and GitHub digests;
+- the downloaded `SHA256SUMS.txt` hashes to the record's digest and lists
+  exactly the record's files;
+- the tag is annotated, is the record's tag object, points directly at the
+  commit, and its message names the same candidate run, commit,
+  `SHA256SUMS.txt` digest, the 8 packages in order and the record's
+  `acceptance-sha256` (parsed by the firmware's rules; shared vectors
+  `tests/fixtures/firmware/tag-vectors.json`);
+- the candidate run is `release_candidate.yml`, dispatched, successful, on the
+  release branch, at the commit.
+
+The limits, glyph ranges and acceptance schema are read from the tagged commit
+with `git show`, never a working tree. Nothing is written unless every check
+passes and the result authorises as production will read it; the contract is
+replaced last. `--check` runs exactly the production decision, locally.
+`tests/test_vendored.py` compares the vendored copies with the contract's commit
+(or `DOGEAR_FIRMWARE_COMMIT`) in a firmware clone, also with `git show`.
+
+**The gate on every write.** `_transact` is the only code that writes
+`publication.json`. Before every write attempt (retries included) it runs the
+quiet-presentation guard in production: if the write shows a quiet revision
+(the new current week's active revision, and every week whose active revision
+changes) and the capability is no, the write never happens and the
+transaction is abandoned ("nothing published"). Quiet means the revision's
+provenance says `edition: quiet` or its issue is schema 3; both are read and
+hash-checked, and if they disagree the write is refused. This holds under
+every policy. Moving away from a quiet revision is always allowed.
+
+| Operation | Shows a quiet revision? | Gate |
+|---|---|---|
+| `stage`, `stage-next` | prepares one (`staged/` only) | `_ready()` |
+| `launch`, `promote`, `correct` | yes | `_ready()` + `_transact` |
+| `rollback`, `restore`, `resume` | yes | `_control` preflight (refused before any record) + `_transact` |
+| `reconcile`, `abandon` | no: they record writes already made | never write the registry |
+| `status`, `reset-preflight`, `attest-subjects` | no: read-only or local | never write the registry |
+
+`status`, the `reconcile` operation and `reset-preflight` report a live quiet
+issue that the capability no longer covers (`reconcile` stops for a human,
+exit 3). No other writer can make one current: the drills run in test mode
+only, `tools/route_vectors.py` writes an in-memory store, the Worker is
+read-only, and **production `publication.json` is never written by hand**
+(the §20g reset is staging-only; any production reset needs its own reviewed
+procedure). Tests: `tests/test_firmware_capability.py` and
+`tests/test_firmware_contract.py`.
