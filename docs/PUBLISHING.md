@@ -2130,28 +2130,56 @@ those bytes, once, after the guards passed. Only its `get`, `put` and
 name, `__dict__`, `__class__`) is refused, and nothing on it can be set. So
 `_transact` is the only path that can write `publication.json`.
 
-The tests scan every module of the package and of tools, at any depth (each
-`*.py` file and each extensionless python script; a symlink fails the scan),
-from the syntax tree. Every finding must be on a reviewed list, one entry per
-occurrence:
+Python cannot hide an object completely (the gate's slot descriptor, for
+one, can be fetched from its class), so two source checks stand behind the
+gate (`tests/write_boundary.py`, records in `tests/write_boundary_review.py`).
+
+The scan reads every module of the package and of tools, at any depth (each
+`*.py` file and each extensionless python script). A symlink anywhere, either
+root included, fails it, and so does a missing root. Every finding must be on
+the reviewed list, one entry per occurrence:
 - every reference to a write method, called or not (`writer = store.put`,
-  `partial(store.put)`);
-- write-method and private names as strings;
-- dynamic attribute access (`getattr`, `vars`, `eval`, …);
-- reflection attributes (`__getattribute__`, `__dict__`, `__closure__`, …);
-- reflective imports (`gc`, `inspect`, `operator`, `functools`, …).
+  `partial(store.put)`), and write-method and private names as strings,
+  keywords, imports or match patterns;
+- every reference to a reflective builtin (`getattr`, `vars`, `eval`, …),
+  bare, qualified (`builtins.getattr`) or saved (`fetch = getattr`), and a
+  `type()` that builds a class;
+- every dunder except a few that only name a module (`__get__`, `__dict__`,
+  `__class__`, `__traceback__`, …), and other routes to private state or to
+  frames: `builtins`, `Formatter`, `attrgetter`, gc's graph, tracing hooks,
+  frame and traceback attributes, process spawning;
+- every import of a sensitive module (reflection, serialisation, code
+  execution, processes, network), and any import of a module not imported
+  before;
+- rebinding or deleting a protected name as an attribute
+  (`publisher.is_registry_key = …`, `firmware.ROOT = …`, `pub.store = …`),
+  and subclassing `Publisher`, `RegistryGate` or `DrillStore`.
 
 An occurrence is identified by its file, enclosing class or function, kind,
-detail, position in that scope, statement text and a count of identical
-occurrences there. So a second write inside an approved function (or the
-approved write moved above the gate's check) is a new finding, while unrelated
-code moving elsewhere changes nothing. Positions inside a function are block
-indices (order is reviewed there); at the top of a module or class they are the
-name the statement binds.
+detail, position in that scope, statement (a digest of its canonical syntax
+tree) and a count of identical occurrences there. So a second write inside an
+approved function (or the approved write moved above the gate's check) is a
+new finding, while unrelated code moving elsewhere changes nothing. Positions
+inside a function are block indices (order is reviewed there); at the top of a
+module or class they are the name the statement binds.
 
-A new writer or reflection fails until it is reviewed. At run time, the exact
-bypass (private `getattr` of the raw store, then a saved `put`), alias
-spellings and alias writers are all refused, with the registry unchanged.
+The source-change guard fingerprints the critical surface: the gate, the
+registry key test, the guarded write and its guards (`_transact`,
+`_quiet_presentation_guard` and the helpers they use, `_control`, `_upload`,
+`Publisher.__init__`), the publisher's imports, `REGISTRY_KEY` and
+`registry.sha256`, all of `firmware.py`, the drill writer, the scanner itself
+and its regression tests. Any change there fails until the new fingerprint is
+recorded, even one that uses a trick the scan does not know. Comments,
+formatting and code outside the surface do not affect it. Both checks use a
+canonical form of the syntax tree, the same on Python 3.9 to 3.14, and read
+local files only.
+
+A new writer, reflection or surface change fails until it is reviewed. At run
+time, the first demonstrated bypass (private `getattr` of the raw store, then a
+saved `put`), alias spellings and alias writers are all refused, with the
+registry unchanged. The second (the slot descriptor from the class via
+`builtins.vars`, applied with `__get__`) works at run time; the scan flags each
+of its steps.
 Before every write attempt (retries included) it runs the
 quiet-presentation guard in production: if the write shows a quiet revision
 (the new current week's active revision, and every week whose active revision
