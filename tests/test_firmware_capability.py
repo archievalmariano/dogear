@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import json
 import socket
@@ -25,7 +26,8 @@ from dogear.publish import cli as publish_cli
 from dogear.publish import firmware
 from dogear.publish import registry as regmod
 from dogear.publish.policy import PublicationPolicy
-from dogear.publish.publisher import Aborted, NeedsHuman, NotReady, Publisher, shown_revisions
+from dogear.publish.publisher import (Aborted, NeedsHuman, NotReady, Publisher, RegistryGate,
+                                      UnguardedRegistryWrite, shown_revisions)
 from dogear.publish.registry import REGISTRY_KEY, Refused
 
 try:
@@ -445,16 +447,6 @@ class OperationClassificationTests(unittest.TestCase):
         ops = next(a for a in publish._actions if isinstance(a, argparse._SubParsersAction)).choices
         self.assertEqual(set(ops), self.WRITES | self.PREPARES | self.NEVER_WRITES)
 
-    def test_only_transact_writes_the_registry(self):
-        source = (Path(firmware.__file__).parent / "publisher.py").read_text()
-        writes = [line for line in source.splitlines() if "put(REGISTRY_KEY" in line]
-        self.assertEqual(len(writes), 1, writes)
-        transact = source.split("    def _transact(", 1)[1].split("\n    def ", 1)[0]
-        self.assertIn("put(REGISTRY_KEY", transact)
-        self.assertIn("self._quiet_presentation_guard(reg, new_reg, fresh, uploads), guard", transact)
-        control = source.split("    def _control(", 1)[1].split("\n    def ", 1)[0]
-        self.assertIn("self._quiet_presentation_guard(reg, new_reg)", control)
-
     def test_the_override_is_refused_in_production_and_has_no_cli_flag(self):
         f = Fixture(self, regular_week(W0, "a"), at(W0, 9), policy=QUIET)
         for supported in (True, False):
@@ -464,6 +456,128 @@ class OperationClassificationTests(unittest.TestCase):
         cli_source = Path(publish_cli.__file__).read_text()
         self.assertNotIn("quiet_supported", cli_source)
         self.assertNotIn("quiet-supported", cli_source)
+
+
+# ---- the registry-write boundary ------------------------------------------------
+
+REPO = Path(firmware.__file__).resolve().parents[2]
+# Every call in the package and tools that can write storage, reviewed: (file,
+# enclosing function, call). A new writer, however it spells the registry key,
+# fails here until it is reviewed and added.
+WRITE_CALLS = {
+    ("dogear/publish/drills.py", "DrillStore.put", "self.store.put"),  # test mode: wraps the store
+    ("dogear/publish/publisher.py", "Publisher._transact", "self.store.allow_once"),  # after the guards
+    ("dogear/publish/publisher.py", "Publisher._transact", "self.store.put"),  # the registry write
+    ("dogear/publish/publisher.py", "Publisher._upload", "self.store.put"),  # artifacts, through the gate
+    ("dogear/publish/publisher.py", "RegistryGate.put", "self.__store.put"),  # the gate itself
+    ("dogear/publish/r2.py", "R2Store.get", "self._request"),
+    ("dogear/publish/r2.py", "R2Store.put", "self._request"),
+    ("tools/route_vectors.py", "build", "store.put"),  # an in-memory store for test vectors
+}
+WRITE_METHODS = {"put", "allow_once", "_request"}
+
+
+def storage_writes() -> tuple:
+    """(write calls, private-store accesses, dynamic attribute accesses) in every
+    module of the package and tools, from the syntax tree, not source spelling."""
+    writes, private, dynamic = set(), set(), set()
+    for path in sorted(list(REPO.glob("dogear/**/*.py")) + list(REPO.glob("tools/*.py"))):
+        rel = path.relative_to(REPO).as_posix()
+
+        def walk(node, scope):
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    walk(child, scope + [child.name])
+                    continue
+                where = ".".join(scope)
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute) and \
+                        child.func.attr in WRITE_METHODS:
+                    writes.add((rel, where, ast.unparse(child.func)))
+                if isinstance(child, ast.Attribute) and ("__store" in child.attr or "_RegistryGate" in child.attr):
+                    private.add((rel, where))
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and \
+                        child.func.id in ("getattr", "setattr", "vars") and \
+                        not (len(child.args) >= 2 and isinstance(child.args[1], ast.Constant) and
+                             child.args[1].value not in WRITE_METHODS):
+                    dynamic.add((rel, where, ast.unparse(child)))
+                walk(child, scope)
+        walk(ast.parse(path.read_text(encoding="utf-8")), [])
+    return writes, private, dynamic
+
+
+class RegistryWriteBoundaryTests(GuardBase):
+    """The registry is written only by _transact, through the gate, right after
+    the quiet-presentation guard passed for exactly those bytes: checked on the
+    syntax tree (every write call site) and at run time (any key spelling)."""
+
+    def test_every_storage_write_call_site_is_reviewed(self):
+        writes, private, dynamic = storage_writes()
+        self.assertEqual(writes, WRITE_CALLS, "a new storage write: review it, then add it to WRITE_CALLS")
+        # Only the gate itself touches the raw store it holds.
+        self.assertTrue(private and all(path == "dogear/publish/publisher.py" and scope.startswith("RegistryGate.")
+                                        for path, scope in private), private)
+        self.assertEqual(dynamic, set(), "dynamic attribute access could reach a write method")
+
+    def test_the_publisher_holds_the_store_only_through_the_gate(self):
+        pub = self.later(W2, 11)
+        self.assertIsInstance(pub.store, RegistryGate)
+        for name, value in vars(pub).items():
+            self.assertIsNot(value, self.f.store, f"Publisher.{name} is the raw store")
+        with self.assertRaises(AttributeError):
+            pub.store._request  # noqa: B018 -- nothing else of the store is reachable
+        with self.assertRaises(TypeError):
+            vars(pub.store)  # no __dict__: the raw store is not an attribute to find
+
+    def test_a_registry_write_in_any_spelling_is_refused_outside_transact(self):
+        pub = self.later(W2, 11)
+        before = self.f.store.objects[REGISTRY_KEY].data
+        alias = "".join(["publication", ".", "json"])
+        for key in (REGISTRY_KEY, alias, "/publication.json", "./publication.json", "PUBLICATION.JSON",
+                    " publication.json", "x/../publication.json"):
+            with self.subTest(key=key), self.assertRaises(UnguardedRegistryWrite):
+                pub.store.put(key, before, content_type="application/json")
+        with self.assertRaises(UnguardedRegistryWrite):
+            getattr(pub.store, "put")(REGISTRY_KEY, before, content_type="application/json")
+        self.assertEqual(self.f.store.objects[REGISTRY_KEY].data, before)
+
+    def test_an_alias_writer_in_a_publisher_method_is_refused(self):
+        class Sneaky(Publisher):
+            def sneak(self):
+                key = REGISTRY_KEY  # an alias, not the literal call the old test matched
+                reg, _ = self._read_registry()
+                return self.store.put(key, regmod.dumps(dict(reg, current=W2.isoformat())),
+                                      content_type="application/json")
+        pub = self.later(W2, 11)
+        sneaky = Sneaky(self.f.store, pub.pubdata, pub.inputs, pub.policy, pub.checks, pub.clock, mode="production")
+        before = self.f.store.objects[REGISTRY_KEY].data
+        with self.assertRaises(UnguardedRegistryWrite):
+            sneaky.sneak()
+        self.assertEqual(self.f.store.objects[REGISTRY_KEY].data, before)
+
+    def test_an_authorisation_is_for_one_write_of_exactly_those_bytes_and_key(self):
+        pub = self.later(W2, 11)
+        before = self.f.store.objects[REGISTRY_KEY].data
+        pub.store.allow_once(regmod.sha256(before))
+        with self.assertRaises(UnguardedRegistryWrite):  # other bytes
+            pub.store.put(REGISTRY_KEY, before + b" ", content_type="application/json")
+        with self.assertRaises(UnguardedRegistryWrite):  # spent by the refused attempt
+            pub.store.put(REGISTRY_KEY, before, content_type="application/json")
+        pub.store.allow_once(regmod.sha256(before))
+        with self.assertRaises(UnguardedRegistryWrite):  # another spelling of the key
+            pub.store.put("/publication.json", before, content_type="application/json")
+        self.assertEqual(self.f.store.objects[REGISTRY_KEY].data, before)
+
+    def test_transact_writes_only_after_the_presentation_guard_passed_for_these_bytes(self):
+        self.revoke()
+        self.tree.write()
+
+        def guard_that_never_ran(pub, *a, **k):
+            return lambda: None  # passes, but never checked or recorded the bytes
+        with mock.patch.object(Publisher, "_quiet_presentation_guard", guard_that_never_ran):
+            before = self.f.store.objects[REGISTRY_KEY].data
+            with self.assertRaises(UnguardedRegistryWrite):
+                self.later(W2, 11).rollback(W1, None, "check")
+            self.assertEqual(self.f.store.objects[REGISTRY_KEY].data, before)
 
 
 if __name__ == "__main__":

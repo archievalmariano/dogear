@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import posixpath
 import re
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -49,6 +50,46 @@ from .store import PreconditionFailed, StoreError
 ROLLOVER = dt.time(6, 0)  # Monday, Asia/Manila
 
 Guard = Callable[[], Optional[str]]
+
+
+class UnguardedRegistryWrite(Exception):
+    """A registry write that did not come from _transact immediately after every
+    guard passed for exactly those bytes. A programming error, never retried."""
+
+
+def is_registry_key(key: object) -> bool:
+    """The registry's key in any spelling (leading slash, ./, case)."""
+    return posixpath.normpath(str(key).strip().lstrip("/")).lower() == REGISTRY_KEY.lower()
+
+
+class RegistryGate:
+    """The publisher's only handle on storage (the registry-write boundary).
+
+    Reads pass through. A write whose key is the registry's, however it is
+    spelled or computed, is refused unless `_transact` has just authorised
+    exactly those bytes for exactly one write, after its guards (the
+    quiet-presentation guard first) passed. Nothing else of the store is
+    reachable through it."""
+
+    __slots__ = ("__store", "__allowed")
+
+    def __init__(self, store) -> None:
+        self.__store = store
+        self.__allowed: Optional[str] = None
+
+    def get(self, key: str):
+        return self.__store.get(key)
+
+    def allow_once(self, registry_sha: str) -> None:
+        self.__allowed = registry_sha
+
+    def put(self, key: str, data: bytes, **kwargs):
+        if is_registry_key(key):
+            allowed, self.__allowed = self.__allowed, None  # one write per authorisation
+            if key != REGISTRY_KEY or allowed is None or allowed != regmod.sha256(data):
+                raise UnguardedRegistryWrite(f"refused a registry write ({key!r}) that no guarded transaction "
+                                             "authorised for these bytes")
+        return self.__store.put(key, data, **kwargs)
 
 
 class Aborted(Exception):
@@ -106,7 +147,9 @@ class Publisher:
         # Which data this target may show (dogear/synthetic.py): production mode is always
         # "production" (nothing synthetic); the staging target is "staging" (only synthetic).
         self.separation = "production" if mode == "production" else separation
-        self.store, self.pubdata, self.inputs, self.policy, self.checks = store, pubdata, inputs, policy, checks
+        # The raw store is held only inside the gate: every registry write goes through _transact.
+        self.store = RegistryGate(store)
+        self.pubdata, self.inputs, self.policy, self.checks = pubdata, inputs, policy, checks
         self.clock = clock or (lambda: dt.datetime.now(MANILA))
         self.mode, self.assets, self.attempts = mode, assets or {}, attempts
         self.served = served or (lambda path: routes.fetch(self.store, path))
@@ -652,6 +695,9 @@ class Publisher:
             reason = guard()
             if reason:
                 return self._stop(pending, reason, uncertain, intended, expected)
+            if self._presentation_checked != intended:  # the guard just passed for exactly these bytes
+                raise UnguardedRegistryWrite(f"{txn}: the quiet-presentation guard did not pass for this write")
+            self.store.allow_once(intended)
             try:
                 self.store.put(REGISTRY_KEY, new_bytes, content_type="application/json",
                                if_match=expected, if_none_match=expected is None)

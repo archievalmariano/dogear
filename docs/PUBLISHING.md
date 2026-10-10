@@ -2122,8 +2122,15 @@ replaced last. `--check` runs exactly the production decision, locally.
 `tests/test_vendored.py` compares the vendored copies with the contract's commit
 (or `DOGEAR_FIRMWARE_COMMIT`) in a firmware clone, also with `git show`.
 
-**The gate on every write.** `_transact` is the only code that writes
-`publication.json`. Before every write attempt (retries included) it runs the
+**The gate on every write.** The publisher holds storage only through a
+`RegistryGate`. It refuses a write to the registry key, in any spelling
+(leading slash, `./`, case), unless `_transact` has just authorised exactly
+those bytes, once, after the guards passed. So `_transact` is the only path
+that can write `publication.json`. The tests enumerate every storage-write
+call site in the package and tools from the syntax tree, so a new writer
+fails until reviewed, whatever it calls the key. They also refuse dynamic
+attribute access, and check at run time that an alias writer is refused.
+Before every write attempt (retries included) it runs the
 quiet-presentation guard in production: if the write shows a quiet revision
 (the new current week's active revision, and every week whose active revision
 changes) and the capability is no, the write never happens and the
