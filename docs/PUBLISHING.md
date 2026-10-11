@@ -2207,7 +2207,8 @@ decoded; only the surrounding whitespace browsers ignore is dropped) must be
 such a URL or a relative reference on the page's own origin, and any URL in
 other attributes, text, CSS, comments or issue strings is taken whole; what the
 edition never uses, scripts, event handlers, `<base>`, meta `http-equiv`,
-embedded documents and CSS escapes, is refused), the web renderer (all of
+embedded documents, `srcset` (in any form: a comma may belong to its URL, so it
+is refused rather than parsed) and CSS escapes, is refused), the web renderer (all of
 `web.py`), the link, fit and served-host
 readers (all of `checks.py` and `routes.py`), the fit renderer
 (`mock/render_dogear.py`) and the device issue builder it shares typesetting

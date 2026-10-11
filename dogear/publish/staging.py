@@ -376,7 +376,8 @@ _URL = re.compile(r"(?i)(?:[a-z][a-z0-9+.-]*:)?//[^\s\"'<>]*")
 # A relative reference that stays on the page's own origin: no scheme, no
 # backslash (browsers read it as a slash), not protocol-relative.
 _RELATIVE = re.compile(r"[A-Za-z0-9._~%/#?=&+-]*")
-# Attributes whose whole value is a URL (srcset, ping and archive hold several).
+# Attributes whose whole value is a URL (ping and archive hold several; srcset,
+# which the edition never uses, is refused outright).
 _LINK_ATTRS = frozenset({"href", "src", "action", "formaction", "poster", "cite", "data", "background", "longdesc",
                          "manifest", "icon", "xlink:href", "codebase", "usemap", "profile"})
 # What the edition never uses, refused outright: each can reach or hide a URL.
@@ -399,14 +400,14 @@ class _PageValues(HTMLParser):
         if tag in _REFUSED_TAGS:
             self.refused.append(f"<{tag}>")
         for name, value in attrs:
-            if name.startswith("on") or (tag == "meta" and name == "http-equiv"):
+            # srcset is refused, never parsed: a comma may belong to a candidate URL,
+            # so no split here could be sure to match the browser's reading.
+            if name.startswith("on") or (tag == "meta" and name == "http-equiv") or name.endswith("srcset"):
                 self.refused.append(f"{tag} {name}")
-            if value is None:
+            if value is None or name.endswith("srcset"):
                 continue
             if name in _LINK_ATTRS:
                 self.links.append(value)
-            elif name == "srcset":
-                self.links += [c.split()[0] for c in value.split(",") if c.split()]
             elif name in ("ping", "archive"):
                 self.links += value.split()
             else:
@@ -433,7 +434,7 @@ def shown_link_problems(base_url: str, selection, issue: dict, web_bytes: bytes)
     must be such a URL or a relative reference on the page's own origin; any
     URL in other attributes, text, CSS or comments, and in any issue string,
     must be one of them too; and what the edition never uses (scripts, event
-    handlers, <base>, meta http-equiv, embedded documents, CSS escapes) is refused."""
+    handlers, <base>, meta http-equiv, embedded documents, srcset, CSS escapes) is refused."""
     allowed = set(external_links(selection)) | {src.url for c in selection.rendered for src in c.record.sources}
     own = base_url.rstrip("/")
 

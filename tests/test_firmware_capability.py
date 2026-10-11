@@ -1421,7 +1421,8 @@ class PublicationInvariantTests(unittest.TestCase):
                                                        lambda web, _h=html_text: real(web).replace("</body>", _h + "</body>")):
                 with self.assertRaises(StageRefused) as refused:
                     stage_week(week, self.golden(), TEST_POLICY, [], self.GOLDEN_NOW, Checks(), "test")
-                self.assertIn("shows a link the link check was not given", "; ".join(refused.exception.problems))
+                said = "; ".join(refused.exception.problems)
+                self.assertTrue("shows a link the link check was not given" in said or "never uses" in said, said)
         self.assertTrue(stage_week(week, self.golden(), TEST_POLICY, [], self.GOLDEN_NOW, Checks(), "test"))
 
     def links(self, page: str, checked: str = "https://library.test/g/2/0", issue: dict = None) -> list:
@@ -1475,6 +1476,33 @@ class PublicationInvariantTests(unittest.TestCase):
         self.assertEqual(self.links('<a href="#golden-02-0">x</a><a href="https://dogear.example.org/2026-11-02/">e</a>'
                                     "<style>@font-face{src:url('../fonts/inter.woff2')}</style>"
                                     '<li><a href="https://source.test/s">source</a></li>'), [])
+
+    def test_codexs_srcset_is_refused_outright(self):
+        # Codex's probe: a comma can be part of a srcset candidate's URL, so the browser may
+        # read "https://library.test/g/2/0,changed" as one URL. The edition never uses
+        # srcset, so any is refused, whatever its quoting, case, spacing or candidates.
+        codex = '<img srcset="https://library.test/g/2/0,changed 1x">'
+        self.assertTrue(any("srcset" in p and "never uses" in p for p in self.links(codex)), self.links(codex))
+        for page in ('<img srcset="https://library.test/g/2/0 1x">',
+                     "<img srcset='https://library.test/g/2/0 1x'>",
+                     "<img srcset=https://library.test/g/2/0>",
+                     '<img SRCSET = "https://library.test/g/2/0 1x , https://library.test/g/2/0 2x">',
+                     '<img srcset="https://dogear.example.org/x.png 1x">',
+                     '<img srcset="../fonts/x.png">',
+                     '<img srcset="">',
+                     "<img srcset>",
+                     '<source srcset="https://library.test/g/2/0">',
+                     '<link rel="preload" imagesrcset="https://library.test/g/2/0 1x">'):
+            with self.subTest(page):
+                self.assertTrue(any("srcset" in p and "never uses" in p for p in self.links(page)), page)
+        # The other checks are unchanged: parentheses pass, an altered link fails, and
+        # normal output (no srcset) stages.
+        parens = "https://library.test/wiki/Book_(novel)"
+        self.assertEqual(self.links(f'<a class="cta" href="{parens}">Read</a>', checked=parens), [])
+        self.assertTrue(self.links('<a class="cta" href="https://library.test/g/2/0;">Read</a>'))
+        self.assertEqual(self.links('<a class="cta" href="https://library.test/g/2/0">Read</a>'), [])
+        self.assertTrue(stage_week(week_starting(self.GOLDEN_WEEK), self.golden(), TEST_POLICY, [], self.GOLDEN_NOW,
+                                   Checks(), "test"))
 
     def test_codexs_incomplete_selector_input_is_refused_and_needs_review(self):
         # Codex's probe: the exempt _read drops one record from what the selector reads,
