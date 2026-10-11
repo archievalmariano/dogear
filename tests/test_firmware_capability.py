@@ -1424,6 +1424,58 @@ class PublicationInvariantTests(unittest.TestCase):
                 self.assertIn("shows a link the link check was not given", "; ".join(refused.exception.problems))
         self.assertTrue(stage_week(week, self.golden(), TEST_POLICY, [], self.GOLDEN_NOW, Checks(), "test"))
 
+    def links(self, page: str, checked: str = "https://library.test/g/2/0", issue: dict = None) -> list:
+        selection = SimpleNamespace(rendered=[SimpleNamespace(record=SimpleNamespace(
+            link=SimpleNamespace(url=checked), sources=(SimpleNamespace(url="https://source.test/s"),)))])
+        return shown_link_problems("https://dogear.example.org", selection,
+                                   issue or {"editionUrl": "https://dogear.example.org/2026-11-02/"},
+                                   f"<html><body>{page}</body></html>".encode("utf-8"))
+
+    def test_codexs_altered_link_is_refused_and_an_unchanged_one_with_parentheses_passes(self):
+        # Codex's probe: the checked link is .../g/2/0; the page shows .../g/2/0; (a
+        # different URL). Values are compared whole and exactly, never trimmed.
+        self.assertEqual(self.links('<a class="cta" href="https://library.test/g/2/0">Read</a>'), [])
+        self.assertEqual(self.links('<a class="cta" href="https://library.test/g/2/0;">Read</a>'),
+                         ["shows a link the link check was not given: https://library.test/g/2/0;"])
+        # An unchanged, checked URL with parentheses passes, in an attribute or in text.
+        parens = "https://library.test/wiki/Book_(novel)"
+        self.assertEqual(self.links(f'<a class="cta" href="{parens}">Read</a><p>{parens}</p>', checked=parens), [])
+        self.assertTrue(self.links(f'<a class="cta" href="{parens})">Read</a>', checked=parens))
+        altered = {
+            "a trailing period": '<a href="https://library.test/g/2/0.">x</a>',
+            "in text, with a semicolon": "<p>https://library.test/g/2/0;</p>",
+            "a tab inside": '<a href="https://library.test/g/2/\t0">x</a>',
+            "backslashes for slashes": '<a href="https:\\\\evil.example/x">x</a>',
+            "a javascript: link": "<a href=\"javascript:location='https://library.test/g/2/0'\">x</a>",
+            "another scheme": '<a href="ftp://library.test/g/2/0">x</a>',
+            "the scheme's case": '<a href="HTTPS://library.test/g/2/0">x</a>',
+            "srcset": '<img srcset="https://library.test/g/2/0; 1x">',
+            "a CSS url(": '<div style="background:url(https://library.test/g/2/0)"></div>',
+            "an issue string": None,
+        }
+        for name, page in altered.items():
+            with self.subTest(name):
+                if page is None:
+                    self.assertTrue(self.links("", issue={"editionUrl": "https://dogear.example.org/2026-11-02/",
+                                                          "note": "https://library.test/g/2/0;"}))
+                else:
+                    self.assertTrue(self.links(page), name)
+        refused = {
+            "<base>": '<base href="https://dogear.example.org/">',
+            "<script>": "<script>1</script>",
+            "an event handler": '<p onclick="go()">x</p>',
+            "meta refresh": '<meta http-equiv="refresh" content="0">',
+            "a CSS escape": '<style>a{background:url(\\68ttps://evil.example)}</style>',
+            "an embedded document": '<iframe src="https://dogear.example.org/x"></iframe>',
+        }
+        for name, page in refused.items():
+            with self.subTest(name):
+                self.assertTrue(any("never uses" in p for p in self.links(page)), name)
+        # What the edition does use stays valid: anchors, its own URLs, relative fonts, sources.
+        self.assertEqual(self.links('<a href="#golden-02-0">x</a><a href="https://dogear.example.org/2026-11-02/">e</a>'
+                                    "<style>@font-face{src:url('../fonts/inter.woff2')}</style>"
+                                    '<li><a href="https://source.test/s">source</a></li>'), [])
+
     def test_codexs_incomplete_selector_input_is_refused_and_needs_review(self):
         # Codex's probe: the exempt _read drops one record from what the selector reads,
         # while the canonical file stays intact.

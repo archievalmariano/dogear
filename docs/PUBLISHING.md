@@ -2201,9 +2201,14 @@ quiet, week and policy modules, `pubdata.py`, the storage clients (`r2.py`,
 For (2): `stage`, `freeze`, `verify_staged`, `run_checks`, `external_links`,
 `artifact_problems`, `device_limit_problems`, `shown_link_problems` (every
 outside URL the artifacts carry is one the link check was given, a source the
-rendered record carries, or DOGEAR's own; the page is parsed as HTML, so every
-attribute quoting and every URL in srcset, style, scripts, meta refresh and
-text is seen), the web renderer (all of `web.py`), the link, fit and served-host
+rendered record carries, or DOGEAR's own, compared as the complete value,
+exactly, never trimmed: a link attribute's whole value (any quoting, entities
+decoded; only the surrounding whitespace browsers ignore is dropped) must be
+such a URL or a relative reference on the page's own origin, and any URL in
+other attributes, text, CSS, comments or issue strings is taken whole; what the
+edition never uses, scripts, event handlers, `<base>`, meta `http-equiv`,
+embedded documents and CSS escapes, is refused), the web renderer (all of
+`web.py`), the link, fit and served-host
 readers (all of `checks.py` and `routes.py`), the fit renderer
 (`mock/render_dogear.py`) and the device issue builder it shares typesetting
 with (all of `issue.py`), the served-output checks (`_outstanding`,

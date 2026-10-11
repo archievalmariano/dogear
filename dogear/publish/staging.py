@@ -369,39 +369,76 @@ def artifact_problems(week: IssueWeek, base_url: str, selection, issue: dict, is
         device_limit_problems(issue, issue_bytes)
 
 
-# An absolute or protocol-relative URL anywhere in a value (an attribute, a srcset,
-# a style's url(...), a meta refresh, a script, the page's text, an issue string).
-_URL = re.compile(r"(?i)(?:https?:)?//[^\s\"'<>()\\,]+")
+# A URL token in free text, a CSS value or an issue string: from its scheme (or a
+# protocol-relative //) to the next whitespace, quote or angle bracket. Taken whole,
+# never trimmed, and compared exactly.
+_URL = re.compile(r"(?i)(?:[a-z][a-z0-9+.-]*:)?//[^\s\"'<>]*")
+# A relative reference that stays on the page's own origin: no scheme, no
+# backslash (browsers read it as a slash), not protocol-relative.
+_RELATIVE = re.compile(r"[A-Za-z0-9._~%/#?=&+-]*")
+# Attributes whose whole value is a URL (srcset, ping and archive hold several).
+_LINK_ATTRS = frozenset({"href", "src", "action", "formaction", "poster", "cite", "data", "background", "longdesc",
+                         "manifest", "icon", "xlink:href", "codebase", "usemap", "profile"})
+# What the edition never uses, refused outright: each can reach or hide a URL.
+_REFUSED_TAGS = frozenset({"script", "base", "iframe", "frame", "frameset", "object", "embed", "applet", "noscript",
+                           "template", "svg", "math"})
 
 
 class _PageValues(HTMLParser):
-    """Every attribute value (double-, single- or un-quoted; entities decoded), and
-    every run of text, style or script, as the browser would read them."""
+    """The page as a browser reads it: the complete values of link attributes
+    (whatever their quoting, entities decoded), every other attribute value and
+    run of text, style or comment, and what the edition never uses."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
+        self.links: list = []
         self.values: list = []
+        self.refused: list = []
 
     def handle_starttag(self, tag, attrs) -> None:
-        self.values += [value for _name, value in attrs if value]
+        if tag in _REFUSED_TAGS:
+            self.refused.append(f"<{tag}>")
+        for name, value in attrs:
+            if name.startswith("on") or (tag == "meta" and name == "http-equiv"):
+                self.refused.append(f"{tag} {name}")
+            if value is None:
+                continue
+            if name in _LINK_ATTRS:
+                self.links.append(value)
+            elif name == "srcset":
+                self.links += [c.split()[0] for c in value.split(",") if c.split()]
+            elif name in ("ping", "archive"):
+                self.links += value.split()
+            else:
+                self.values.append(value)
+                if name == "style" and "\\" in value:
+                    self.refused.append("a CSS escape in a style attribute")
 
     def handle_data(self, data) -> None:
+        self.values.append(data)
+        if self.cdata_elem == "style" and "\\" in data:
+            self.refused.append("a CSS escape in a stylesheet")
+
+    def handle_comment(self, data) -> None:
         self.values.append(data)
 
 
 def shown_link_problems(base_url: str, selection, issue: dict, web_bytes: bytes) -> list:
     """Every outside URL the artifacts carry is one the link check was given
     (external_links), a source the rendered record itself carries (listed for
-    provenance, not link-checked by design), or DOGEAR's own: so no rendering
-    can show a reading link the link check never saw. The page is parsed as
-    HTML, so every attribute quoting, and URLs inside srcset, style, scripts and
-    text, are seen; every issue string is searched the same way."""
-    checked = set(external_links(selection))
-    sources = {src.url for c in selection.rendered for src in c.record.sources}
+    provenance, not link-checked by design), or DOGEAR's own, compared as the
+    complete value, exactly: so no rendering can show a link the link check never
+    saw, nor an altered form of one. The page is parsed as HTML: a link
+    attribute's whole value (browsers ignore only its surrounding whitespace)
+    must be such a URL or a relative reference on the page's own origin; any
+    URL in other attributes, text, CSS or comments, and in any issue string,
+    must be one of them too; and what the edition never uses (scripts, event
+    handlers, <base>, meta http-equiv, embedded documents, CSS escapes) is refused."""
+    allowed = set(external_links(selection)) | {src.url for c in selection.rendered for src in c.record.sources}
     own = base_url.rstrip("/")
 
     def outside(url: str) -> bool:
-        return url not in checked and url not in sources and url != own and not url.startswith(own + "/")
+        return url not in allowed and url != own and not url.startswith(own + "/")
 
     def strings(value):
         if isinstance(value, dict):
@@ -418,9 +455,14 @@ def shown_link_problems(base_url: str, selection, issue: dict, web_bytes: bytes)
     page.feed(web_bytes.decode("utf-8", "replace"))
     page.close()
     found = set()
+    for value in page.links:
+        url = value.strip(" \t\n\f\r")
+        if not (_RELATIVE.fullmatch(url) and not url.startswith("//")):
+            found.add(url)
     for text in list(strings(issue)) + page.values:
-        found.update(m.rstrip(".;:!?") for m in _URL.findall(text))
-    return [f"shows a link the link check was not given: {u}" for u in sorted(found) if outside(u)]
+        found.update(_URL.findall(text))
+    problems = [f"shows a link the link check was not given: {u}" for u in sorted(found) if outside(u)]
+    return problems + [f"the page carries {r}, which the edition never uses" for r in sorted(set(page.refused))]
 
 
 def verify_staged(staged: Staged, inputs: StageInputs, policy: PublicationPolicy, history: list,
