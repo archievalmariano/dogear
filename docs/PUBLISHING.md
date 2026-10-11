@@ -2200,8 +2200,10 @@ quiet, week and policy modules, `pubdata.py`, the storage clients (`r2.py`,
 
 For (2): `stage`, `freeze`, `verify_staged`, `run_checks`, `external_links`,
 `artifact_problems`, `device_limit_problems`, `shown_link_problems` (every
-outside link the artifacts show is one the link check was given, a source
-the rendered record carries, or DOGEAR's own), the link, fit and served-host
+outside URL the artifacts carry is one the link check was given, a source the
+rendered record carries, or DOGEAR's own; the page is parsed as HTML, so every
+attribute quoting and every URL in srcset, style, scripts, meta refresh and
+text is seen), the web renderer (all of `web.py`), the link, fit and served-host
 readers (all of `checks.py` and `routes.py`), the fit renderer
 (`mock/render_dogear.py`) and the device issue builder it shares typesetting
 with (all of `issue.py`), the served-output checks (`_outstanding`,
@@ -2209,7 +2211,10 @@ with (all of `issue.py`), the served-output checks (`_outstanding`,
 
 For (3): all of `select.py` (slot bars, recognition tiers, composition, the
 quiet selector), `generate` and `quiet_occurrence` (which selector runs, with
-which bars and inputs), `_quiet_source`, all of `quiet_history.py` (the
+which bars and inputs), every selector input: `_read` and `freeze` (and
+`stage` refuses unless the frozen dataset and affinity are exactly the
+configured files), `_history`, all of `affinity.py`, and `_write_staged` (the
+staged copy promotion regenerates from); `_quiet_source`, all of `quiet_history.py` (the
 source, from history that is complete as well as valid: every registry
 revision has exactly one content line), and the re-check of every quiet
 exclusion on the revision's own bytes (`edition.quiet_exclusion_problems`).
@@ -2223,10 +2228,8 @@ surface or reviewed as not critical, with the reason, in
 `write_boundary_review.NOT_CRITICAL`. The test is behaviour, not when the code
 runs: could changing it make the system say "published", "verified" or "valid
 quiet issue" falsely? Only a reason that shows "no" keeps an entry off the
-surface: type aliases, scoring inputs the selector bounds (`_history`,
-`parse_affinity`), the browser page's markup (its links bound by
-`shown_link_problems`), staged files that are re-verified, input reads the
-eligibility guard re-checks, fonts, and the CLI's clash defaults.
+surface: three type aliases, the font files, and the two CLI defaults used
+only to refuse a conflicting flag.
 A new dependency fails until it is placed.
 
 Any change to the surface fails until the new fingerprint is recorded, even

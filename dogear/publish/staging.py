@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
-import html
 import json
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -298,6 +298,12 @@ def stage(week: IssueWeek, inputs: StageInputs, policy: PublicationPolicy, histo
     if policy.unset():
         raise StageRefused(week.start, [f"publication policy unset: {', '.join(policy.unset())}"])
     frozen = freeze(inputs, policy, history, now, quiet_source)
+    # The selector reads exactly the configured files: not a subset, not another copy.
+    for name, path, frozen_bytes in (("dataset", inputs.dataset, frozen.dataset_bytes),
+                                     ("affinity", inputs.affinity, frozen.affinity_bytes)):
+        canonical = Path(path).read_bytes() if Path(path).is_file() else b""
+        if frozen_bytes != canonical:
+            raise StageRefused(week.start, [f"the frozen {name} is not the configured {name} file"])
     if mode == "production":
         synthetic = synthetic_records(frozen.dataset_bytes.decode("utf-8", "replace"))
         if synthetic:  # the staging fixture, or any record marked like it, never reaches production
@@ -363,26 +369,44 @@ def artifact_problems(week: IssueWeek, base_url: str, selection, issue: dict, is
         device_limit_problems(issue, issue_bytes)
 
 
-_HREF = re.compile(rb'(?:href|src)\s*=\s*"([^"]*)"', re.IGNORECASE)
+# An absolute or protocol-relative URL anywhere in a value (an attribute, a srcset,
+# a style's url(...), a meta refresh, a script, the page's text, an issue string).
+_URL = re.compile(r"(?i)(?:https?:)?//[^\s\"'<>()\\,]+")
+
+
+class _PageValues(HTMLParser):
+    """Every attribute value (double-, single- or un-quoted; entities decoded), and
+    every run of text, style or script, as the browser would read them."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.values: list = []
+
+    def handle_starttag(self, tag, attrs) -> None:
+        self.values += [value for _name, value in attrs if value]
+
+    def handle_data(self, data) -> None:
+        self.values.append(data)
 
 
 def shown_link_problems(base_url: str, selection, issue: dict, web_bytes: bytes) -> list:
-    """Every outside URL the artifacts show is one the link check was given
+    """Every outside URL the artifacts carry is one the link check was given
     (external_links), a source the rendered record itself carries (listed for
     provenance, not link-checked by design), or DOGEAR's own: so no rendering
-    can show a reading link the link check never saw."""
+    can show a reading link the link check never saw. The page is parsed as
+    HTML, so every attribute quoting, and URLs inside srcset, style, scripts and
+    text, are seen; every issue string is searched the same way."""
     checked = set(external_links(selection))
     sources = {src.url for c in selection.rendered for src in c.record.sources}
     own = base_url.rstrip("/")
 
     def outside(url: str) -> bool:
-        if not url.lower().startswith(("http://", "https://", "//")):
-            return False  # relative: the page's own assets and anchors
         return url not in checked and url not in sources and url != own and not url.startswith(own + "/")
 
     def strings(value):
         if isinstance(value, dict):
-            for v in value.values():
+            for k, v in value.items():
+                yield k
                 yield from strings(v)
         elif isinstance(value, list):
             for v in value:
@@ -390,9 +414,13 @@ def shown_link_problems(base_url: str, selection, issue: dict, web_bytes: bytes)
         elif isinstance(value, str):
             yield value
 
-    shown = [v for v in strings(issue) if v.lower().startswith(("http://", "https://", "//"))]
-    shown += [html.unescape(m.decode("utf-8", "replace")) for m in _HREF.findall(web_bytes)]
-    return [f"shows a link the link check was not given: {u}" for u in sorted(set(shown)) if outside(u)]
+    page = _PageValues()
+    page.feed(web_bytes.decode("utf-8", "replace"))
+    page.close()
+    found = set()
+    for text in list(strings(issue)) + page.values:
+        found.update(m.rstrip(".;:!?") for m in _URL.findall(text))
+    return [f"shows a link the link check was not given: {u}" for u in sorted(found) if outside(u)]
 
 
 def verify_staged(staged: Staged, inputs: StageInputs, policy: PublicationPolicy, history: list,

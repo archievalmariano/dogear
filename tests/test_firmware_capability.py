@@ -1391,6 +1391,71 @@ class PublicationInvariantTests(unittest.TestCase):
                                              staged.web_bytes),
                          ["shows a link the link check was not given: https://unchecked.example.net/y"])
 
+    GOLDEN_WEEK, GOLDEN_NOW = dt.date(2026, 11, 2), dt.datetime(2026, 10, 30, 10, 2, tzinfo=MANILA)
+
+    def golden(self):
+        golden = REPO / "tests" / "golden"
+        return StageInputs(golden / "regular-dataset.json", Path("/nonexistent.json"), "https://dogear.example.org",
+                           "dogear@golden")
+
+    def test_codexs_single_quoted_link_is_refused_and_the_renderer_needs_review(self):
+        # Codex's probe: the exempt renderer adds a single-quoted outside link; it went
+        # through staging and promotion unchecked. The renderer is now on the surface...
+        self.assertIn(repr(("dogear/web.py", "")), self.changed(
+            "dogear/web.py", "def render_web(web: dict) -> str:\n",
+            "def render_web(web: dict) -> str:\n    web = dict(web)\n"))
+        # ... and the link binding reads the page as HTML, every quoting and place a URL can sit.
+        import dogear.publish.staging as staging_module
+        real = staging_module.render_web
+        week = week_starting(self.GOLDEN_WEEK)
+        for name, html_text in (
+                ("single-quoted", "<a class='cta' href='https://unchecked.example.net/q'>Read</a>"),
+                ("unquoted", "<a href=https://unchecked.example.net/q>Read</a>"),
+                ("entity-encoded", '<a href="&#104;ttps://unchecked.example.net/q">Read</a>'),
+                ("srcset", '<img srcset="//unchecked.example.net/q 1x">'),
+                ("style url()", "<div style=\"background:url('https://unchecked.example.net/q')\"></div>"),
+                ("meta refresh", '<meta http-equiv="refresh" content="0;url=https://unchecked.example.net/q">'),
+                ("script", "<script>location='https://unchecked.example.net/q'</script>"),
+                ("text", "<p>https://unchecked.example.net/q</p>")):
+            with self.subTest(name), mock.patch.object(staging_module, "render_web",
+                                                       lambda web, _h=html_text: real(web).replace("</body>", _h + "</body>")):
+                with self.assertRaises(StageRefused) as refused:
+                    stage_week(week, self.golden(), TEST_POLICY, [], self.GOLDEN_NOW, Checks(), "test")
+                self.assertIn("shows a link the link check was not given", "; ".join(refused.exception.problems))
+        self.assertTrue(stage_week(week, self.golden(), TEST_POLICY, [], self.GOLDEN_NOW, Checks(), "test"))
+
+    def test_codexs_incomplete_selector_input_is_refused_and_needs_review(self):
+        # Codex's probe: the exempt _read drops one record from what the selector reads,
+        # while the canonical file stays intact.
+        import dogear.publish.staging as staging_module
+        real_read = staging_module._read
+
+        def drop_one(path):
+            data = real_read(path)
+            if Path(path) == self.golden().dataset:
+                raw = json.loads(data)
+                raw["records"] = raw["records"][1:]
+                data = json.dumps(raw).encode("utf-8")
+            return data
+        with mock.patch.object(staging_module, "_read", drop_one), self.assertRaises(StageRefused) as refused:
+            stage_week(week_starting(self.GOLDEN_WEEK), self.golden(), TEST_POLICY, [], self.GOLDEN_NOW, Checks(), "test")
+        self.assertIn("the frozen dataset is not the configured dataset file", refused.exception.problems)
+        # And every selector input needs review to change: the reader, the binding, the
+        # history and the preferences it scores against, and the staged copy promotion reads.
+        probes = (
+            (self.STAGING, "        return Path(path).read_bytes()", "        return Path(path).read_bytes()[:-1]", "_read"),
+            (self.STAGING, "        if frozen_bytes != canonical:", "        if False:", "stage"),
+            (self.PUBLISHER, "            if dt.date.fromisoformat(week) >= before:\n                continue",
+             "            if True:\n                continue", "Publisher._history"),
+            (self.PUBLISHER, "        self.pubdata.write_staged(staged.week, staged.files())",
+             "        self.pubdata.write_staged(staged.week, dict(staged.files()))", "Publisher._write_staged"),
+            ("dogear/affinity.py", "def parse_affinity(text: str) -> Affinity:\n",
+             "def parse_affinity(text: str) -> Affinity:\n    text = '{}'\n", ""),
+        )
+        for rel, old, new, region in probes:
+            with self.subTest(region=f"{rel} {region}"):
+                self.assertIn(repr((rel, region)), self.changed(rel, old, new))
+
     def test_codexs_zero_slot_bars_need_review(self):
         # Codex's probe: generate hands the quiet selector zero slot bars; regeneration
         # would faithfully reproduce the wrong bytes, so the source must not change unreviewed.

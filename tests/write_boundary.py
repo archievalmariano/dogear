@@ -141,8 +141,7 @@ SURFACE = (
     ("dogear/publish/eligibility.py", ""),
     ("dogear/week.py", ""),
     ("dogear/dataset.py", ""),  # records and their approvals, which eligibility compares
-    ("dogear/affinity.py", "<bindings>"),
-    ("dogear/affinity.py", "normalize"),
+    ("dogear/affinity.py", ""),  # the owner's preferences: a quiet scoring input
     ("dogear/publish/edition.py", ""),
     ("dogear/synthetic.py", ""),
     ("dogear/quiet.py", ""),
@@ -151,6 +150,7 @@ SURFACE = (
     # typesetting it shares with the issue), the served-output readers
     ("dogear/select.py", ""),
     ("dogear/issue.py", ""),  # the device issue, and the typesetting the fit check shares
+    ("dogear/web.py", ""),  # the web edition, whose every link must have been checked
     ("dogear/publish/checks.py", ""),
     ("dogear/publish/routes.py", ""),
     ("mock/render_dogear.py", ""),
@@ -162,6 +162,8 @@ SURFACE = (
     ("dogear/publish/staging.py", "<bindings>"),
     ("dogear/publish/publisher.py", "Publisher._stage"),
     ("dogear/publish/publisher.py", "Publisher._uploads"),
+    ("dogear/publish/publisher.py", "Publisher._history"),  # the published weeks the selector scores against
+    ("dogear/publish/publisher.py", "Publisher._write_staged"),  # the staged inputs promotion regenerates from
     ("dogear/publish/staging.py", "stage"),
     ("dogear/publish/staging.py", "freeze"),
     ("dogear/publish/staging.py", "generate"),
@@ -170,7 +172,9 @@ SURFACE = (
     ("dogear/publish/staging.py", "external_links"),
     ("dogear/publish/staging.py", "LinkReport"),
     ("dogear/publish/staging.py", "shown_link_problems"),
-    ("dogear/publish/staging.py", "_HREF"),
+    ("dogear/publish/staging.py", "_URL"),
+    ("dogear/publish/staging.py", "_PageValues"),
+    ("dogear/publish/staging.py", "_read"),
     ("dogear/publish/staging.py", "verify_staged"),
     ("dogear/publish/staging.py", "Staged"),
     ("dogear/publish/staging.py", "StageInputs"),

@@ -144,11 +144,13 @@ REVIEWED = {
     Finding('dogear/publish/r2.py', 'R2Store.get', 'write-call', 'self._request', 'body[0]', '2c9474fd159b344d', 1),
     # status, headers, body = self._request('PUT', key, bytes(data), extra)
     Finding('dogear/publish/r2.py', 'R2Store.put', 'write-call', 'self._request', 'body[3]', '767de7e1197aece9', 1),
-    # dogear/publish/staging.py: exceptions' own constructors
+    # dogear/publish/staging.py: exceptions' own constructors, and the page parser's
     # super().__init__(f'{week}: ' + '; '.join(problems))
     Finding('dogear/publish/staging.py', 'StageRefused.__init__', 'reflection', "super().__init__(f'{week}: ' + '; '.join(problems))", 'body[0]', '943e1394c60cd752', 1),
     # super().__init__(week, problems)
     Finding('dogear/publish/staging.py', 'WeekHeld.__init__', 'reflection', 'super().__init__(week, problems)', 'body[0]', 'f139b8521720e8af', 1),
+    # super().__init__(convert_charrefs=True)
+    Finding('dogear/publish/staging.py', '_PageValues.__init__', 'reflection', 'super().__init__(convert_charrefs=True)', 'body[0]', '2cb1a00e4a7ad3c5', 1),
     # dogear/publish/store.py: the in-memory test store names the operation for its fault hook
     # action = self._fault('put', key, data)
     Finding('dogear/publish/store.py', 'MemoryStore.put', 'write-name', 'put', 'body[1]', 'ecfc3197db42b3ba', 1),
@@ -159,6 +161,11 @@ REVIEWED = {
     Finding('dogear/synthetic.py', '', 'import', 'urllib.parse', '-', '7f6d2de520ba06be', 1),
     # import sys
     Finding('dogear/synthetic.py', '', 'rebinding', 'sys (import)', '-/body[0]', 'f7252e3c1dbe1d5e', 1),
+    # dogear/web.py: builds its font list (_FONTS) in a module-level loop
+    # _FONTS += [('Newsreader', f'newsreader-latin-wght-{_style}', _style, _FONTS[0][3]), ('Newsreader', f'newsreader-l
+    Finding('dogear/web.py', '', 'rebinding', '_FONTS (augassign)', '-/body[0]', 'e32384c8837729b8', 1),
+    # for _style in ('normal', 'italic'):
+    Finding('dogear/web.py', '', 'rebinding', '_style (for)', '-', 'dee1b3ad76a31592', 1),
     # tools/chain_check.py: the chain check opens a TLS connection (read only); a constant hasattr
     # import socket
     Finding('tools/chain_check.py', '', 'import', 'socket', '-', '9df267ed6eef4f61', 1),
@@ -208,32 +215,18 @@ REVIEWED = {
 # Package names the surface uses that are not on it, each reviewed as unable to
 # change what a write makes visible, eligibility, quiet presentation or the capability.
 NOT_CRITICAL = {
-    ('dogear/affinity.py', 'Affinity'):
-        'the preference levels (see parse_affinity)',
-    ('dogear/affinity.py', 'EMPTY'):
-        'no preferences (see parse_affinity)',
-    ('dogear/affinity.py', 'parse_affinity'):
-        "parses the owner's preference file into levels: a scoring input. The protected selector turns a level into its own bounded lift (AFFINITY_LIFT) under its own bars, and an unknown level fails selection",
     ('dogear/cli.py', 'DEFAULT_AFFINITY'):
-        'used only to refuse --affinity alongside --target; TARGETS fixes the paths',
+        'used only to refuse --affinity alongside --target; TARGETS (protected) fixes the paths',
     ('dogear/cli.py', 'DEFAULT_DATASET'):
-        'used only to refuse --dataset alongside --target; TARGETS fixes the paths',
+        'used only to refuse --dataset alongside --target; TARGETS (protected) fixes the paths',
     ('dogear/publish/cli.py', 'FONTS'):
-        'the font files uploaded beside the web page',
+        'the font files uploaded beside the web page: no check, record or selection reads them',
     ('dogear/publish/publisher.py', 'Guard'):
         'the guard type alias, for annotations only',
-    ('dogear/publish/publisher.py', 'Publisher._history'):
-        'the published weeks the selector scores against (its recent-repeat penalty): a scoring input. It cannot admit an excluded quiet item (exclusions come from the protected quiet source and are re-checked on the bytes), and it decides no publication, verification or currentness',
-    ('dogear/publish/publisher.py', 'Publisher._write_staged'):
-        "saves Friday's staged files for promotion; verify_staged (protected) trusts none of them: inputs, provenance, regeneration, eligibility, edition, quiet rules and every check are redone",
     ('dogear/publish/staging.py', 'FitChecker'):
         'a checker type alias, for annotations only',
     ('dogear/publish/staging.py', 'LinkChecker'):
         'a checker type alias, for annotations only',
-    ('dogear/publish/staging.py', '_read'):
-        "reads the input files to freeze; any record it returned that is not the dataset's own fails the write-time eligibility guard, which re-reads the dataset itself and compares approved fingerprints",
-    ('dogear/web.py', 'render_web'):
-        "the browser page's markup and wording: presentation. Every outside link it shows must be one the link check was given or the record's own source (shown_link_problems, protected); the device fit concerns the device issue (issue.py, protected), not this page",
 }
 
 PROTECTED = {
@@ -296,31 +289,35 @@ PROTECTED = {
     ('dogear/publish/eligibility.py', ''): '0975d75936707113959f78362a6fc4820f2856baeedad8287a7f6871c01d31f5',
     ('dogear/week.py', ''): '4087294013e6a65914a3387e8607b2efa5331f1ddfd0926b6f538b720eecc9b9',
     ('dogear/dataset.py', ''): '59c2852e0ca0e622025570cfb9056985374a3ceadea530eb9cc9ea97253287ce',
-    ('dogear/affinity.py', '<bindings>'): '1bbb970d77d7db74158136629fa5710f5364b58a82934f762eec29bd51483d9a',
-    ('dogear/affinity.py', 'normalize'): '85d6ec7a6892838d43926beaaea76461490e2cfe33f8c6122a93f70616a1bc53',
+    ('dogear/affinity.py', ''): 'f12f6045be75567e9492b6bdd1551e019326ddf894a49eefec0bc1ffddbb4688',
     ('dogear/publish/edition.py', ''): '06c4032e3c90292c94b7a176725df4089dd718707a8c9623ae2f0daafee9dfe3',
     ('dogear/synthetic.py', ''): '9298499ee140b9ba1e456a910dd3b265bd88165489ff3fa9dc29c896be944fe3',
     ('dogear/quiet.py', ''): '75727c0a54d4e9958e0d67937250a4476b30d979d2d2592689534044bb99128d',
     ('dogear/select.py', ''): '6b5d1449d6b7d092a0c5d820e501f538beefd5534f832a584c4d7f8f14a93b53',
     ('dogear/issue.py', ''): 'b7fe3de28ccd6537f83ac05d4482ae061e5680c087d594e15b17732969d8cee3',
+    ('dogear/web.py', ''): 'f9ff5edbc695f3d7c2cc147811cfd94233f1e895084c9acc4ca49a0cbd99b1f0',
     ('dogear/publish/checks.py', ''): '5b6f5ff4a9125ead387bbcc9d6921501de650408b3fff4c50272c39e79e748df',
     ('dogear/publish/routes.py', ''): 'a25019c047bd898289762d45dfd6782fb803894894697125f1809c2f95a5c15d',
     ('mock/render_dogear.py', ''): '0fa736f6645b2b19b9356e21a06195dc0dac0c708f088216cd27d92eb50389a7',
     ('dogear/publish/publisher.py', 'Publisher._quiet_source'): 'dd0bbf2bea4fb7c527adfc28f3c4d6f1ff4b1c8f59ccab5a9a0af53be0e37ed5',
     ('dogear/publish/quiet_history.py', ''): 'cb19b7a56af8ad4398a104be5559393bc2937b41f1ef7905768573ffbd4a50c5',
     ('dogear/publish/pubdata.py', ''): '841baee953da25a57de288f6190fb734e99d028cc42e4dcc108dad0dd36597da',
-    ('dogear/publish/staging.py', '<bindings>'): '9423a2b8a415536dbe7c6e36f695c248c1eb2d58a09d8fd79019bab8e5439f5d',
+    ('dogear/publish/staging.py', '<bindings>'): '863e651ad20a99df8da764e0d040ba9c644959f946a1688476fc331ae9135688',
     ('dogear/publish/publisher.py', 'Publisher._stage'): '7efdc9c380eacbb35839614be878edfb703ac3710b79a227f5d123080710bf82',
     ('dogear/publish/publisher.py', 'Publisher._uploads'): '4c387adafce21110a9cc13fe14f1f04ed51e976f668533bc109a362baa6fb14b',
-    ('dogear/publish/staging.py', 'stage'): 'c64da939580e581d396ca59446476daaaebd5fc8740255a3c5ce2f661d80e726',
+    ('dogear/publish/publisher.py', 'Publisher._history'): '69731475d3e16c36c4701f5a14a3395ebce86ab9d86b76443e9b73df94c33c6b',
+    ('dogear/publish/publisher.py', 'Publisher._write_staged'): '6003e83628719d859fae046a6ea1396d10138ee4cb1d18188b0b1cf438c9d688',
+    ('dogear/publish/staging.py', 'stage'): 'f429852bee3e9ba3c83df233f2a9229ded997cd04d2a26ae167f1eaf93cc0a4c',
     ('dogear/publish/staging.py', 'freeze'): '5742b77284efa26df947ba5a16a0a513f093b43eb28955d4db427cb876faad65',
     ('dogear/publish/staging.py', 'generate'): '0fa0a6c37b066ab25f7b634c2c17bf6b954720859c4e11a5ac766c789e9afda1',
     ('dogear/publish/staging.py', 'quiet_occurrence'): '8004991e9284a1b8ec0ee64de256e6ea449d40ac70e0217bd3a02d29bb4f4c6c',
     ('dogear/publish/staging.py', 'run_checks'): 'a3f0318e54778f970602229f2feb80b0a56bda0842f41fab9edce04263d26782',
     ('dogear/publish/staging.py', 'external_links'): 'b181ddc66e762be6f54380223783d9408603dd3222e8e34e35d7b22eed93eb5f',
     ('dogear/publish/staging.py', 'LinkReport'): '47839a3f5ce299745612442cc5583ae100a8e094d18dac9ad3ee10a9f692921e',
-    ('dogear/publish/staging.py', 'shown_link_problems'): '9cf893cbdb865d97d887f753a755126e27d7a444a5ecd405158a2d0bb19f7336',
-    ('dogear/publish/staging.py', '_HREF'): '4300ae5056dff4a3d0283b121be62038f2e5407308ea94255057c42630c79a8c',
+    ('dogear/publish/staging.py', 'shown_link_problems'): 'f30c262424d13db913f5e0da10efe3a7d749763918363347b175a61eeafaa9df',
+    ('dogear/publish/staging.py', '_URL'): '8e0eacd411a372a8ab511b6578ec10143966c71256fc4e8e4ab2d081af13640c',
+    ('dogear/publish/staging.py', '_PageValues'): '5d9b905478aaf22d2d5472c1b22d4a7ca315543de117fe9e3ffa3025ef2ff9be',
+    ('dogear/publish/staging.py', '_read'): '3d77c69b98b962c578b8afa82a853ef3fb7a8ab2cd6a2b0a3ee0c5aed70b445a',
     ('dogear/publish/staging.py', 'verify_staged'): '95c078cfacb816dcd2e302a599e90cfa55ffc955036303e3eaacc7f4d775e210',
     ('dogear/publish/staging.py', 'Staged'): '4081b879038ffc371a42d35df3d375481c13c372735108194a869311098ef21a',
     ('dogear/publish/staging.py', 'StageInputs'): '6066bcd07918e93a1d0cffcfdb1376c3054660ea6f4df871edab6090f31b5052',
@@ -347,7 +344,7 @@ PROTECTED = {
     ('dogear/publish/cli.py', '_apply_target'): '0b8c75dafb4a622648786dec51a3b6b06f871f5ef1cbcdf7c1fc6f6af3928627',
     ('dogear/publish/cli.py', '_pairing_problem'): '6e3d2c9f0db2558ce01e86fe65975bcaaceff5b533763f4c0100b4c8beed51e8',
     ('dogear/publish/cli.py', '_configure'): '2c40824205e389361f335fdea80a5523d64290ddca46d9ac517266c898d45786',
-    ('tests/write_boundary.py', ''): 'f49014baa93f90cd6470d682f22e4e440a336745951b217410d20d3475f734e5',
+    ('tests/write_boundary.py', ''): 'd98b9be079a4b02f3dacbe7fc899499af8630dc774d8d9223fa9b91b471f58a6',
     ('tests/test_firmware_capability.py', 'RegistryWriteBoundaryTests'): 'c4a0b639040ff82ba7ca910f93bdc8a3cb0cf449f3e3ece6de7377789bcda876',
     ('tests/test_firmware_capability.py', 'SourceReviewGuardTests'): 'f081a01b5abf841fd514636ad2c522a530d2dc59b1e72575a65a61ffa59c9da7',
     ('tests/test_firmware_capability.py', 'BindingAndSurfaceTests'): 'b30dc384ffcda76b0d2c1a37f1b5ed0f8d55ee1458d149dc8e96f65c5ecc1b0d',
@@ -355,10 +352,10 @@ PROTECTED = {
     ('tests/test_firmware_capability.py', 'LAMBDA_REBINDING'): 'bb7893ac6cc38e35e83e6e16adfb2b8ad8811b44dc01153a0d899299ad571492',
     ('tests/test_firmware_capability.py', 'CliHandoffTests'): '2db490a4454289face410dca4a08057a94f89bb07efead88aebeedf6e0d1bdd2',
     ('tests/test_firmware_capability.py', 'QuietVerificationSurfaceTests'): '42fb997cb831a730230a7eb9bc0079a402406a6b0bea6639a5f54d27cc2e44aa',
-    ('tests/test_firmware_capability.py', 'PublicationInvariantTests'): '48f8c296efccd9e1d822d97df1b76e9cf121bad6bac76556f6b9faa064ddfd74',
+    ('tests/test_firmware_capability.py', 'PublicationInvariantTests'): '5bef32a9a1ea054188dd932fba40f22107bbd18a982fb638768d37c805093f26',
     ('tests/test_firmware_capability.py', 'BYPASS'): '360bf4738a179e6101e83bb258dc1a735e478a18912482e0180f474463bab73e',
     ('tests/test_firmware_capability.py', 'QUALIFIED_BYPASS'): '79a282624e5670903ba58f896ab77ebb03a021b6a3fb9768f2fea351559a3fd9',
     ('tests/test_firmware_capability.py', 'BYPASS_VARIANTS'): '8cc6673364fe095c2f8b83c41850280d97366bd31377ba10c21f86f76bfbae43',
     ('tests/test_firmware_capability.py', 'NESTED_WRITER'): 'ab430d05252c7b86e244c9af7f55d9216fdb440add1bd098cea6e122891c8308',
-    ('<surface>', ''): 'fa9d46379850008eddcff57c1316bc3dffaceaf77a108f227a3eac73bb28b0d8',
+    ('<surface>', ''): '5f352a2a88735de6c918caf9e2ada0cf87364ef900f387cb54214695c689ed85',
 }
