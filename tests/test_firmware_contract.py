@@ -87,8 +87,16 @@ class SyncTests(unittest.TestCase):
             self.files[f"{fc.FONT_HEADERS}/{name}.h"] = font_header(name)
         self.commit_files()
         git(self.repo, "tag", "-a", TAG, "-m", "placeholder")
+        self.release()
+        # Today's contract stands in until a sync replaces it.
+        self.old = b'{"_note": "old", "firmwareCommit": "3d9d9e56", "limits": {}}\n'
+        (self.root / firmware.CONTRACT).parent.mkdir(parents=True, exist_ok=True)
+        (self.root / firmware.CONTRACT).write_bytes(self.old)
+
+    def release(self):
+        """The owner-approved record, and GitHub as the published release shows it,
+        for the commit the tag points at now."""
         self.tag_object, self.commit = git(self.repo, "rev-parse", TAG), git(self.repo, "rev-parse", f"{TAG}^{{commit}}")
-        # The owner-approved record, and GitHub as the published release shows it.
         self.record = verification_record(self.commit, self.tag_object)
         self.write_record()
         rel = self.record["release"]
@@ -107,10 +115,6 @@ class SyncTests(unittest.TestCase):
                 "event": "workflow_dispatch", "status": "completed", "conclusion": "success",
                 "head_branch": "release/v1.2.0-dogear", "head_sha": self.commit},
         }, self.sums)
-        # Today's contract stands in until a sync replaces it.
-        self.old = b'{"_note": "old", "firmwareCommit": "3d9d9e56", "limits": {}}\n'
-        (self.root / firmware.CONTRACT).parent.mkdir(parents=True, exist_ok=True)
-        (self.root / firmware.CONTRACT).write_bytes(self.old)
 
     def commit_files(self):
         for path, text in self.files.items():
@@ -240,6 +244,26 @@ class SyncTests(unittest.TestCase):
         elsewhere.write_bytes(self.record_path().read_bytes())
         with self.assertRaises(firmware.Invalid):
             fc.sync(TAG, elsewhere, fc.Clone(self.repo), self.gh, root=self.root)
+
+    def test_host_e3_coverage_is_mandatory_in_the_sync(self):
+        # The tagged firmware's acceptance schema without hostCovered: refused.
+        schema = json.loads(SCHEMA_BYTES)
+        schema.pop("hostCovered")
+        self.files[firmware.FIRMWARE_SCHEMA_PATH] = json.dumps(schema, indent=2) + "\n"
+        self.commit_files()
+        git(self.repo, "tag", "-f", "-a", TAG, "-m", "placeholder")
+        self.release()
+        self.assert_refused("hostCovered")
+
+    def test_the_release_must_carry_the_e3_host_evidence(self):
+        release = self.gh.gets[f"repos/{fc.REPO}/releases/tags/{TAG}"]
+        release["assets"] = [a for a in release["assets"] if a["name"] != firmware.E3_EVIDENCE]
+        self.assert_refused()
+        self.setUp()
+        record = json.loads(json.dumps(self.record))
+        record["acceptance"].pop("hostCovered")
+        self.write_record(record)
+        self.assert_refused("hostCovered")
 
     def test_firmware_without_schema_3_cannot_authorise(self):
         self.files[fc.LIMITS_HEADER] = header(dict(LIMITS, kIssueSchemaMax=2))

@@ -2083,12 +2083,19 @@ GitHub, no network. It says yes only if every one of these holds:
 - the contract, record and schema parse strictly (no duplicate key) and match
   their pinned hashes;
 - the record's release block names the tag, tag object, commit, release id,
-  candidate run, `SHA256SUMS.txt` digest and all 17 asset digests, with the
-  legacy copies equal to their sources;
+  candidate run, `SHA256SUMS.txt` digest and all 18 asset digests
+  (`e3-host-evidence.json` among them), with the legacy copies equal to their
+  sources;
+- the schema requires host E3 coverage (`hostCovered`: "Physical E3 is not a
+  release gate. Host E3 coverage is mandatory.", exactly the 28 required host
+  tests), and E3 is no package's physical check;
 - its acceptance record holds exactly the 8 packages in order, each with
-  exactly the checks the schema requires of it, each exactly `PASS`, each
-  package digest the release asset's; its canonical sha256 is
-  `acceptanceSha256`;
+  exactly the checks the schema requires of it (never a physical E3), each
+  exactly `PASS`, each package digest the release asset's; under
+  `hostCovered`, the candidate run's own E3 host evidence (the release's commit
+  and candidate run, this test definition, every required test `PASS`, none
+  skipped) whose canonical sha256 is the release's `e3-host-evidence.json`; its
+  canonical sha256 is `acceptanceSha256`;
 - both OTA entries passed;
 - `kIssueSchemaMax >= 3`, both flagship DOGEAR builds passed every quiet and
   regular-cache check, and `authorizes.quietWeek` says exactly that;

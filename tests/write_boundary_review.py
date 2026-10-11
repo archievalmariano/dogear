@@ -334,7 +334,7 @@ PROTECTED = {
     ('dogear/publish/staging.py', 'MAX_ENTRIES'): '45c16c6719db770c285141661468ab4f445940b967a4db96193a0ff4372c9bf3',
     ('dogear/publish/staging.py', 'provenance_bytes'): 'f83f0dcbbcdcd282554984a9a1b22dc26ed2aece59fba13df93c91ef74f6a12c',
     ('dogear/publish/staging.py', 'Checks'): '35b07399afe917c0a41b38de46c569e41cda53f451ce941d828cd1d74bd099a1',
-    ('dogear/publish/firmware.py', ''): '2e22a774f2f5049937d5652efc8eff9c3d95daab60d1e8cecc570e89c5e8d1c2',
+    ('dogear/publish/firmware.py', ''): '85084c2954763f62957c332b6ea489f91cc368c4e9084f79a0e8222ae05e90c2',
     ('dogear/publish/r2.py', ''): '4afa501dcb1fc56454c277eabf009e51b4d11993d6c30759e7cdaacb62f28aa2',
     ('dogear/publish/store.py', ''): 'ff1b9479259d27e55d008db7d74feca7a30ec040f111fcccece0c22c8257c233',
     ('dogear/publish/drills.py', ''): '6330a81c0a1cf4477c0ee057ef5ece5c909ef77364ac36dbbf0858958b3f6e51',

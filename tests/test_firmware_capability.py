@@ -45,14 +45,14 @@ from dogear.week import MANILA, week_starting
 from dogear.quiet import QuietSource
 
 try:
-    from tests.firmware_fixture import FIXTURES, SCHEMA, SyncedTree
+    from tests.firmware_fixture import FIXTURES, SCHEMA, SCHEMA_BYTES, SyncedTree
     from tests.write_boundary import (REPO, SCANNED, STATEMENTS, changed_regions, covered, dependencies, discover,
                                       regions, scan_repo, scan_source, surface, unreviewed)
     from tests.write_boundary_review import NOT_CRITICAL, PROTECTED, REVIEWED
     from tests.test_publish import W0, W1, W2, W3, Fixture, at
     from tests.test_quiet_week import QUIET, line_for, promote, published, regular_week, stored_issue
 except ImportError:
-    from firmware_fixture import FIXTURES, SCHEMA, SyncedTree
+    from firmware_fixture import FIXTURES, SCHEMA, SCHEMA_BYTES, SyncedTree
     from write_boundary import (REPO, SCANNED, STATEMENTS, changed_regions, covered, dependencies, discover,
                                 regions, scan_repo, scan_source, surface, unreviewed)
     from write_boundary_review import NOT_CRITICAL, PROTECTED, REVIEWED
@@ -130,7 +130,7 @@ class CapabilityTests(Tree):
     def test_checks_must_be_exactly_each_packages_checks_each_pass(self):
         gpd = lambda r: r["acceptance"]["packages"][7]["checks"]  # noqa: E731
         for mutate in (lambda r: gpd(r).pop("dogear-v3-q1-cover"),
-                       lambda r: gpd(r).pop("dogear-e3-cant-load"),
+                       lambda r: gpd(r).update({firmware.E3_CHECK: "PASS"}),  # physical E3: never a check
                        lambda r: gpd(r).update({"dogear-v2-cache-503": "FAIL"}),
                        lambda r: gpd(r).update({"dogear-v3-q2-pages": "pass"}),
                        lambda r: gpd(r).update({"extra": "PASS"}),
@@ -140,6 +140,65 @@ class CapabilityTests(Tree):
                 self.tree.edit_record(lambda r: (mutate(r), r.update(
                     acceptanceSha256=firmware.sha256(firmware.canonical(r["acceptance"])))))
                 self.assert_refused()
+
+    def test_host_e3_evidence_is_mandatory_and_bound_to_the_release(self):
+        e3 = firmware.E3_CHECK
+        ev = lambda r: r["acceptance"]["hostCovered"][e3]  # noqa: E731
+
+        def repin(r):  # the evidence asset and acceptanceSha256 follow the change: only the rule can refuse
+            if "hostCovered" in r["acceptance"] and e3 in r["acceptance"]["hostCovered"]:
+                r["release"]["assets"][firmware.E3_EVIDENCE] = firmware.sha256(firmware.canonical(ev(r)))
+            r["acceptanceSha256"] = firmware.sha256(firmware.canonical(r["acceptance"]))
+
+        mutations = {
+            "hostCovered deleted": lambda r: r["acceptance"].pop("hostCovered"),
+            "E3 entry deleted": lambda r: r["acceptance"]["hostCovered"].pop(e3),
+            "a test failed": lambda r: ev(r)["tests"].update({firmware.E3_HOST_TESTS[0]: "FAIL"}),
+            "a test missing": lambda r: ev(r)["tests"].pop(firmware.E3_HOST_TESTS[-1]),
+            "a test skipped": lambda r: ev(r).update(skipped=[firmware.E3_HOST_TESTS[5]]),
+            "another commit": lambda r: ev(r).update(commit="0" * 40),
+            "another run": lambda r: ev(r).update(candidateRun=4243),
+            "another definition": lambda r: ev(r).update(definitionSha256="0" * 64),
+            "another repository": lambda r: ev(r).update(repository="x/y"),
+            "physical E3 substituted": lambda r: (r["acceptance"].pop("hostCovered"), [
+                p["checks"].update({e3: "PASS"}) for p in r["acceptance"]["packages"] if p["package"] in
+                ("x4-gd", "x4pro-gpd")]),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(case=name):
+                self.tree.edit_record(lambda r: (mutate(r), repin(r)))
+                self.assert_refused()
+        # The evidence must be the release's own asset.
+        self.tree.edit_record(lambda r: (r["release"]["assets"].update({firmware.E3_EVIDENCE: "0" * 64}),
+                                         r.update(acceptanceSha256=firmware.sha256(
+                                             firmware.canonical(r["acceptance"])))))
+        self.assert_refused("E3 host evidence")
+        self.tree.write()
+        self.assertEqual(self.cap(), firmware.Capability(True, None))
+
+    def test_the_schema_requires_hostCovered_exactly(self):
+        e3 = firmware.E3_CHECK
+        mutations = {
+            "hostCovered deleted": lambda s: s.pop("hostCovered"),
+            "a required test removed": lambda s: s["hostCovered"][e3]["tests"].pop(),
+            "a test added": lambda s: s["hostCovered"][e3]["tests"].append("DogearPages.NavigationIsCircular"),
+            "the policy reworded": lambda s: s["hostCovered"][e3].update(policy="optional"),
+            "physical E3 back on a flagship": lambda s: (s["checks"].update({e3: "physical"}),
+                                                          s["packages"]["x4pro-gpd"]["checks"].append(e3)),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(case=name):
+                schema = json.loads(SCHEMA_BYTES)
+                mutate(schema)
+                with self.assertRaises(firmware.Invalid):
+                    firmware.check_schema(schema)
+        # A vendored copy without hostCovered, pinned as if synced, still refuses.
+        schema = json.loads(SCHEMA_BYTES)
+        schema.pop("hostCovered")
+        data = json.dumps(schema).encode()
+        (self.root / firmware.SCHEMA_COPY).write_bytes(data)
+        self.tree.edit_contract(lambda c: c["release"].update(acceptanceSchemaSha256=firmware.sha256(data)))
+        self.assert_refused("hostCovered")
 
     def test_the_record_must_bind_the_tag_run_sums_and_assets(self):
         rel = lambda r: r["release"]  # noqa: E731

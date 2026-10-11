@@ -30,8 +30,17 @@ def sums_text(files: dict) -> bytes:
     return "".join(f"{files[name]}  {name}\n" for name in sorted(files)).encode("ascii")
 
 
-def assets() -> dict:
+def e3_evidence(commit: str = COMMIT, run: int = RUN) -> dict:
+    """The candidate run's E3 host evidence, as candidate.py e3-evidence writes it."""
+    return {"schema": firmware.E3_EVIDENCE_SCHEMA, "check": firmware.E3_CHECK,
+            "repository": firmware.FIRMWARE_REPOSITORY, "commit": commit, "candidateRun": run,
+            "definitionSha256": firmware.sha256(firmware.canonical(SCHEMA["hostCovered"][firmware.E3_CHECK])),
+            "tests": {t: "PASS" for t in firmware.E3_HOST_TESTS}, "skipped": []}
+
+
+def assets(commit: str = COMMIT, run: int = RUN) -> dict:
     out = {name: h(name) for name in firmware.expected_assets(SCHEMA) if name != firmware.SUMS}
+    out[firmware.E3_EVIDENCE] = firmware.sha256(firmware.canonical(e3_evidence(commit, run)))
     for legacy, source in firmware.LEGACY_ASSETS.items():
         out[legacy] = out[source]
     out[firmware.SUMS] = firmware.sha256(sums_text(out))
@@ -57,11 +66,13 @@ def acceptance(release: dict) -> dict:
                                 "coverRows": 3, "pages": 6},
                          "Q2": {"issueId": "dogear-2026-12-21", "schemaVersion": 3, "sha256": h("Q2"), "items": 5,
                                 "coverRows": 3, "pages": 7}},
-            "packages": entries, "approvedBy": "owner", "approvedOn": "2026-10-21"}
+            "packages": entries,
+            "hostCovered": {firmware.E3_CHECK: e3_evidence(release["commit"], release["candidateRun"])},
+            "approvedBy": "owner", "approvedOn": "2026-10-21"}
 
 
 def verification_record(commit: str = COMMIT, tag_object: str = TAG_OBJECT) -> dict:
-    a = assets()
+    a = assets(commit)
     release = {"tag": TAG, "tagObject": tag_object, "commit": commit, "releaseId": RELEASE_ID, "candidateRun": RUN,
                "sumsSha256": a[firmware.SUMS], "assets": a}
     acc = acceptance(release)

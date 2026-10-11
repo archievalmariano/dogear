@@ -41,7 +41,7 @@ HEX64 = re.compile(r"[0-9a-f]{64}")
 TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
 ISSUE_ID = re.compile(r"dogear-[0-9]{4}-[0-9]{2}-[0-9]{2}")
 RECORD_KEYS = ("schema", "repository", "tag", "commit", "candidateRun", "sumsSha256", "fixtures", "packages",
-               "approvedBy", "approvedOn")
+               "hostCovered", "approvedBy", "approvedOn")
 PACKAGE_KEYS = ("package", "env", "board", "file", "sha256", "install", "level", "date", "checks")
 PIECE_KEYS = ("bootloader", "partitions", "boot_app0")
 VERIFICATION_KEYS = ("schema", "repository", "release", "acceptanceSha256", "acceptance", "ota", "authorizes",
@@ -53,6 +53,48 @@ CONTRACT_RELEASE_KEYS = ("tag", "tagObject", "commit", "releaseId", "candidateRu
 OTA = (("X4", "x4-g"), ("X4 Pro", "x4pro-gp"))  # the update test: each board on its existing package
 TAG_FIELDS = ("candidate-run", "candidate-commit", "candidate-sums-sha256", "physically-accepted",
               "acceptance-sha256")
+
+
+# E3 (CAN'T LOAD AN ISSUE) is host-covered, never physical: "Physical E3 is not a release gate. Host E3 coverage is mandatory."
+# The firmware's candidate run produces e3-host-evidence.json on its own commit (each of
+# exactly these tests PASS, none skipped); it is a release asset, and the
+# acceptance record carries the same evidence. Mirrors candidate.py.
+E3_CHECK = "dogear-e3-cant-load"
+E3_POLICY = "Physical E3 is not a release gate. Host E3 coverage is mandatory."
+E3_EVIDENCE = "e3-host-evidence.json"
+E3_EVIDENCE_SCHEMA = "crosspoint-e3-host-evidence/1"
+E3_DEFINITION_KEYS = ('policy', 'scenario', 'reason', 'evidence', 'tests')
+E3_EVIDENCE_KEYS = ('schema', 'check', 'repository', 'commit', 'candidateRun', 'definitionSha256', 'tests', 'skipped')
+E3_HOST_TESTS = (
+    "DogearBootstrap.ATlsReadFailureAfterTheExactBodyIsNeverNothingPublished",
+    "DogearBootstrap.BytesReadOneAtATimeClassifyTheSame",
+    "DogearBootstrap.ChunkedFraming",
+    "DogearBootstrap.ContentLengthMustMatchTheBody",
+    "DogearBootstrap.EveryTruncationIsAnError",
+    "DogearBootstrap.NonOkBodiesAreCappedAt64Bytes",
+    "DogearBootstrap.OnlyExplicitFramingCounts",
+    "DogearBootstrap.OnlyStatus503",
+    "DogearBootstrap.OnlyTheExactBodyCounts",
+    "DogearBootstrap.OnlyTheFirstManifestResponse",
+    "DogearBootstrap.RouterVectorsClassifyExactlyAsTheServerMeansThem",
+    "DogearBootstrap.TheReaderStopsAtCompletionAndReportsHowItEnded",
+    "DogearState.EachStatusScreenHasItsOwnHeadingAndNote",
+    "DogearState.EveryCombinationFollowsTheThreeRules",
+    "DogearState.StatusCopyIsExactlyTheApprovedCopy",
+    "DogearState.TheCasesThatMatter",
+    "DogearTls.CertificateForAnotherHostIsRefused",
+    "DogearTls.ExpiredCertificateIsRefused",
+    "DogearTls.FailsClosedWhenTrustCannotBeSetUp",
+    "DogearTls.ProductionRootsDoNotTrustTheTestRoot",
+    "DogearTls.SelfSignedCertificateIsRefused",
+    "DogearTls.TrustedCertificateForTheRightHostConnects",
+    "DogearTls.ValidCertificateDoesNotCoverADifferentRequestedHost",
+    "DogearTlsRead.ACorruptRecordAfterTheExactBodyIsNotNothingPublished",
+    "DogearTlsRead.AReadFailureAfterTheExactBodyIsNotNothingPublished",
+    "DogearTlsRead.EvenACleanCloseCannotFrameNothingPublished",
+    "DogearTlsRead.ExplicitFramingIsNothingPublishedAndACutBeforeItsEndIsNot",
+    "DogearTlsRead.ReadResultWaitsOnlyWhileTheTransportIsOpen",
+)
 
 
 class Invalid(ValueError):
@@ -139,11 +181,48 @@ def check_schema(schema) -> dict:
         require(isinstance(group, list) and group, f"acceptance schema: no {key}")
         for name in flagships:
             require(all(c in packages[name]["checks"] for c in group), f"{name} lacks {key}")
+    check_e3_definition(schema)
     return schema
 
 
+def check_e3_definition(schema: dict) -> dict:
+    """hostCovered is required: exactly E3, with the policy, the evidence file and
+    exactly E3_HOST_TESTS; and E3 is not a physical check anywhere."""
+    host = schema.get("hostCovered")
+    require(isinstance(host, dict), "acceptance schema: hostCovered is missing; host E3 coverage is mandatory")
+    exact_keys(host, [E3_CHECK], "hostCovered")
+    definition = host[E3_CHECK]
+    exact_keys(definition, E3_DEFINITION_KEYS, f"hostCovered.{E3_CHECK}")
+    require(definition["policy"] == E3_POLICY, f"hostCovered.{E3_CHECK}: the policy must read {E3_POLICY!r}")
+    require(definition["evidence"] == E3_EVIDENCE, f"hostCovered.{E3_CHECK}: evidence must be {E3_EVIDENCE}")
+    require(definition["tests"] == list(E3_HOST_TESTS),
+            f"hostCovered.{E3_CHECK}: tests are not exactly the required E3 host tests")
+    require(E3_CHECK not in schema.get("checks", {}), f"{E3_CHECK} must not be a physical check")
+    for name, spec in schema["packages"].items():
+        require(E3_CHECK not in spec["checks"], f"{name}: physical E3 cannot stand in for host E3 evidence")
+    return definition
+
+
+def check_e3_evidence(evidence, schema: dict, *, commit, run) -> None:
+    """The candidate run's E3 host-test PASS: this commit and run, this definition,
+    exactly the required tests, each exactly PASS, none skipped."""
+    exact_keys(evidence, E3_EVIDENCE_KEYS, "E3 host evidence")
+    require(evidence["schema"] == E3_EVIDENCE_SCHEMA, f"E3 host evidence schema is not {E3_EVIDENCE_SCHEMA}")
+    require(evidence["check"] == E3_CHECK, f"E3 host evidence is not for {E3_CHECK}")
+    require(evidence["repository"] == FIRMWARE_REPOSITORY, "E3 host evidence names another repository")
+    require(evidence["commit"] == commit, "E3 host evidence belongs to another commit")
+    require(is_int(evidence["candidateRun"]) and evidence["candidateRun"] == run,
+            "E3 host evidence belongs to another candidate run")
+    require(evidence["definitionSha256"] == sha256(canonical(schema["hostCovered"][E3_CHECK])),
+            "E3 host evidence is for another host-test definition")
+    exact_keys(evidence["tests"], E3_HOST_TESTS, "E3 host evidence tests")
+    failed = sorted(t for t, result in evidence["tests"].items() if result != "PASS")
+    require(not failed, f"E3 host tests not PASS: {failed}")
+    require(evidence["skipped"] == [], "E3 host evidence records skipped tests")
+
+
 def expected_assets(schema: dict) -> list:
-    names = [SUMS, *LEGACY_ASSETS]
+    names = [SUMS, E3_EVIDENCE, *LEGACY_ASSETS]
     for name in schema["packageOrder"]:
         names.append(f"firmware-{name}.bin")
         if schema["packages"][name]["board"] == "X4 Pro":
@@ -188,6 +267,12 @@ def check_acceptance(record, schema: dict, release: dict) -> None:
             "record candidateRun is not the release's")
     require(record["sumsSha256"] == release["sumsSha256"], f"record sumsSha256 is not the release's {SUMS}")
     check_fixtures(record["fixtures"], schema)
+    host = record["hostCovered"]
+    require(isinstance(host, dict), "record hostCovered is missing; host E3 coverage is mandatory")
+    exact_keys(host, [E3_CHECK], "record hostCovered")
+    check_e3_evidence(host[E3_CHECK], schema, commit=release["commit"], run=release["candidateRun"])
+    require(sha256(canonical(host[E3_CHECK])) == release["assets"].get(E3_EVIDENCE),
+            f"the record's E3 host evidence is not the release's {E3_EVIDENCE}")
     entries = record["packages"]
     require(isinstance(entries, list) and all(isinstance(e, dict) for e in entries), "packages is not a list of objects")
     names = [e.get("package") for e in entries]
@@ -204,6 +289,8 @@ def check_acceptance(record, schema: dict, release: dict) -> None:
         for key in ("board", "install", "level"):
             require(entry[key] == spec[key], f"{name}: {key} must be {spec[key]!r}")
         check_date(entry["date"], f"{name} date")
+        require(not (isinstance(entry["checks"], dict) and E3_CHECK in entry["checks"]),
+                f"{name}: physical E3 cannot stand in for host E3 evidence")
         exact_keys(entry["checks"], spec["checks"], f"{name} checks")
         failed = sorted(c for c, result in entry["checks"].items() if result != "PASS")
         require(not failed, f"{name}: {failed} not PASS")
