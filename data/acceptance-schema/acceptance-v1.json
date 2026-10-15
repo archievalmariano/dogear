@@ -1,0 +1,267 @@
+{
+  "schema": "crosspoint-acceptance/1",
+  "comment": "Physical acceptance of a release candidate (docs/RELEASING.md). Each package's record must hold exactly its checks, each exactly PASS. Physical E3 is not a release gate. Host E3 coverage is mandatory (hostCovered). Read by scripts/release/candidate.py and, from the tagged commit, by DOGEAR's firmware-contract sync.",
+  "packageOrder": [
+    "x4-g",
+    "x4-gd",
+    "x4pro-g",
+    "x4pro-gd",
+    "x4pro-p",
+    "x4pro-pd",
+    "x4pro-gp",
+    "x4pro-gpd"
+  ],
+  "packages": {
+    "x4-g": {
+      "board": "X4",
+      "install": "microSD",
+      "level": "full",
+      "checks": [
+        "install-bytes",
+        "boots",
+        "version-string",
+        "apps-exact",
+        "goto-edition",
+        "tools-open",
+        "book-reads",
+        "update-check"
+      ]
+    },
+    "x4-gd": {
+      "board": "X4",
+      "install": "microSD",
+      "level": "full+dogear",
+      "checks": [
+        "install-bytes",
+        "boots",
+        "version-string",
+        "apps-exact",
+        "goto-edition",
+        "tools-open",
+        "book-reads",
+        "update-check",
+        "dogear-opens",
+        "dogear-e1-no-issue-yet",
+        "dogear-e2-no-issue-on-device",
+        "dogear-v2-cache-offline",
+        "dogear-v2-cache-503",
+        "dogear-v3-q1-cover",
+        "dogear-v3-q1-pages",
+        "dogear-v3-q1-navigation",
+        "dogear-v3-q2-cover",
+        "dogear-v3-q2-pages",
+        "dogear-v3-q2-navigation",
+        "dogear-no-writes"
+      ]
+    },
+    "x4pro-g": {
+      "board": "X4 Pro",
+      "install": "USB 4-region",
+      "level": "boot",
+      "checks": [
+        "install-bytes",
+        "boots",
+        "version-string",
+        "apps-exact",
+        "goto-opens"
+      ]
+    },
+    "x4pro-gd": {
+      "board": "X4 Pro",
+      "install": "USB 4-region",
+      "level": "boot",
+      "checks": [
+        "install-bytes",
+        "boots",
+        "version-string",
+        "apps-exact",
+        "goto-opens",
+        "dogear-opens"
+      ]
+    },
+    "x4pro-p": {
+      "board": "X4 Pro",
+      "install": "USB 4-region",
+      "level": "boot",
+      "checks": [
+        "install-bytes",
+        "boots",
+        "version-string",
+        "apps-exact",
+        "onpoint-opens"
+      ]
+    },
+    "x4pro-pd": {
+      "board": "X4 Pro",
+      "install": "USB 4-region",
+      "level": "boot",
+      "checks": [
+        "install-bytes",
+        "boots",
+        "version-string",
+        "apps-exact",
+        "onpoint-opens",
+        "dogear-opens"
+      ]
+    },
+    "x4pro-gp": {
+      "board": "X4 Pro",
+      "install": "USB 4-region",
+      "level": "full",
+      "checks": [
+        "install-bytes",
+        "boots",
+        "version-string",
+        "apps-exact",
+        "goto-edition",
+        "onpoint-opens",
+        "tools-open",
+        "book-reads",
+        "settings-kept",
+        "update-check"
+      ]
+    },
+    "x4pro-gpd": {
+      "board": "X4 Pro",
+      "install": "USB 4-region",
+      "level": "full+dogear",
+      "checks": [
+        "install-bytes",
+        "boots",
+        "version-string",
+        "apps-exact",
+        "goto-edition",
+        "onpoint-opens",
+        "tools-open",
+        "book-reads",
+        "settings-kept",
+        "update-check",
+        "dogear-opens",
+        "dogear-e1-no-issue-yet",
+        "dogear-e2-no-issue-on-device",
+        "dogear-v2-cache-offline",
+        "dogear-v2-cache-503",
+        "dogear-v3-q1-cover",
+        "dogear-v3-q1-pages",
+        "dogear-v3-q1-navigation",
+        "dogear-v3-q2-cover",
+        "dogear-v3-q2-pages",
+        "dogear-v3-q2-navigation",
+        "dogear-no-writes"
+      ]
+    }
+  },
+  "checks": {
+    "install-bytes": "X4: the file on the card hashes to its SHA256SUMS.txt line before installing. X4 Pro: all four regions (bootloader 0x0, partitions 0x8000, boot_app0 0xe000, app 0x10000) report 'Hash of data verified.' with the candidate's pieces and app; NVS is never written.",
+    "boots": "Boots to Home, with no reset loop.",
+    "version-string": "Settings shows <version>-A<apps_version>-<PACKAGE>.",
+    "apps-exact": "Home > Apps lists exactly the package's apps plus Tools, nothing else.",
+    "goto-edition": "GOTO loads an edition.",
+    "goto-opens": "GOTO opens.",
+    "onpoint-opens": "ON POINT opens.",
+    "tools-open": "Calculator and Calendar open, plus Clock on the X4 Pro.",
+    "book-reads": "A book opens and turns pages.",
+    "settings-kept": "X4 Pro: the Wi-Fi network and settings are kept after the install.",
+    "update-check": "Settings > System > Check for updates offers nothing older.",
+    "dogear-opens": "DOGEAR opens to a valid screen (an issue, CACHED, or one status screen), with no crash.",
+    "dogear-e1-no-issue-yet": "No /dogear; online against real production (503 'nothing published'): NO ISSUE YET and its note, exact copy.",
+    "dogear-e2-no-issue-on-device": "No /dogear; Wi-Fi off: NO ISSUE ON THIS DEVICE and its note, exact copy.",
+    "dogear-v2-cache-offline": "Fixture R (schema 2) as the only SD generation, Wi-Fi off: the regular cover matches its mock sheet; every page opens; CACHED.",
+    "dogear-v2-cache-503": "Fixture R, online against production (503): the same issue with CACHED, never NO ISSUE YET.",
+    "dogear-v3-q1-cover": "Fixture Q1 (schema 3), Wi-Fi off: the Quiet A cover matches its mock sheet: SOME QUIET THIS WEEK with the exact approved note; one featured lead, first; the fixture's supporting rows; no ALSO THIS WEEK head; pager 1 / N; CACHED.",
+    "dogear-v3-q1-pages": "Fixture Q1: every item page, 2 to N-1, opens in order and matches the sheet; the final page shows the QR.",
+    "dogear-v3-q1-navigation": "Fixture Q1: Next and Previous step one page each way; Next from the final page returns to the cover; Back exits to Apps; reopening shows the cover again.",
+    "dogear-v3-q2-cover": "Fixture Q2 (schema 3, 5 items, the 5th row deferred off the cover): as dogear-v3-q1-cover, with the fixture's rows.",
+    "dogear-v3-q2-pages": "Fixture Q2: as dogear-v3-q1-pages; the 5th item has its own page.",
+    "dogear-v3-q2-navigation": "Fixture Q2: as dogear-v3-q1-navigation.",
+    "dogear-no-writes": "After the offline and 503 checks, the test /dogear files are byte-identical to what was placed."
+  },
+  "fixtures": {
+    "R": {
+      "schemaVersion": 2,
+      "keys": [
+        "issueId",
+        "schemaVersion",
+        "sha256",
+        "items",
+        "pages"
+      ]
+    },
+    "Q1": {
+      "schemaVersion": 3,
+      "keys": [
+        "issueId",
+        "schemaVersion",
+        "sha256",
+        "items",
+        "coverRows",
+        "pages"
+      ]
+    },
+    "Q2": {
+      "schemaVersion": 3,
+      "keys": [
+        "issueId",
+        "schemaVersion",
+        "sha256",
+        "items",
+        "coverRows",
+        "pages"
+      ]
+    }
+  },
+  "quietChecks": [
+    "dogear-v3-q1-cover",
+    "dogear-v3-q1-pages",
+    "dogear-v3-q1-navigation",
+    "dogear-v3-q2-cover",
+    "dogear-v3-q2-pages",
+    "dogear-v3-q2-navigation"
+  ],
+  "regularCacheChecks": [
+    "dogear-v2-cache-offline",
+    "dogear-v2-cache-503"
+  ],
+  "dogearFlagships": [
+    "x4-gd",
+    "x4pro-gpd"
+  ],
+  "hostCovered": {
+    "dogear-e3-cant-load": {
+      "policy": "Physical E3 is not a release gate. Host E3 coverage is mandatory.",
+      "scenario": "No /dogear; on a Wi-Fi network without internet: CAN\u2019T LOAD AN ISSUE and its note, exact copy.",
+      "reason": "Not physically reproduced: Wi-Fi association without upstream internet would require disrupting or reconfiguring the household network solely for this test (owner amendment, 2026-10-11). Never a physical check and never a physical PASS; the candidate run itself must produce e3-host-evidence.json for its own commit, every test below PASS and none skipped.",
+      "evidence": "e3-host-evidence.json",
+      "tests": [
+        "DogearBootstrap.ATlsReadFailureAfterTheExactBodyIsNeverNothingPublished",
+        "DogearBootstrap.BytesReadOneAtATimeClassifyTheSame",
+        "DogearBootstrap.ChunkedFraming",
+        "DogearBootstrap.ContentLengthMustMatchTheBody",
+        "DogearBootstrap.EveryTruncationIsAnError",
+        "DogearBootstrap.NonOkBodiesAreCappedAt64Bytes",
+        "DogearBootstrap.OnlyExplicitFramingCounts",
+        "DogearBootstrap.OnlyStatus503",
+        "DogearBootstrap.OnlyTheExactBodyCounts",
+        "DogearBootstrap.OnlyTheFirstManifestResponse",
+        "DogearBootstrap.RouterVectorsClassifyExactlyAsTheServerMeansThem",
+        "DogearBootstrap.TheReaderStopsAtCompletionAndReportsHowItEnded",
+        "DogearState.EachStatusScreenHasItsOwnHeadingAndNote",
+        "DogearState.EveryCombinationFollowsTheThreeRules",
+        "DogearState.StatusCopyIsExactlyTheApprovedCopy",
+        "DogearState.TheCasesThatMatter",
+        "DogearTls.CertificateForAnotherHostIsRefused",
+        "DogearTls.ExpiredCertificateIsRefused",
+        "DogearTls.FailsClosedWhenTrustCannotBeSetUp",
+        "DogearTls.ProductionRootsDoNotTrustTheTestRoot",
+        "DogearTls.SelfSignedCertificateIsRefused",
+        "DogearTls.TrustedCertificateForTheRightHostConnects",
+        "DogearTls.ValidCertificateDoesNotCoverADifferentRequestedHost",
+        "DogearTlsRead.ACorruptRecordAfterTheExactBodyIsNotNothingPublished",
+        "DogearTlsRead.AReadFailureAfterTheExactBodyIsNotNothingPublished",
+        "DogearTlsRead.EvenACleanCloseCannotFrameNothingPublished",
+        "DogearTlsRead.ExplicitFramingIsNothingPublishedAndACutBeforeItsEndIsNot",
+        "DogearTlsRead.ReadResultWaitsOnlyWhileTheTransportIsOpen"
+      ]
+    }
+  }
+}

@@ -1,0 +1,345 @@
+{
+  "schema": 2,
+  "repository": "archievalmariano/crosspoint-reader",
+  "release": {
+    "tag": "v1.2.0",
+    "tagObject": "23733059886d0a772e0ca15f50b4206e0246e3fb",
+    "commit": "85bad5424d6dd91966aa997f46b426a823ca83db",
+    "releaseId": 413424084,
+    "candidateRun": 38630358450,
+    "sumsSha256": "5477cfce5c953981b790a0cbcb03cf5aa251f2534f9effdac59160ae33fff5e7",
+    "assets": {
+      "SHA256SUMS.txt": "5477cfce5c953981b790a0cbcb03cf5aa251f2534f9effdac59160ae33fff5e7",
+      "e3-host-evidence.json": "f160dfc76437b19c72a663dc94eb7fbc049887bf97dd4c116ba6295d78b53c69",
+      "firmware-x4-g.bin": "2152ef3831aa1a155ae7dd4b7d153c77bd307f05a18e7580b816055e32c6327f",
+      "firmware-x4-gd.bin": "8d9b99806676925fc04d603ddb2b62a064c0be6acf1b17e042a4613b03321302",
+      "firmware-x4pro-g.bin": "9e31b60eff29e42d6257df94bcc562856085b0aee7b249a73db3193e3594acf4",
+      "firmware-x4pro-g.factory.bin": "5a13f529fd2e76d97fc00a8ae4230c19d5c50b9f2bfe3c206936ead0f641b93f",
+      "firmware-x4pro-gd.bin": "b0b684f34c13d95378cdf49cccc0874629b5c839d05a10f31947a7fd62deba0f",
+      "firmware-x4pro-gd.factory.bin": "34730b4808358daba3d1ccbcaaa0b8123ce5285d380911b84e7b80961c80dfe1",
+      "firmware-x4pro-gp.bin": "ee894df34d4556d87455c01bcdcca6ac9236ce45520bb069f692648d3f900949",
+      "firmware-x4pro-gp.factory.bin": "3270a0481b5985c133a65cccab72a36ae870285c4fc2627cee4c9a26a4e992b7",
+      "firmware-x4pro-gpd.bin": "009d6a8ecf001aebb728a77da78c987206e9f7aafff45a06949903754631c0f8",
+      "firmware-x4pro-gpd.factory.bin": "73a769c3e93881b686ecf48238b5b5b6de7fc286cf46b70202b0e7dc9e29a774",
+      "firmware-x4pro-p.bin": "5d6a59e3a125fa79dbdf735eee1ef83a2f6c93c380aeef155ead0fce1a26dc95",
+      "firmware-x4pro-p.factory.bin": "09fd55dff9efd0e4c905a2d5775d90f4f00a8ae2febbcd6dec56220b2ef4cc8e",
+      "firmware-x4pro-pd.bin": "cdd6079a6316e1b8a5af811dea7ab0f0d190dcd87c0eaed295726d7622fa1edb",
+      "firmware-x4pro-pd.factory.bin": "b1e4d993b69628fc9dc03e4ced8411e2c1160609b6cbfc458b48f13690547074",
+      "firmware-x4pro.bin": "ee894df34d4556d87455c01bcdcca6ac9236ce45520bb069f692648d3f900949",
+      "firmware.bin": "2152ef3831aa1a155ae7dd4b7d153c77bd307f05a18e7580b816055e32c6327f"
+    }
+  },
+  "acceptanceSha256": "3922e7e807261bff060f0176aa45e137b32aefb8e31e5c0c81bed6e6612642ab",
+  "acceptance": {
+    "schema": "crosspoint-acceptance/1",
+    "repository": "archievalmariano/crosspoint-reader",
+    "tag": "v1.2.0",
+    "commit": "85bad5424d6dd91966aa997f46b426a823ca83db",
+    "candidateRun": 38630358450,
+    "sumsSha256": "5477cfce5c953981b790a0cbcb03cf5aa251f2534f9effdac59160ae33fff5e7",
+    "fixtures": {
+      "generator": "caa54b97b2726c86f977ab776b1bbc2b5b39428a",
+      "R": {
+        "issueId": "dogear-2026-11-23",
+        "schemaVersion": 2,
+        "sha256": "abb3162cbfafe06b4f60188b3d40e15573c740519905ed96eaf6279c432975e9",
+        "items": 4,
+        "pages": 6
+      },
+      "Q1": {
+        "issueId": "dogear-2026-11-16",
+        "schemaVersion": 3,
+        "sha256": "97fd204e391b0d7e08833bb4b67687a3d33d5a95aab7ef079bb936a30ebec36c",
+        "items": 4,
+        "coverRows": 3,
+        "pages": 6
+      },
+      "Q2": {
+        "issueId": "dogear-2026-12-21",
+        "schemaVersion": 3,
+        "sha256": "e3844304e7277dcf31cb048a9646a5b12c2e52d2ff72ac7c7952572c84ecc776",
+        "items": 5,
+        "coverRows": 3,
+        "pages": 7
+      }
+    },
+    "packages": [
+      {
+        "package": "x4-g",
+        "env": "gh_release",
+        "board": "X4",
+        "file": "firmware-x4-g.bin",
+        "sha256": "2152ef3831aa1a155ae7dd4b7d153c77bd307f05a18e7580b816055e32c6327f",
+        "install": "microSD",
+        "level": "full",
+        "date": "2026-10-15",
+        "checks": {
+          "install-bytes": "PASS",
+          "boots": "PASS",
+          "version-string": "PASS",
+          "apps-exact": "PASS",
+          "goto-edition": "PASS",
+          "tools-open": "PASS",
+          "book-reads": "PASS",
+          "update-check": "PASS"
+        }
+      },
+      {
+        "package": "x4-gd",
+        "env": "x4-goto-dogear-gh_release",
+        "board": "X4",
+        "file": "firmware-x4-gd.bin",
+        "sha256": "8d9b99806676925fc04d603ddb2b62a064c0be6acf1b17e042a4613b03321302",
+        "install": "microSD",
+        "level": "full+dogear",
+        "date": "2026-10-15",
+        "checks": {
+          "install-bytes": "PASS",
+          "boots": "PASS",
+          "version-string": "PASS",
+          "apps-exact": "PASS",
+          "goto-edition": "PASS",
+          "tools-open": "PASS",
+          "book-reads": "PASS",
+          "update-check": "PASS",
+          "dogear-opens": "PASS",
+          "dogear-e1-no-issue-yet": "PASS",
+          "dogear-e2-no-issue-on-device": "PASS",
+          "dogear-v2-cache-offline": "PASS",
+          "dogear-v2-cache-503": "PASS",
+          "dogear-v3-q1-cover": "PASS",
+          "dogear-v3-q1-pages": "PASS",
+          "dogear-v3-q1-navigation": "PASS",
+          "dogear-v3-q2-cover": "PASS",
+          "dogear-v3-q2-pages": "PASS",
+          "dogear-v3-q2-navigation": "PASS",
+          "dogear-no-writes": "PASS"
+        }
+      },
+      {
+        "package": "x4pro-g",
+        "env": "x4pro-goto-gh_release",
+        "board": "X4 Pro",
+        "file": "firmware-x4pro-g.bin",
+        "sha256": "9e31b60eff29e42d6257df94bcc562856085b0aee7b249a73db3193e3594acf4",
+        "pieces": {
+          "bootloader": "15f88ae11793eddc5b7e1f770fba54b10a6f59809c14d7c51cfbf0db8d2fa3ca",
+          "partitions": "bd0f7954aca2ef7d925ee21aaa1f3dc8822d1d6ce5cbbd26a135e5886bfff6ce",
+          "boot_app0": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+        },
+        "install": "USB 4-region",
+        "level": "boot",
+        "date": "2026-10-15",
+        "checks": {
+          "install-bytes": "PASS",
+          "boots": "PASS",
+          "version-string": "PASS",
+          "apps-exact": "PASS",
+          "goto-opens": "PASS"
+        }
+      },
+      {
+        "package": "x4pro-gd",
+        "env": "x4pro-goto-dogear-gh_release",
+        "board": "X4 Pro",
+        "file": "firmware-x4pro-gd.bin",
+        "sha256": "b0b684f34c13d95378cdf49cccc0874629b5c839d05a10f31947a7fd62deba0f",
+        "pieces": {
+          "bootloader": "15f88ae11793eddc5b7e1f770fba54b10a6f59809c14d7c51cfbf0db8d2fa3ca",
+          "partitions": "bd0f7954aca2ef7d925ee21aaa1f3dc8822d1d6ce5cbbd26a135e5886bfff6ce",
+          "boot_app0": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+        },
+        "install": "USB 4-region",
+        "level": "boot",
+        "date": "2026-10-15",
+        "checks": {
+          "install-bytes": "PASS",
+          "boots": "PASS",
+          "version-string": "PASS",
+          "apps-exact": "PASS",
+          "goto-opens": "PASS",
+          "dogear-opens": "PASS"
+        }
+      },
+      {
+        "package": "x4pro-p",
+        "env": "x4pro-onpoint-gh_release",
+        "board": "X4 Pro",
+        "file": "firmware-x4pro-p.bin",
+        "sha256": "5d6a59e3a125fa79dbdf735eee1ef83a2f6c93c380aeef155ead0fce1a26dc95",
+        "pieces": {
+          "bootloader": "15f88ae11793eddc5b7e1f770fba54b10a6f59809c14d7c51cfbf0db8d2fa3ca",
+          "partitions": "bd0f7954aca2ef7d925ee21aaa1f3dc8822d1d6ce5cbbd26a135e5886bfff6ce",
+          "boot_app0": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+        },
+        "install": "USB 4-region",
+        "level": "boot",
+        "date": "2026-10-15",
+        "checks": {
+          "install-bytes": "PASS",
+          "boots": "PASS",
+          "version-string": "PASS",
+          "apps-exact": "PASS",
+          "onpoint-opens": "PASS"
+        }
+      },
+      {
+        "package": "x4pro-pd",
+        "env": "x4pro-onpoint-dogear-gh_release",
+        "board": "X4 Pro",
+        "file": "firmware-x4pro-pd.bin",
+        "sha256": "cdd6079a6316e1b8a5af811dea7ab0f0d190dcd87c0eaed295726d7622fa1edb",
+        "pieces": {
+          "bootloader": "15f88ae11793eddc5b7e1f770fba54b10a6f59809c14d7c51cfbf0db8d2fa3ca",
+          "partitions": "bd0f7954aca2ef7d925ee21aaa1f3dc8822d1d6ce5cbbd26a135e5886bfff6ce",
+          "boot_app0": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+        },
+        "install": "USB 4-region",
+        "level": "boot",
+        "date": "2026-10-15",
+        "checks": {
+          "install-bytes": "PASS",
+          "boots": "PASS",
+          "version-string": "PASS",
+          "apps-exact": "PASS",
+          "onpoint-opens": "PASS",
+          "dogear-opens": "PASS"
+        }
+      },
+      {
+        "package": "x4pro-gp",
+        "env": "x4pro-gh_release",
+        "board": "X4 Pro",
+        "file": "firmware-x4pro-gp.bin",
+        "sha256": "ee894df34d4556d87455c01bcdcca6ac9236ce45520bb069f692648d3f900949",
+        "pieces": {
+          "bootloader": "15f88ae11793eddc5b7e1f770fba54b10a6f59809c14d7c51cfbf0db8d2fa3ca",
+          "partitions": "bd0f7954aca2ef7d925ee21aaa1f3dc8822d1d6ce5cbbd26a135e5886bfff6ce",
+          "boot_app0": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+        },
+        "install": "USB 4-region",
+        "level": "full",
+        "date": "2026-10-15",
+        "checks": {
+          "install-bytes": "PASS",
+          "boots": "PASS",
+          "version-string": "PASS",
+          "apps-exact": "PASS",
+          "goto-edition": "PASS",
+          "onpoint-opens": "PASS",
+          "tools-open": "PASS",
+          "book-reads": "PASS",
+          "settings-kept": "PASS",
+          "update-check": "PASS"
+        }
+      },
+      {
+        "package": "x4pro-gpd",
+        "env": "x4pro-all-gh_release",
+        "board": "X4 Pro",
+        "file": "firmware-x4pro-gpd.bin",
+        "sha256": "009d6a8ecf001aebb728a77da78c987206e9f7aafff45a06949903754631c0f8",
+        "pieces": {
+          "bootloader": "15f88ae11793eddc5b7e1f770fba54b10a6f59809c14d7c51cfbf0db8d2fa3ca",
+          "partitions": "bd0f7954aca2ef7d925ee21aaa1f3dc8822d1d6ce5cbbd26a135e5886bfff6ce",
+          "boot_app0": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0"
+        },
+        "install": "USB 4-region",
+        "level": "full+dogear",
+        "date": "2026-10-15",
+        "checks": {
+          "install-bytes": "PASS",
+          "boots": "PASS",
+          "version-string": "PASS",
+          "apps-exact": "PASS",
+          "goto-edition": "PASS",
+          "onpoint-opens": "PASS",
+          "tools-open": "PASS",
+          "book-reads": "PASS",
+          "settings-kept": "PASS",
+          "update-check": "PASS",
+          "dogear-opens": "PASS",
+          "dogear-e1-no-issue-yet": "PASS",
+          "dogear-e2-no-issue-on-device": "PASS",
+          "dogear-v2-cache-offline": "PASS",
+          "dogear-v2-cache-503": "PASS",
+          "dogear-v3-q1-cover": "PASS",
+          "dogear-v3-q1-pages": "PASS",
+          "dogear-v3-q1-navigation": "PASS",
+          "dogear-v3-q2-cover": "PASS",
+          "dogear-v3-q2-pages": "PASS",
+          "dogear-v3-q2-navigation": "PASS",
+          "dogear-no-writes": "PASS"
+        }
+      }
+    ],
+    "hostCovered": {
+      "dogear-e3-cant-load": {
+        "candidateRun": 38630358450,
+        "check": "dogear-e3-cant-load",
+        "commit": "85bad5424d6dd91966aa997f46b426a823ca83db",
+        "definitionSha256": "237102287d25d4654bad8c25b7661676b51877d957defbb32369a32beacd9376",
+        "repository": "archievalmariano/crosspoint-reader",
+        "schema": "crosspoint-e3-host-evidence/1",
+        "skipped": [],
+        "tests": {
+          "DogearBootstrap.ATlsReadFailureAfterTheExactBodyIsNeverNothingPublished": "PASS",
+          "DogearBootstrap.BytesReadOneAtATimeClassifyTheSame": "PASS",
+          "DogearBootstrap.ChunkedFraming": "PASS",
+          "DogearBootstrap.ContentLengthMustMatchTheBody": "PASS",
+          "DogearBootstrap.EveryTruncationIsAnError": "PASS",
+          "DogearBootstrap.NonOkBodiesAreCappedAt64Bytes": "PASS",
+          "DogearBootstrap.OnlyExplicitFramingCounts": "PASS",
+          "DogearBootstrap.OnlyStatus503": "PASS",
+          "DogearBootstrap.OnlyTheExactBodyCounts": "PASS",
+          "DogearBootstrap.OnlyTheFirstManifestResponse": "PASS",
+          "DogearBootstrap.RouterVectorsClassifyExactlyAsTheServerMeansThem": "PASS",
+          "DogearBootstrap.TheReaderStopsAtCompletionAndReportsHowItEnded": "PASS",
+          "DogearState.EachStatusScreenHasItsOwnHeadingAndNote": "PASS",
+          "DogearState.EveryCombinationFollowsTheThreeRules": "PASS",
+          "DogearState.StatusCopyIsExactlyTheApprovedCopy": "PASS",
+          "DogearState.TheCasesThatMatter": "PASS",
+          "DogearTls.CertificateForAnotherHostIsRefused": "PASS",
+          "DogearTls.ExpiredCertificateIsRefused": "PASS",
+          "DogearTls.FailsClosedWhenTrustCannotBeSetUp": "PASS",
+          "DogearTls.ProductionRootsDoNotTrustTheTestRoot": "PASS",
+          "DogearTls.SelfSignedCertificateIsRefused": "PASS",
+          "DogearTls.TrustedCertificateForTheRightHostConnects": "PASS",
+          "DogearTls.ValidCertificateDoesNotCoverADifferentRequestedHost": "PASS",
+          "DogearTlsRead.ACorruptRecordAfterTheExactBodyIsNotNothingPublished": "PASS",
+          "DogearTlsRead.AReadFailureAfterTheExactBodyIsNotNothingPublished": "PASS",
+          "DogearTlsRead.EvenACleanCloseCannotFrameNothingPublished": "PASS",
+          "DogearTlsRead.ExplicitFramingIsNothingPublishedAndACutBeforeItsEndIsNot": "PASS",
+          "DogearTlsRead.ReadResultWaitsOnlyWhileTheTransportIsOpen": "PASS"
+        }
+      }
+    },
+    "approvedBy": "owner",
+    "approvedOn": "2026-10-15"
+  },
+  "ota": [
+    {
+      "board": "X4",
+      "from": "v1.1.1",
+      "to": "v1.2.0",
+      "package": "x4-g",
+      "result": "PASS",
+      "date": "2026-10-15"
+    },
+    {
+      "board": "X4 Pro",
+      "from": "v1.1.1",
+      "to": "v1.2.0",
+      "package": "x4pro-gp",
+      "slotVerified": true,
+      "result": "PASS",
+      "date": "2026-10-15"
+    }
+  ],
+  "authorizes": {
+    "kIssueSchemaMax": 3,
+    "quietWeek": true
+  },
+  "approvedBy": "owner",
+  "approvedOn": "2026-10-15"
+}
