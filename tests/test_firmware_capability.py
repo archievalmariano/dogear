@@ -82,10 +82,11 @@ class CapabilityTests(Tree):
     def test_a_synced_verified_release_authorises_quiet_issues(self):
         self.assertEqual(self.cap(), firmware.Capability(True, None))
 
-    def test_the_repository_contract_does_not_authorise_quiet_issues_yet(self):
-        c = firmware.capability()  # the real data/: not synced from a verified release
-        self.assertFalse(c.ok)
-        self.assertIn("no release block", c.reason)
+    def test_the_repository_contract_authorises_quiet_issues(self):
+        c = firmware.capability()  # the real data/: synced from the verified v1.2.0 release
+        self.assertEqual(c, firmware.Capability(True, None))
+        contract = json.loads((firmware.ROOT / firmware.CONTRACT).read_text(encoding="utf-8"))
+        self.assertEqual(contract["release"]["tag"], "v1.2.0")
 
     def test_missing_or_old_style_files_refuse(self):
         (self.root / firmware.CONTRACT).unlink()

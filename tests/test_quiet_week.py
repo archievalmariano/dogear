@@ -774,11 +774,16 @@ class ProductionGateTests(unittest.TestCase):
         except ImportError:
             from firmware_fixture import SyncedTree
         f = Fixture(self, regular_week(W0, "a"), at(W0, 9), policy=QUIET)
-        with self.assertRaises(NotReady) as caught:
-            self.pub(f)._ready()  # this repository's contract: not synced from a verified release yet
+        with tempfile.TemporaryDirectory() as d:  # a contract not synced from a verified release
+            unsynced = SyncedTree(Path(d)).write()
+            unsynced.edit_contract(lambda c: c.pop("release"))
+            with mock.patch.object(firmware, "ROOT", Path(d)):
+                with self.assertRaises(NotReady) as caught:
+                    self.pub(f)._ready()
         self.assertIn("firmware", str(caught.exception))
         contract = json.loads((ROOT / "data" / "firmware-contract.json").read_text())
-        self.assertNotIn("release", contract)
+        self.assertEqual(contract["release"]["tag"], "v1.2.0")
+        self.pub(f)._ready()  # this repository's contract: synced from the verified v1.2.0 release
         with tempfile.TemporaryDirectory() as d:
             SyncedTree(Path(d)).write()
             with mock.patch.object(firmware, "ROOT", Path(d)):
