@@ -241,4 +241,6 @@ class OperateTargetTests(unittest.TestCase):
         self.assertIn("needs: confirm", operate)
         self.assertIn("uses: ./.github/workflows/_dogear-publish.yml", operate)
         reusable = (ROOT / ".github" / "workflows" / "_dogear-publish.yml").read_text(encoding="utf-8")
-        self.assertIn("environment: ${{ inputs.target }}", reusable)  # the reviewer still decides production
+        # Routed: an operate run (workflow_dispatch) is never a schedule event, so it gets the
+        # reviewed production environment (tests/test_route.py); the reviewer still decides.
+        self.assertIn("environment: ${{ needs.route.outputs.environment }}", reusable)

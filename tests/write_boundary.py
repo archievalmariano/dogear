@@ -110,6 +110,26 @@ SURFACE = (
     ("dogear/publish/publisher.py", "Publisher._verify_outstanding"),
     ("dogear/publish/publisher.py", "Publisher._check_target"),
     ("dogear/publish/publisher.py", "Publisher._save_quietly"),
+    # the hold (PUBLISHING §4b): the only write with empty verification targets, the
+    # proof that makes it hold-only, its own result, and the codes a public log shows
+    ("dogear/publish/publisher.py", "HoldNotProven"),
+    ("dogear/publish/publisher.py", "_hold_only_guard"),
+    ("dogear/publish/publisher.py", "expected_verify"),
+    ("dogear/publish/publisher.py", "Publisher._committed_hold"),
+    ("dogear/publish/publisher.py", "Publisher.hold"),
+    ("dogear/publish/publisher.py", "Publisher._hold"),
+    ("dogear/publish/publisher.py", "AUTO_HOLD_CODES"),
+    ("dogear/publish/publisher.py", "STAGE_CODES"),
+    ("dogear/publish/publisher.py", "HOLD_CODES"),
+    # unattended operation (D2): what makes a Friday proof actionable, and when an
+    # unattended promotion must hold instead of publishing
+    ("dogear/publish/publisher.py", "Publisher.stage"),
+    ("dogear/publish/publisher.py", "Publisher.stage_next"),
+    ("dogear/publish/publisher.py", "Publisher._saved_proof_problem"),
+    ("dogear/publish/publisher.py", "Publisher._stage_failed"),
+    ("dogear/publish/publisher.py", "Publisher._proof_problem"),
+    ("dogear/publish/publisher.py", "Publisher._persisted_proof"),
+    ("dogear/publish/publisher.py", "_UNREADABLE_PROOF"),
     # what a write makes visible, and the guards every write re-runs (eligibility,
     # separation, the Manila week, visible revisions), and the operations that
     # choose which guards a write gets

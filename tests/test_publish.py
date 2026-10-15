@@ -7,14 +7,17 @@ of what was last saved, as a CI job would.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import datetime as dt
+import io
 import json
 import re
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from dogear.dataset import fingerprint
 from dogear.publish import registry as regmod
@@ -73,11 +76,15 @@ class Remote:
             self.saves.append(message)
         return commit
 
+    def read_saved(self, paths: list) -> dict:
+        """What was last saved (the remote), never a working tree."""
+        return {p: (self.remote / p).read_bytes() for p in paths if (self.remote / p).is_file()}
+
     def checkout(self) -> PubData:
         self.n += 1
         work = self.base / f"work{self.n}"
         shutil.copytree(self.remote, work)
-        return PubData(work, self.committer(work))
+        return PubData(work, self.committer(work), self.read_saved)
 
 
 class Fixture:
@@ -93,6 +100,8 @@ class Fixture:
         self.mode, self.policy = mode, policy
         self.links_checked: list = []
         self.served = None
+        self.generator = "dogear@test"
+        self.affinity = self.tmp / "none.json"
         self.checks = checks if checks is not None else Checks(link_checker=self._links, fit_checker=lambda d, ids: [])
         self.pub = self.run()
 
@@ -113,8 +122,8 @@ class Fixture:
 
     def run(self) -> Publisher:
         """A new run: fresh checkout of the publication data, same store and clock."""
-        self.pub = Publisher(self.store, self.remote.checkout(), StageInputs(self.dataset, self.tmp / "none.json",
-                                                                             BASE, "dogear@test"),
+        self.pub = Publisher(self.store, self.remote.checkout(), StageInputs(self.dataset, self.affinity,
+                                                                             BASE, self.generator),
                              self.policy, self.checks, self.clock, mode=self.mode,
                              assets={"inter.woff2": b"font-bytes"}, served=self.served)
         return self.pub
@@ -1371,6 +1380,730 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(rollover_week(at(W1 + dt.timedelta(days=6), 23, 59)).start, W1)
         utc = dt.datetime(2026, 11, 8, 22, 2, tzinfo=dt.timezone.utc)  # Sunday 22:02 UTC
         self.assertEqual(rollover_week(utc).start, W1)
+
+
+
+# ---- review by exception (PUBLISHING §4b): the audited hold and unattended runs ----
+
+FRIDAY = dt.timedelta(days=3)  # the Friday before a Monday
+
+
+def prod_launched(test: unittest.TestCase, records: list = None) -> Fixture:
+    """Production mode (the presentation guard reads served issues), W0 launched, W1 promoted."""
+    f = Fixture(test, records if records is not None else four_weeks(), at(W0, 9), mode="production")
+    test.assertEqual(f.pub.launch(first_publication=True).status, "published")
+    f.clock.t = at(W1)
+    test.assertEqual(f.run().promote().status, "published")
+    return f
+
+
+def saved(f: Fixture, name: str) -> bytes:
+    path = f.remote.remote / name
+    return path.read_bytes() if path.is_file() else None
+
+
+def lines(f: Fixture, op: str) -> list:
+    return [h for h in f.history() if h["op"] == op]
+
+
+def unserved(f: Fixture, *paths: str):
+    """The host fails these paths; everything else is served as stored."""
+    def served(path: str) -> tuple:
+        if path in paths:
+            return 404, b""
+        return routes.fetch(f.store, path)
+    return served
+
+
+def remote_pending(f: Fixture) -> bytes:
+    return saved(f, "pending.json")
+
+
+def rewrite_remote_json(f: Fixture, name: str, change) -> None:
+    path = f.remote.remote / name
+    data = json.loads(path.read_text(encoding="utf-8"))
+    change(data)
+    path.write_text(json.dumps(data, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+
+def rewrite_history(f: Fixture, txn: str, **changes) -> None:
+    path = f.remote.remote / "history.jsonl"
+    out = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        h = json.loads(raw)
+        if h["txn"] == txn:
+            h.update(changes)
+        out.append(json.dumps(h, sort_keys=True))
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+class HoldTests(unittest.TestCase):
+    """`hold <reason>`: audited, nothing visible changes, works when the current
+    revision itself is what is broken (correction 1)."""
+
+    def hold(self, f: Fixture, hh: int = 10, reason: str = "check the next issue"):
+        f.clock.t = at(f.clock.t.date(), hh)
+        return f.run().hold(reason)
+
+    def test_a_hold_changes_nothing_visible_and_is_recorded_once(self):
+        f = prod_launched(self)
+        before, manifest = f.registry(), f.served_manifest()
+        out = self.hold(f)
+        self.assertEqual((out.status, out.code, out.week), ("held", "HELD", "2026-11-09"))
+        after = f.registry()
+        self.assertEqual((after["current"], after["weeks"]), (before["current"], before["weeks"]))
+        self.assertEqual(regmod.manifest_bytes(after), regmod.manifest_bytes(before))
+        self.assertEqual(after["hold"], {"reason": "check the next issue", "since": at(W1, 10).isoformat(),
+                                         "txn": out.txn})
+        self.assertEqual(f.served_manifest(), manifest)
+        [line] = lines(f, "hold")
+        self.assertEqual((line["status"], line["verify"], line["code"], line["txn"]), ("committed", [], "HELD", out.txn))
+        self.assertEqual([v["txn"] for v in PubData(f.remote.remote).verified()].count(out.txn), 1)
+        self.assertIsNone(saved(f, "unverified.json"))
+        self.assertIsNone(remote_pending(f))
+        self.assertEqual(saved(f, "publication.json"), f.store.objects[REGISTRY_KEY].data)  # the mirror
+
+    def test_noop_when_held_and_refused_with_nothing_published(self):
+        f = prod_launched(self)
+        self.hold(f)
+        self.assertEqual(self.hold(f, 11).status, "noop")
+        self.assertEqual(len(lines(f, "hold")), 1)
+        g = Fixture(self, four_weeks(), at(W0, 9), mode="production")
+        with self.assertRaises(Refused):
+            g.pub.hold("nothing yet")
+        with self.assertRaises(Refused):
+            self.hold(prod_launched(self), reason="   ")
+
+    def test_promote_waits_while_held_and_resume_releases(self):
+        f = prod_launched(self)
+        self.hold(f)
+        f.clock.t = at(W2)
+        self.assertEqual(f.run().promote().status, "noop")
+        self.assertEqual(f.registry()["current"], "2026-11-09")
+        f.clock.t = at(W2, 9)
+        self.assertEqual(f.run().resume().status, "published")
+        self.assertEqual(f.run().promote().status, "published")
+        self.assertEqual(f.registry()["current"], "2026-11-16")
+
+    def test_a_hold_works_when_the_current_revision_is_broken(self):
+        cases = {
+            "approval withdrawn": lambda f: f.edit("w1-0", approval=None),
+            "issue object missing": lambda f: f.store.objects.pop(regmod.active_revision(f.registry(), "2026-11-09")["issueKey"]),
+            "provenance missing": lambda f: (f.remote.remote / "published" / "2026-11-09" / "rev0.provenance.json").unlink(),
+        }
+        for name, breaks in cases.items():
+            with self.subTest(name):
+                f = prod_launched(self)
+                breaks(f)
+                out = self.hold(f)
+                self.assertEqual(out.status, "held")
+                self.assertIsNotNone(f.registry()["hold"])
+                # Control: the operations that make a revision visible still refuse it.
+                f.clock.t = at(W1, 11)
+                with self.assertRaises(Refused):
+                    f.run().resume()
+
+    def test_presentation_guard_hold_branch_is_only_for_hold_only_writes(self):
+        from dogear.publish import publisher as pubmod
+        f = prod_launched(self)
+        f.store.objects.pop(regmod.active_revision(f.registry(), "2026-11-09")["issueKey"])  # current issue gone
+        f.store.objects.pop(regmod.active_revision(f.registry(), "2026-11-02")["issueKey"])
+        f.clock.t = at(W1, 10)
+        pub = f.run()
+        reg, _ = pub._read_registry()
+        txn = regmod.make_txn(f.clock(), "hold", ["t"])
+        held = regmod.hold(reg, "x", f.clock().isoformat(), txn)
+        rolled = regmod.rollback(reg, W0, None, "x", f.clock().isoformat(), txn)  # also sets a hold, moves current
+        reads = len(f.store.calls)
+        self.assertIsNone(pub._quiet_presentation_guard(reg, held)())  # hold-only: authorised, no issue read
+        self.assertEqual(f.store.calls[reads:], [])
+        self.assertEqual(pub._presentation_checked, regmod.sha256(regmod.dumps(held)))
+        self.assertIn("issue object is missing", pub._quiet_presentation_guard(reg, rolled)())  # full check
+        self.assertIsNone(pub._presentation_checked)
+        # Mutation: give every write the hold branch, and the full check is gone.
+        with mock.patch.object(pubmod, "_hold_only_guard", lambda before, after: None):
+            self.assertIsNone(pub._quiet_presentation_guard(reg, rolled)())
+
+    def test_promotion_first_then_the_hold_is_abandoned_cleanly(self):
+        f = prod_launched(self)
+        f.clock.t = at(W2, 6, 2)
+        pub = f.run()
+        promoted = []
+
+        def fault(op, key, data):
+            if op == "put" and key == REGISTRY_KEY and not promoted:  # the hold's write: a promotion lands first
+                promoted.append(1)
+                f.store.fault = None
+                other = f.run()
+                self.assertEqual(other.promote().status, "published")
+            return None
+
+        f.store.fault = fault
+        with self.assertRaises(Aborted) as err:
+            pub.hold("too late")
+        self.assertIn("changed under us", str(err.exception))
+        self.assertEqual(f.registry()["current"], "2026-11-16")
+        self.assertIsNone(f.registry()["hold"])
+        self.assertIsNone(remote_pending(f))
+        self.assertEqual([h["status"] for h in lines(f, "hold")], ["aborted"])
+
+    def test_hold_first_then_promotion_holds(self):
+        f = prod_launched(self)
+        self.hold(f)
+        f.clock.t = at(W2, 7, 7)
+        self.assertEqual(f.run().promote().status, "noop")
+        out = f.run().promote(unattended=True)
+        self.assertEqual((out.status, out.code), ("held", "HELD"))
+        self.assertEqual(f.registry()["current"], "2026-11-09")
+
+
+class HoldAuditTests(unittest.TestCase):
+    """Revision 3/3.1: the only empty-target transaction is a proven hold, settled at
+    once, never outstanding; its result is the hold whatever else is unserved."""
+
+    def held(self, f: Fixture, hh: int = 10):
+        f.clock.t = at(f.clock.t.date(), hh)
+        return f.run().hold("audit")
+
+    def kept_pending(self, f: Fixture, op: str):
+        """A transaction that applied but could not be confirmed: pending kept, registry = intended."""
+        reads = {"after_put": False}
+
+        def fault(o, key, data):
+            if key != REGISTRY_KEY:
+                return None
+            if o == "put":
+                reads["after_put"] = True
+                return "applied-then-fail"
+            return "fail" if reads["after_put"] else None
+
+        f.store.fault = fault
+        with self.assertRaises(NeedsHuman):
+            if op == "hold":
+                self.held(f)
+            else:
+                f.clock.t = at(W2)
+                f.run().promote()
+        f.store.fault = None
+        pending = PubData(f.remote.remote).read_pending()
+        self.assertIsNotNone(pending)
+        self.assertEqual(regmod.sha256(f.store.objects[REGISTRY_KEY].data), pending["intendedRegistrySha"])
+        return pending
+
+    def final_state(self, f: Fixture) -> dict:
+        return {name: saved(f, name) for name in ("history.jsonl", "verified.jsonl", "publication.json",
+                                                    "unverified.json", "pending.json")}
+
+    # (a)
+    def test_a_hold_commits_with_empty_targets_that_recompute_exactly(self):
+        from dogear.publish.publisher import _expected_targets_problem, expected_verify
+        f = prod_launched(self)
+        before = f.registry()
+        out = self.held(f)
+        self.assertEqual(lines(f, "hold")[0]["verify"], [])
+        self.assertEqual(expected_verify("hold", before, f.registry()), [])
+        pending = {"txn": out.txn, "op": "hold", "verify": [], "expectedEtag": "x",
+                   "expectedRegistry": regmod.dumps(before).decode(), "expectedRegistrySha": regmod.sha256(regmod.dumps(before)),
+                   "intendedRegistry": f.registry(), "intendedRegistrySha": regmod.sha256(regmod.dumps(f.registry()))}
+        self.assertIsNone(_expected_targets_problem(pending))
+
+    # (b)
+    def test_empty_targets_are_refused_for_every_other_operation(self):
+        from dogear.publish.pubdata import targets_problem
+        for op in ("launch", "promote", "correct", "rollback", "restore", "resume", None):
+            with self.subTest(op=op):
+                self.assertIsNotNone(targets_problem([], op))
+        self.assertIsNone(targets_problem([], "hold"))
+        # A non-hold pending recorded with [] cannot be finalized ...
+        f = prod_launched(self)
+        self.kept_pending(f, "promote")
+        rewrite_remote_json(f, "pending.json", lambda p: p.update(verify=[]))
+        raw = remote_pending(f)
+        with self.assertRaises(NeedsHuman) as err:
+            f.run().reconcile()
+        self.assertIn("cannot be trusted", str(err.exception))
+        self.assertEqual(remote_pending(f), raw)
+        # ... and a committed non-hold history line with [] stops everything.
+        g = prod_launched(self)
+        rewrite_history(g, lines(g, "promote")[0]["txn"], verify=[])
+        with self.assertRaises(CorruptState):
+            g.run().status()
+        # An unverified.json entry with [] is malformed, whatever it names.
+        h = prod_launched(self)
+        (h.remote.remote / "unverified.json").write_text(json.dumps(
+            {"entries": [{"txn": lines(h, "promote")[0]["txn"], "since": "x", "targets": []}]}))
+        with self.assertRaises(CorruptState):
+            h.run().status()
+
+    # (c)
+    def test_a_hold_is_settled_at_once_and_never_outstanding_even_with_the_host_down(self):
+        f = prod_launched(self)
+
+        def down(path):
+            raise OSError("host unreachable")
+
+        f.served = down
+        out = self.held(f)
+        self.assertEqual(out.status, "held")
+        self.assertIn(out.txn, [v["txn"] for v in PubData(f.remote.remote).verified()])
+        self.assertIsNone(saved(f, "unverified.json"))
+
+    # (d)
+    def test_an_interrupted_hold_recovers_to_the_identical_state(self):
+        reference = prod_launched(self)
+        self.held(reference)
+        want = self.final_state(reference)
+        self.assertIsNone(want["unverified.json"])
+
+        # Crash after the registry write, before it could be read back: recovered by a later reconcile.
+        f = prod_launched(self)
+        self.kept_pending(f, "hold")
+        out = f.run().reconcile()
+        self.assertIn("recorded", out.message)
+        self.assertEqual(self.final_state(f), want)
+
+        # Crash at each write inside _finalize, on the same working tree and from a fresh checkout.
+        for step in ("write_registry_mirror", "append_verified_once", "clear_pending"):
+            for resume_on in ("same checkout", "fresh checkout"):
+                with self.subTest(step=step, resume_on=resume_on):
+                    g = prod_launched(self)
+                    g.clock.t = at(W1, 10)
+                    pub = g.run()
+                    with mock.patch.object(PubData, step, side_effect=RuntimeError("crash")):
+                        with self.assertRaises(RuntimeError):
+                            pub.hold("audit")
+                    self.assertIsNotNone(PubData(g.remote.remote).read_pending())  # saved before the switch
+                    (pub if resume_on == "same checkout" else g.run()).reconcile()
+                    self.assertEqual(self.final_state(g), want)
+
+    def test_stop_after_an_uncertain_hold_write_returns_the_hold_result(self):
+        # Codex: every path that confirms a hold write, _stop's late confirmation included,
+        # ends in the hold result. The first attempt applies but cannot be read back; the
+        # guard then stops the retry, and _stop finds the registry is ours.
+        f = prod_launched(self)
+        f.clock.t = at(W1, 10)
+        pub = f.run()
+        reg, obj = pub._read_registry()
+        txn = regmod.make_txn(f.clock(), "hold", ["t"])
+        new_reg = regmod.hold(reg, "audit", f.clock().isoformat(), txn)
+        calls, reads = [], {"left": 0}
+
+        def guard():
+            calls.append(1)
+            return None if len(calls) == 1 else "stopped before the retry"
+
+        def fault(o, key, data):
+            if key == REGISTRY_KEY and o == "put":
+                reads["left"] = 1
+                return "applied-then-fail"
+            if key == REGISTRY_KEY and o == "get" and reads["left"]:
+                reads["left"] -= 1
+                return "fail"
+            return None
+
+        f.store.fault = fault
+        line = {"txn": txn, "op": "hold", "week": "2026-11-09", "at": f.clock().isoformat(), "code": "HELD",
+                "reason": "audit"}
+        out = pub._transact("hold", "2026-11-09", reg, obj, new_reg, [], guard, line, None)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual((out.status, out.code, out.txn), ("held", "HELD", txn))
+        self.assertIn(txn, [v["txn"] for v in PubData(f.remote.remote).verified()])
+        self.assertIsNone(saved(f, "unverified.json"))
+
+    # (e)
+    def test_a_mutated_hold_or_audit_record_is_refused_and_never_falls_back(self):
+        from dogear.publish import publisher as pubmod
+        from dogear.publish.publisher import UnguardedRegistryWrite
+        manifest_target = lambda f: {"kind": "manifest", "path": "/current.json",
+                                     "sha256": regmod.sha256(regmod.manifest_bytes(f.registry()))}
+        # A hold pending whose targets were changed away from [].
+        for targets in ("manifest", "other"):
+            with self.subTest(pending_targets=targets):
+                f = prod_launched(self)
+                self.kept_pending(f, "hold")
+                value = [manifest_target(f)] if targets == "manifest" else [{"kind": "x"}]
+                rewrite_remote_json(f, "pending.json", lambda p: p.update(verify=value))
+                raw = remote_pending(f)
+                with self.assertRaises(NeedsHuman):
+                    f.run().reconcile()
+                self.assertEqual(remote_pending(f), raw)
+                self.assertEqual(lines(f, "hold"), [])
+        # A promotion relabelled as a hold: not hold-only, so neither [] nor its full list is accepted.
+        for targets in ([], "full"):
+            with self.subTest(relabelled=targets):
+                f = prod_launched(self)
+                full = self.kept_pending(f, "promote")["verify"]
+                rewrite_remote_json(f, "pending.json", lambda p: p.update(op="hold", verify=[] if targets == [] else full))
+                raw = remote_pending(f)
+                with self.assertRaises(NeedsHuman) as err:
+                    f.run().reconcile()
+                self.assertIn("not hold-only", str(err.exception))
+                self.assertEqual(remote_pending(f), raw)
+        # Before any pending is saved: an "op hold" that is not hold-only is a programming error.
+        f = prod_launched(self)
+        f.clock.t = at(W1, 10)
+        pub = f.run()
+        reg, obj = pub._read_registry()
+        txn = regmod.make_txn(f.clock(), "hold", ["x"])
+        not_hold_only = regmod.rollback(reg, W0, None, "x", f.clock().isoformat(), txn)
+        puts = len([c for c in f.store.calls if c[0] == "put"])
+        with self.assertRaises(UnguardedRegistryWrite):
+            pub._transact("hold", "2026-11-09", reg, obj, not_hold_only, [], lambda: None,
+                          {"txn": txn, "op": "hold", "week": "2026-11-09"}, None)
+        self.assertEqual(len([c for c in f.store.calls if c[0] == "put"]), puts)
+        self.assertIsNone(pub.pubdata.read_pending())
+        self.assertEqual(f.registry()["current"], "2026-11-09")
+        # Mutation: a hold proof that accepts anything lets that write through.
+        g = prod_launched(self)
+        g.clock.t = at(W1, 10)
+        gp = g.run()
+        reg, obj = gp._read_registry()
+        bad = regmod.rollback(reg, W0, None, "x", g.clock().isoformat(), txn)
+        with mock.patch.object(pubmod, "_hold_only_guard", lambda before, after: None):
+            gp._transact("hold", "2026-11-09", reg, obj, bad, [], lambda: None,
+                         {"txn": txn, "op": "hold", "week": "2026-11-09"}, None)
+        self.assertEqual(g.registry()["current"], "2026-11-02")  # what the guard prevents
+
+        # Committed audit records altered after the fact.
+        audits = {
+            "hold line with targets": lambda f, t: rewrite_history(f, t, verify=[manifest_target(f)]),
+            "hold listed as outstanding": lambda f, t: (f.remote.remote / "unverified.json").write_text(json.dumps(
+                {"entries": [{"txn": t, "since": "x", "targets": [manifest_target(f)]}]})),
+            "hold missing from verified.jsonl": lambda f, t: (f.remote.remote / "verified.jsonl").write_text(
+                "".join(l + "\n" for l in (f.remote.remote / "verified.jsonl").read_text().splitlines() if t not in l)),
+        }
+        reasons = {"hold line with targets": "a hold verifies nothing", "hold listed as outstanding":
+                   "a hold is never outstanding", "hold missing from verified.jsonl": "neither outstanding nor settled"}
+        for name, alter in audits.items():
+            with self.subTest(audit=name):
+                f = prod_launched(self)
+                t = self.held(f).txn
+                alter(f, t)
+                with self.assertRaises(CorruptState) as err:
+                    f.run().status()
+                self.assertIn(reasons[name], str(err.exception))
+
+    def test_the_hold_proof_refuses_every_other_change_for_its_own_reason(self):
+        from dogear.publish.publisher import _hold_only_guard
+        f = prod_launched(self)
+        reg = f.registry()
+        txn = regmod.make_txn(at(W1, 10), "hold", ["t"])
+        held = regmod.hold(reg, "x", "now", txn)
+        self.assertIsNone(_hold_only_guard(reg, held))
+
+        def variant(change):
+            out = copy.deepcopy(held)
+            change(out)
+            return out
+        older = copy.deepcopy(reg["weeks"]["2026-11-09"]["revisions"][0])
+        cases = {
+            "it changes the current week or a revision": [
+                variant(lambda r: r.update(current="2026-11-02")),
+                variant(lambda r: r["weeks"]["2026-11-09"]["revisions"].append(dict(older, rev=1))),
+                variant(lambda r: r["weeks"].pop("2026-11-02")),
+                variant(lambda r: r["weeks"]["2026-11-02"]["revisions"][0].update(publishedAt="later"))],
+            "it does not set a new hold of its own": [
+                reg, variant(lambda r: r["hold"].update(txn=regmod.make_txn(at(W1, 11), "hold", ["u"])))],
+            "is invalid": [variant(lambda r: r.update(schemaVersion=2)), variant(lambda r: r.update(extra=1))],
+        }
+        for reason, afters in cases.items():
+            for after in afters:
+                with self.subTest(reason=reason):
+                    self.assertIn(reason, _hold_only_guard(reg, after) or "")
+        self.assertIn("does not set a new hold", _hold_only_guard(held, variant(lambda r: None)))  # already held
+        self.assertEqual(_hold_only_guard(None, held), "nothing is published")
+
+    # (f) Codex's regression
+    def test_an_automatic_hold_is_the_result_despite_earlier_unserved_output(self):
+        f = prod_launched(self)
+        # W2 published with its page unserved: committed, its targets outstanding (exit 8).
+        f.served = unserved(f, "/2026-11-16/")
+        f.clock.t = at(W2)
+        with self.assertRaises(PublishedUnverified):
+            f.run().promote()
+        outstanding = saved(f, "unverified.json")
+        self.assertIsNotNone(outstanding)
+        before = f.registry()
+        # W3: no Friday proof; the scheduled promote must hold, not stop at exit 8.
+        f.clock.t = at(W3, 7, 7)
+        out = f.run().promote(unattended=True)
+        self.assertEqual((out.status, out.code, out.week), ("held", "AUTO_NO_PROOF", "2026-11-23"))
+        self.assertEqual(len(lines(f, "hold")), 1)
+        self.assertEqual(lines(f, "hold")[0]["verify"], [])
+        self.assertEqual([v["txn"] for v in PubData(f.remote.remote).verified()].count(out.txn), 1)
+        self.assertEqual(saved(f, "unverified.json"), outstanding)  # untouched, not settled
+        after = f.registry()
+        self.assertEqual((after["current"], after["weeks"]), (before["current"], before["weeks"]))
+        self.assertEqual(regmod.manifest_bytes(after), regmod.manifest_bytes(before))
+        with self.assertRaises(PublishedUnverified):  # later runs still retry the earlier target
+            f.run().reconcile()
+        f.served = None
+        self.assertIn("served output verified", f.run().reconcile().message)
+        self.assertIsNone(saved(f, "unverified.json"))
+        # The same for an operator's hold.
+        g = prod_launched(self)
+        g.served = unserved(g, "/2026-11-16/")
+        g.clock.t = at(W2)
+        with self.assertRaises(PublishedUnverified):
+            g.run().promote()
+        outstanding = saved(g, "unverified.json")
+        out = self.held(g)
+        self.assertEqual((out.status, out.code), ("held", "HELD"))
+        self.assertEqual(saved(g, "unverified.json"), outstanding)
+
+    # (g)
+    def test_a_valid_proof_never_publishes_over_earlier_unserved_output(self):
+        f = prod_launched(self)
+        f.served = unserved(f, "/2026-11-16/")
+        f.clock.t = at(W2)
+        with self.assertRaises(PublishedUnverified):
+            f.run().promote()
+        # The Friday proof for W3, staged as Friday's run would have (the host check aside).
+        f.clock.t = at(W3 - FRIDAY, 11, 7)
+        pub = f.run()
+        reg, _ = pub._read_registry()
+        pub._write_staged(pub._stage(rollover_week(at(W3)), pub._history(reg, W3), f.clock()), [])
+        before, puts = f.store.objects[REGISTRY_KEY].data, len(f.store.calls)
+        f.clock.t = at(W3, 7, 7)
+        with self.assertRaises(PublishedUnverified):
+            f.run().promote(unattended=True)
+        self.assertEqual(f.store.objects[REGISTRY_KEY].data, before)
+        self.assertFalse([c for c in f.store.calls[puts:] if c[0] == "put"])
+        self.assertIsNone(remote_pending(f))
+
+
+class UnattendedPromoteTests(unittest.TestCase):
+    """D2: the scheduled promote publishes only the reviewed Friday proof."""
+
+    def friday(self, f: Fixture, monday: dt.date, hh: int = 11):
+        f.clock.t = at(monday - FRIDAY, hh, 7)
+        out = f.run().stage_next(unattended=True)
+        self.assertEqual(out.status, "staged", out)
+        return out
+
+    def monday(self, f: Fixture, monday: dt.date, hh: int = 7):
+        f.clock.t = at(monday, hh, 7)
+        return f.run().promote(unattended=True)
+
+    def assert_held(self, f: Fixture, out, code: str, current: str = "2026-11-09"):
+        self.assertEqual((out.status, out.code), ("held", code), out)
+        self.assertEqual(f.registry()["current"], current)
+        self.assertIsNotNone(f.registry()["hold"])
+        self.assertTrue(any(code in n for n in out.notices))
+
+    def test_a_valid_friday_proof_publishes_exactly_the_staged_bytes(self):
+        f = prod_launched(self)
+        self.friday(f, W2)
+        staged = {n: saved(f, f"staged/2026-11-16/{n}") for n in ("issue.json", "web.html")}
+        out = self.monday(f, W2)
+        self.assertEqual(out.status, "published")
+        rev = regmod.active_revision(f.registry(), "2026-11-16")
+        self.assertEqual(f.store.objects[rev["issueKey"]].data, staged["issue.json"])
+        self.assertEqual(f.store.objects[rev["webKey"]].data, staged["web.html"])
+
+    def test_no_proof_holds_and_uploads_nothing(self):
+        f = prod_launched(self)
+        keys = set(f.store.objects)
+        out = self.monday(f, W2)
+        self.assert_held(f, out, "AUTO_NO_PROOF")
+        self.assertEqual(set(f.store.objects), keys)
+        self.assertIsNone(saved(f, "staged/2026-11-16/issue.json"))  # never staged inline
+
+    def test_a_changed_input_holds(self):
+        changes = {
+            "approval withdrawn": lambda f: f.edit("w2-0", approval=None),
+            "policy": lambda f: setattr(f, "policy", PublicationPolicy(slot5_bar=40, sparse_week="publish",
+                                                                       empty_week="hold-previous")),
+            "generator": lambda f: setattr(f, "generator", "dogear@other"),
+        }
+        for name, change in changes.items():
+            with self.subTest(name):
+                f = prod_launched(self)
+                self.friday(f, W2)
+                change(f)
+                self.assert_held(f, self.monday(f, W2), "AUTO_PROOF_CHANGED")
+
+    def test_a_malformed_or_wrongly_shaped_proof_is_a_changed_proof(self):
+        """Codex's regression: loading the persisted proof is part of validating it. A
+        malformed or wrongly shaped one is AUTO_PROOF_CHANGED: one audited hold, the
+        previous issue current, nothing uploaded or published, exit 9; never a crash,
+        never "absent", never a publication."""
+        from dogear.publish.cli import _Report
+
+        def prov_edit(change):
+            def edit(d):
+                prov = json.loads((d / "provenance.json").read_text())
+                change(prov)
+                (d / "provenance.json").write_text(json.dumps(prov))
+            return edit
+        cases = {
+            "malformed provenance JSON": lambda d: (d / "provenance.json").write_text('{"week": "2026-11-16", '),
+            "provenance is a list": lambda d: (d / "provenance.json").write_text("[]"),
+            "provenance is a string": lambda d: (d / "provenance.json").write_text('"proof"'),
+            "provenance is not UTF-8": lambda d: (d / "provenance.json").write_bytes(b"\xff\xfe{}"),
+            "provenance without inputs": prov_edit(lambda p: p.pop("inputs")),
+            "inputs is a list": prov_edit(lambda p: p.update(inputs=[])),
+            "generatedAt missing": prov_edit(lambda p: p["inputs"].pop("generatedAt")),
+            "records is an object": prov_edit(lambda p: p.update(records={})),
+            "history is a number": prov_edit(lambda p: p["inputs"].update(history=7)),
+            "validation is a list": lambda d: (d / "validation.json").write_text("[]"),
+            "malformed validation JSON": lambda d: (d / "validation.json").write_text("{"),
+            "a staged file missing": lambda d: (d / "issue.json").unlink(),
+        }
+        at_load = {"malformed provenance JSON": "unreadable", "provenance is a list": "wrong shape",
+                   "provenance is a string": "wrong shape", "provenance without inputs": "wrong shape",
+                   "inputs is a list": "wrong shape", "generatedAt missing": "wrong shape",
+                   "records is an object": "wrong shape", "validation is a list": "wrong shape",
+                   "malformed validation JSON": "unreadable", "a staged file missing": "incomplete"}
+        for name, corrupt in cases.items():
+            with self.subTest(name):
+                f = prod_launched(self)
+                self.friday(f, W2)
+                corrupt(f.remote.remote / "staged" / "2026-11-16")
+                before, keys = f.registry(), set(f.store.objects)
+                out = self.monday(f, W2)
+                self.assertEqual((out.status, out.code, out.week), ("held", "AUTO_PROOF_CHANGED", "2026-11-16"))
+                if name in at_load:  # refused while loading, before any verification reads it
+                    self.assertTrue(any(at_load[name] in n for n in out.notices), out.notices)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(_Report(mock.Mock(public_log=False), None).success(out), 9)
+                holds = lines(f, "hold")
+                self.assertEqual([(h["status"], h["code"], h["verify"]) for h in holds],
+                                 [("committed", "AUTO_PROOF_CHANGED", [])])
+                after = f.registry()
+                self.assertEqual((after["current"], after["weeks"]), (before["current"], before["weeks"]))
+                self.assertEqual(set(f.store.objects), keys)  # nothing uploaded, nothing published
+                self.assertNotIn("2026-11-16", after["weeks"])
+                # The next catch-up reports the durable hold; it neither re-holds nor publishes.
+                again = self.monday(f, W2, 8)
+                self.assertEqual((again.status, again.code), ("held", "HELD"))
+                self.assertEqual(len(lines(f, "hold")), 1)
+        # Only a genuinely absent proof is AUTO_NO_PROOF.
+        f = prod_launched(self)
+        self.assert_held(f, self.monday(f, W2), "AUTO_NO_PROOF")
+
+    def test_manual_promote_of_a_malformed_proof_is_unchanged(self):
+        f = prod_launched(self)
+        self.friday(f, W2)
+        (f.remote.remote / "staged" / "2026-11-16" / "provenance.json").write_text("[]")
+        f.clock.t = at(W2)
+        with self.assertRaises(AttributeError):  # as at b22e4cc: the manual path is not changed here
+            f.run().promote()
+
+    def test_a_proof_from_outside_the_window_holds(self):
+        f = prod_launched(self)
+        f.clock.t = at(W2 - dt.timedelta(days=4), 11)  # Thursday: before the Friday window
+        self.assertEqual(f.run().stage(W2).status, "staged")
+        self.assert_held(f, self.monday(f, W2), "AUTO_PROOF_LATE")
+        g = prod_launched(self)
+        g.clock.t = at(W2, 6, 30)  # after the rollover
+        self.assertEqual(g.run().stage(W2).status, "staged")
+        self.assert_held(g, self.monday(g, W2), "AUTO_PROOF_LATE")
+        h = prod_launched(self)  # the window's edges: Friday 00:00 is in it
+        h.clock.t = at(W2 - FRIDAY, 0, 0)
+        self.assertEqual(h.run().stage(W2).status, "staged")
+        self.assertEqual(self.monday(h, W2).status, "published")
+
+    def test_an_affinity_change_after_friday_publishes_the_proof_unchanged(self):
+        f = prod_launched(self)
+        self.friday(f, W2)
+        staged_issue = saved(f, "staged/2026-11-16/issue.json")
+        f.affinity.write_text(json.dumps({"preferred": [{"name": "w2-1"}, {"name": "w3-1"}], "adjacent": []}), encoding="utf-8")
+        self.assertEqual(self.monday(f, W2).status, "published")
+        rev = regmod.active_revision(f.registry(), "2026-11-16")
+        self.assertEqual(f.store.objects[rev["issueKey"]].data, staged_issue)
+        # The next staging cycle reads the new affinity.
+        self.friday(f, W3)
+        prov = json.loads(saved(f, "staged/2026-11-23/provenance.json"))
+        self.assertEqual(prov["inputs"]["affinitySha256"], regmod.sha256(f.affinity.read_bytes()))
+
+    def test_a_missing_proof_is_never_classified_by_generating_the_week(self):
+        # A held (empty) week, and a normal one: with no Friday proof both are
+        # AUTO_NO_PROOF, and Monday runs no selector, staging or link check to say why.
+        for name, records in (("held week", week_records(W0, "w0") + week_records(W1, "w1") + week_records(W3, "w3")),
+                              ("normal week", None)):
+            with self.subTest(name):
+                f = prod_launched(self, records)
+                checked = len(f.links_checked)
+                with mock.patch.object(Publisher, "_stage", autospec=True, side_effect=Publisher._stage) as staging:
+                    self.assert_held(f, self.monday(f, W2), "AUTO_NO_PROOF")
+                self.assertFalse(staging.called, "Monday generated the week")
+                self.assertEqual(len(f.links_checked), checked)
+                self.assertIsNone(saved(f, "staged/2026-11-16/issue.json"))
+        # The held week's own signal is Friday's run.
+        f = prod_launched(self, week_records(W0, "w0") + week_records(W1, "w1") + week_records(W3, "w3"))
+        f.clock.t = at(W2 - FRIDAY, 11, 7)
+        self.assertEqual(f.run().stage_next(unattended=True).code, "STAGE_WEEK_HELD")
+
+    def test_manual_promote_is_unchanged(self):
+        f = prod_launched(self)
+        f.clock.t = at(W2)
+        out = f.run().promote()  # nothing staged: staged at promotion, as before
+        self.assertEqual(out.status, "published")
+        self.assertTrue(any("staged at promotion" in n for n in out.notices))
+
+    def test_recovery_is_resume_then_a_manual_promote(self):
+        f = prod_launched(self)
+        self.assert_held(f, self.monday(f, W2), "AUTO_NO_PROOF")
+        f.clock.t = at(W2, 9)
+        self.assertEqual(f.run().resume().status, "published")
+        # A daily catch-up between the two re-holds (still no proof): harmless.
+        self.assert_held(f, self.monday(f, W2, 8), "AUTO_NO_PROOF")
+        f.clock.t = at(W2, 9, 30)
+        self.assertEqual(f.run().resume().status, "published")
+        self.assertEqual(f.run().promote().status, "published")
+        self.assertEqual(f.registry()["current"], "2026-11-16")
+        self.assertIsNone(f.registry()["hold"])
+
+
+class UnattendedStageTests(unittest.TestCase):
+    """The Friday run succeeds only with an actionable proof (correction 2)."""
+
+    def friday(self, f: Fixture, unattended: bool = True):
+        f.clock.t = at(W2 - FRIDAY, 11, 7)
+        return f.run().stage_next(unattended=unattended)
+
+    def test_the_nominal_case_saves_and_verifies_the_exact_bytes(self):
+        f = prod_launched(self)
+        out = self.friday(f)
+        self.assertEqual(out.status, "staged")
+        self.assertIsNone(out.code)
+        files = f.run().pubdata.read_saved_staged(W2)
+        self.assertEqual(files, PubData(f.remote.remote).read_staged(W2))
+
+    def test_a_held_week_is_not_a_proof(self):
+        records = week_records(W0, "w0") + week_records(W1, "w1") + week_records(W3, "w3")
+        out = self.friday(prod_launched(self, records))
+        self.assertEqual((out.status, out.code, out.week), ("held", "STAGE_WEEK_HELD", "2026-11-16"))
+
+    def test_a_wrong_week_is_not_a_proof(self):
+        f = prod_launched(self)
+        real = Publisher._stage
+        with mock.patch.object(Publisher, "_stage", lambda pub, week, history, now:
+                               real(pub, rollover_week(at(W3)), pub._history(f.registry(), W3), now)):
+            out = self.friday(f)
+        self.assertEqual(out.code, "STAGE_WRONG_WEEK")
+
+    def test_an_unsaved_proof_is_never_success(self):
+        f = prod_launched(self)
+        f.remote.fail = 1  # the stage save fails (tolerated as a notice before)
+        out = self.friday(f)
+        self.assertEqual((out.status, out.code), ("held", "STAGE_NOT_SAVED"))
+        g = prod_launched(self)
+        g.remote.fail = 1
+        self.assertEqual(self.friday(g, unattended=False).status, "staged")  # manual: unchanged
+        h = prod_launched(self)  # nowhere to read the saved state from: never "saved"
+        h.clock.t = at(W2 - FRIDAY, 11, 7)
+        pub = h.run()
+        pub.pubdata.saved_reader = None
+        self.assertEqual(pub.stage_next(unattended=True).code, "STAGE_NOT_SAVED")
+
+    def test_a_saved_proof_that_does_not_verify_is_not_a_proof(self):
+        f = prod_launched(self)
+        with mock.patch("dogear.publish.publisher.verify_staged", return_value=["regenerates differently"]):
+            out = self.friday(f)
+        self.assertEqual((out.status, out.code), ("held", "STAGE_INVALID"))
+        self.assertIn("regenerates differently", " ".join(out.notices))
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ input (a correction's reason) is always exactly one argument.
 
     DOGEAR_TARGET=staging|production   DOGEAR_OP=<op>   [DOGEAR_WEEK, DOGEAR_REV,
     DOGEAR_EXPECT_REV, DOGEAR_REASON, DOGEAR_TXN]   PUBDATA=<checkout>   [DOGEAR_GIT=1]
+    [DOGEAR_UNATTENDED=0|1]   (1 only from the workflow's route job, for stage-next or promote)
 
 Exits with the publisher's own code (docs: dogear/publish/cli.py).
 """
@@ -21,8 +22,9 @@ ROOT = Path(__file__).resolve().parents[1]
 OPS = {
     "status": (), "reconcile": (), "stage-next": (), "promote": (), "resume": (),
     "stage": ("week",), "launch": (), "correct": ("week", "expect_rev", "reason"),
-    "rollback": ("week", "reason"), "restore": ("week", "rev"), "abandon": ("txn",),
+    "rollback": ("week", "reason"), "restore": ("week", "rev"), "abandon": ("txn",), "hold": ("reason",),
 }
+UNATTENDED_OPS = ("stage-next", "promote")  # the only scheduled operations
 OPTIONAL = {"rollback": ("rev",)}
 TXN = re.compile(r"^[0-9]{8}T[0-9]{6}-[a-z]+-[0-9a-f]{12}$")
 
@@ -44,7 +46,14 @@ def build_argv(env: dict) -> list:
     if env.get("DOGEAR_GIT") == "1":
         argv.append("--git")
     argv.append("--public-log")  # Actions logs of a public repository are public
+    unattended = env.get("DOGEAR_UNATTENDED", "")
+    if unattended not in ("", "0", "1"):
+        raise BadInput("DOGEAR_UNATTENDED must be 0 or 1")
+    if unattended == "1" and op not in UNATTENDED_OPS:
+        raise BadInput(f"only {' and '.join(UNATTENDED_OPS)} run unattended")
     argv.append(op)
+    if unattended == "1":
+        argv.append("--unattended")
     values = {name: (env.get(f"DOGEAR_{name.upper()}") or "").strip() for name in
               ("week", "rev", "expect_rev", "reason", "txn")}
     wanted = OPS[op] + OPTIONAL.get(op, ())

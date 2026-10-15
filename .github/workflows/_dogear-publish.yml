@@ -13,6 +13,15 @@
 #                   secrets: DOGEAR_R2_* (dogear-issues only), PUBLICATION_DATA_DEPLOY_KEY
 #                   (write, dogear-publication-data only), EDITORIAL_DEPLOY_KEY (read-only)
 #                   vars: PUBLICATION_DATA_REPO = archievalmariano/dogear-publication-data
+#   production-scheduled  deployment branch main only; NO reviewer: the unattended
+#                   Friday stage-next and Monday promote (PUBLISHING §4b). Its own,
+#                   separately revocable credentials, of the same scopes as production.
+#                   The `route` job below sends only a first-attempt scheduled run on main,
+#                   from dogear-stage.yml (stage-next) or dogear-promote.yml (promote), here.
+#                   GitHub does not restrict which workflow or event on main may name
+#                   this environment: every workflow on main is inside its trust
+#                   boundary, which the main ruleset, owner review of workflow changes
+#                   and tests/test_hosting.py RoutingBoundaryTests hold (PUBLISHING §4b).
 # The bucket, host, mode, dataset and policy are not variables: `--target` fixes them.
 # PUBLICATION_ENABLED=true (G10) gates only the SCHEDULED stage and promote jobs; a manual
 # workflow_dispatch of an enabled workflow runs regardless. Until approval, safety also
@@ -34,6 +43,46 @@ permissions:
   contents: read
 
 jobs:
+  # No environment, no secrets: which environment the publish job may use, and whether
+  # it runs unattended. Unattended production (no reviewer) only for a FIRST-attempt
+  # schedule event on main of this repository, from exactly dogear-stage.yml with
+  # stage-next or dogear-promote.yml with promote. Anything else is the reviewed
+  # production environment (reruns, workflow_dispatch, every operate op), or fails.
+  route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      environment: ${{ steps.r.outputs.environment }}
+      unattended: ${{ steps.r.outputs.unattended }}
+    steps:
+      - name: Route
+        id: r
+        env:
+          TARGET: ${{ inputs.target }}
+          OP: ${{ inputs.op }}
+          EVENT: ${{ github.event_name }}
+          ATTEMPT: ${{ github.run_attempt }}
+          REF: ${{ github.ref }}
+          CALLER: ${{ github.workflow_ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          case "$TARGET" in staging|production) ;; *) echo "::error::bad target"; exit 1 ;; esac
+          env_name="$TARGET"; unattended=0
+          if [ "$TARGET" = production ] && [ "$EVENT" = schedule ] && [ "$ATTEMPT" = 1 ] \
+             && [ "$REF" = refs/heads/main ] && [ "$REPO" = archievalmariano/dogear ]; then
+            case "$OP|$CALLER" in
+              "stage-next|archievalmariano/dogear/.github/workflows/dogear-stage.yml@refs/heads/main"|\
+              "promote|archievalmariano/dogear/.github/workflows/dogear-promote.yml@refs/heads/main")
+                env_name=production-scheduled; unattended=1 ;;
+            esac
+          fi
+          if [ "$TARGET" = staging ] && [ "$EVENT" = schedule ] && [ "$ATTEMPT" = 1 ] && [ "$REF" = refs/heads/main ]; then
+            case "$OP" in stage-next|promote) unattended=1 ;; esac
+          fi
+          echo "environment=$env_name" >> "$GITHUB_OUTPUT"
+          echo "unattended=$unattended" >> "$GITHUB_OUTPUT"
+          echo "route: $TARGET $OP -> $env_name (unattended=$unattended)"
+
   # Production only: the private editorial checks against THIS public commit and the
   # editorial commit production will use. It finishes before production's approval
   # is requested, and records the pair the publish job must use.
@@ -74,17 +123,51 @@ jobs:
         run: python tools/editorial_gate.py
 
   publish:
-    needs: editorial-gate
+    needs: [route, editorial-gate]
     # Staging skips the gate; production runs only after it passed, on its pair.
-    if: ${{ !cancelled() && (inputs.target != 'production' || needs.editorial-gate.result == 'success') }}
+    if: ${{ !cancelled() && needs.route.result == 'success' && (inputs.target != 'production' || needs.editorial-gate.result == 'success') }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.target }}
+    environment: ${{ needs.route.outputs.environment }}
     timeout-minutes: 20
     # One publication at a time per target; never cancel one in flight.
     concurrency:
       group: dogear-publication-${{ inputs.target }}
       cancel-in-progress: false
     steps:
+      # First, before any step that uses a secret: re-check the route against this
+      # job's own context. A rerun of only this job reuses the route's outputs from
+      # attempt 1, so the attempt is read here again; any mismatch fails closed.
+      - name: Assert the route
+        env:
+          ENVIRONMENT: ${{ needs.route.outputs.environment }}
+          UNATTENDED: ${{ needs.route.outputs.unattended }}
+          TARGET: ${{ inputs.target }}
+          OP: ${{ inputs.op }}
+          EVENT: ${{ github.event_name }}
+          ATTEMPT: ${{ github.run_attempt }}
+          REF: ${{ github.ref }}
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          case "$ENVIRONMENT" in staging|production|production-scheduled) ;; *) fail "unknown environment" ;; esac
+          case "$UNATTENDED" in 0|1) ;; *) fail "bad unattended flag" ;; esac
+          case "$TARGET:$ENVIRONMENT" in
+            staging:staging|production:production|production:production-scheduled) ;;
+            *) fail "the environment does not match the target" ;;
+          esac
+          if [ "$ENVIRONMENT" = production-scheduled ]; then
+            [ "$EVENT" = schedule ] || fail "unattended production needs a schedule event"
+            [ "$ATTEMPT" = 1 ] || fail "unattended production never runs on a rerun"
+            [ "$REF" = refs/heads/main ] || fail "unattended production runs only on main"
+            [ "$UNATTENDED" = 1 ] || fail "production-scheduled without the unattended flag"
+            case "$OP" in stage-next|promote) ;; *) fail "unattended production runs only stage-next or promote" ;; esac
+          elif [ "$TARGET" = production ] && [ "$UNATTENDED" != 0 ]; then
+            fail "reviewed production never runs unattended"
+          fi
+          if [ "$UNATTENDED" = 1 ]; then
+            [ "$EVENT" = schedule ] && [ "$ATTEMPT" = 1 ] && [ "$REF" = refs/heads/main ] || fail "unattended outside a first-attempt schedule on main"
+          fi
+          echo "route asserted: $TARGET -> $ENVIRONMENT"
+
       - name: Check configuration
         env:
           TARGET: ${{ inputs.target }}
@@ -184,6 +267,7 @@ jobs:
           DOGEAR_EXPECT_REV: ${{ inputs.expect_rev }}
           DOGEAR_REASON: ${{ inputs.reason }}
           DOGEAR_TXN: ${{ inputs.txn }}
+          DOGEAR_UNATTENDED: ${{ needs.route.outputs.unattended }}
           PUBDATA: ${{ github.workspace }}/publication-data
           DOGEAR_GIT: "1"
           DOGEAR_R2_ACCOUNT_ID: ${{ secrets.DOGEAR_R2_ACCOUNT_ID }}

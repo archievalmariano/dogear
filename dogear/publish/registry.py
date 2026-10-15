@@ -245,6 +245,20 @@ def restore(reg: dict, week: dt.date, rev: int, txn: str) -> dict:
     return new
 
 
+def hold(reg: Optional[dict], reason: str, since: str, txn: str) -> dict:
+    """Hold automatic promotion and change nothing visible: ``current``, ``weeks`` and
+    every ``active`` stay exactly as they were. Released by ``resume``."""
+    if reg is None:
+        raise Refused("nothing is published")
+    if not reason.strip():
+        raise Refused("a hold needs a reason")
+    if reg["hold"] is not None:
+        raise NoOp("already held")
+    new = copy.deepcopy(reg)
+    new["hold"], new["txn"] = {"reason": reason.strip(), "since": since, "txn": txn}, txn
+    return new
+
+
 def resume(reg: dict, txn: str) -> dict:
     """Lift the hold only. Automatic promotion resumes with the next unpublished week."""
     if reg["hold"] is None:

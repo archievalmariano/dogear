@@ -10,6 +10,10 @@
     publication.json                   mirror of the registry after each commit
     published/<monday>/rev<N>.provenance.json
 
+A hold (``op`` "hold") changes nothing the host serves: its committed history line
+records ``verify: []``, it is settled in verified.jsonl when it commits, and it is
+never in unverified.json. No other transaction may have empty targets.
+
 ``save`` makes the working tree durable (commit + push). A save that raises
 leaves the remote as it was: a later run that starts from a fresh checkout
 must still find everything it needs, which is why the pending transaction is
@@ -50,9 +54,13 @@ def _json(obj: object) -> bytes:
 
 
 class PubData:
-    def __init__(self, root: Path, committer: Optional[Callable[[str], None]] = None) -> None:
+    def __init__(self, root: Path, committer: Optional[Callable[[str], None]] = None,
+                 saved_reader: Optional[Callable[[list], Optional[dict]]] = None) -> None:
         self.root = Path(root)
         self.committer = committer
+        # Reads paths from the SAVED state (the remote's committed main), never this
+        # working tree; None when nothing is saved anywhere (then nothing reads as saved).
+        self.saved_reader = saved_reader
 
     def save(self, message: str) -> None:
         if self.committer is None:
@@ -83,6 +91,20 @@ class PubData:
             return {name: (d / name).read_bytes() for name in STAGED_FILES}
         except OSError:
             return None  # incomplete: treated as absent, and re-staged
+
+    def read_saved_staged(self, week: dt.date) -> Optional[dict[str, bytes]]:
+        """staged/<week>/ exactly as last saved (the committed remote state, not this
+        working tree), or None if it is not completely there or cannot be read."""
+        if self.saved_reader is None:
+            return None
+        paths = [f"staged/{week.isoformat()}/{name}" for name in STAGED_FILES]
+        try:
+            got = self.saved_reader(paths)
+        except Exception:  # noqa: BLE001 - an unreadable remote is "not saved"
+            return None
+        if not isinstance(got, dict) or not all(isinstance(got.get(p), bytes) for p in paths):
+            return None
+        return {name: got[p] for name, p in zip(STAGED_FILES, paths)}
 
     # The transaction in flight.
 
@@ -297,10 +319,14 @@ def _valid_target(t: object) -> bool:
 _ISSUE_PATH = re.compile(r"^/issues/dogear-(\d{4}-\d{2}-\d{2})\.([0-9a-f]{16})\.json$")
 
 
-def targets_problem(targets: object) -> Optional[str]:
-    """What is wrong with a verification target list, or None. The shape is fixed by
-    ``verification_targets``: the manifest, then a page and its device issue per week,
-    weeks ascending and each a Monday."""
+def targets_problem(targets: object, op: Optional[str] = None) -> Optional[str]:
+    """What is wrong with a verification target list, or None. A hold's list is
+    exactly empty. Every other operation's (and an unverified.json entry's, which
+    names no operation) has the shape ``verification_targets`` fixes: the manifest,
+    then a page and its device issue per week, weeks ascending and each a Monday;
+    so it is never empty."""
+    if op == "hold":
+        return None if isinstance(targets, list) and not targets else "a hold verifies nothing: its targets must be []"
     if not isinstance(targets, list) or not targets or not all(_valid_target(t) for t in targets):
         return "targets are missing or malformed"
     head, rest = targets[0], targets[1:]
@@ -330,6 +356,30 @@ def targets_problem(targets: object) -> Optional[str]:
 
 class RemoteMoved(SaveFailed):
     """The remote branch is not where this run last saw it: nothing was written."""
+
+
+def git_saved_reader(root: Path, branch: str = "main") -> Callable[[list], Optional[dict]]:
+    """Reads paths from the remote branch as saved (fetched afresh, then read from
+    that commit): what a later run would find, not this checkout's working tree.
+    None if the remote cannot be read; a path it lacks is simply absent."""
+
+    def read(paths: list) -> Optional[dict]:
+        fetch = subprocess.run(["git", "-C", str(root), "fetch", "-q", "--no-tags", "origin", f"refs/heads/{branch}"],
+                               capture_output=True)
+        if fetch.returncode != 0:
+            return None
+        tip = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "-q", "FETCH_HEAD^{commit}"],
+                             capture_output=True, text=True).stdout.strip()
+        if not tip:
+            return None
+        out = {}
+        for path in paths:
+            shown = subprocess.run(["git", "-C", str(root), "show", f"{tip}:{path}"], capture_output=True)
+            if shown.returncode == 0:
+                out[path] = shown.stdout
+        return out
+
+    return read
 
 
 def git_committer(root: Path, push: bool = True, branch: str = "main") -> Callable[[str], None]:

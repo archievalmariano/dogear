@@ -3,6 +3,8 @@
 # any revision, a run is a green no-op. See _dogear-publish.yml.
 # dogear-scheduler dispatches at 06:02 and 06:17 Monday and 06:32 daily (PHT); these
 # GitHub crons are the redundant fallback.
+# A first-attempt SCHEDULED run on main is routed to the unattended production-scheduled
+# environment by _dogear-publish.yml's route job (PUBLISHING §4b); a manual run is reviewed.
 name: DOGEAR promote
 
 on:
