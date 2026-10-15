@@ -140,10 +140,10 @@ class ConstantsAndPolicyTests(unittest.TestCase):
         self.assertEqual(QUIET_NOTE, "Not much on our calendar, but still a few things worth a dogear for you.")
         self.assertEqual(EMPTY_CHOICES, ("hold-previous", "quiet-week"))
 
-    def test_production_policy_keeps_quiet_week_off(self):
+    def test_production_policy_turns_quiet_week_on(self):
         policy = load_policy(ROOT / "data" / "publication-policy.json")
-        self.assertEqual((policy.slot5_bar, policy.sparse_week, policy.empty_week), (42, "publish", None))
-        self.assertEqual(policy.unset(), ["emptyWeek"])  # production still refuses until the owner's switch
+        self.assertEqual((policy.slot5_bar, policy.sparse_week, policy.empty_week), (42, "publish", "quiet-week"))
+        self.assertEqual(policy.unset(), [])  # the owner's switch, after the v1.2.0 contract sync
         self.assertEqual(load_policy(ROOT / "fixtures" / "staging-policy.json").empty_week, "quiet-week")
 
 
