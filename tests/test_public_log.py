@@ -105,6 +105,42 @@ class PublicLogTests(unittest.TestCase):
         history = PubData(self.tmp / f"run{self.runs}").history()
         self.assertTrue(any(h.get("reason") == REASON for h in history))  # kept in private data
 
+    def test_a_hold_shows_only_its_code_and_week_and_exits_9(self):
+        self.assertEqual(self.run_cli("2027-03-03T10:00:00+08:00", "launch", "--first-publication")[0], 0)
+        code, printed = self.run_cli("2027-03-04T10:00:00+08:00", "hold", "--reason", HOLD)
+        self.assertEqual(code, 9)  # held, action needed: the run is red
+        self.assert_clean(printed)
+        self.assertRegex(printed, r"^held: hold 2027-03-01 HELD \d{8}T\d{6}-hold-[0-9a-f]{12}\n$")
+        code, printed = self.run_cli("2027-03-04T10:01:00+08:00", "hold", "--reason", HOLD)
+        self.assertEqual((code, printed.split(":")[0]), (0, "noop"))  # already held
+        code, printed = self.run_cli("2027-03-08T07:07:00+08:00", "promote", "--unattended")
+        self.assertEqual(code, 9)  # the current week is unpublished and held
+        self.assert_clean(printed)
+        self.assertRegex(printed, r"^held: promote 2027-03-08 HELD\n")
+        self.assertEqual(self.run_cli("2027-03-08T07:08:00+08:00", "promote")[0], 0)  # manual: noop, as before
+
+    def test_the_unattended_week_end_to_end_with_the_saved_state_read_back(self):
+        self.assertEqual(self.run_cli("2027-03-03T10:00:00+08:00", "launch", "--first-publication")[0], 0)
+        code, printed = self.run_cli("2027-03-05T11:07:00+08:00", "stage-next", "--unattended")
+        self.assertEqual(code, 0, printed)  # read back from the pushed remote, and verified
+        self.assertTrue(printed.startswith("staged: stage-next"), printed)
+        code, printed = self.run_cli("2027-03-08T07:07:00+08:00", "promote", "--unattended")
+        self.assertEqual(code, 0, printed)
+        self.assertRegex(printed, r"^published: promote \d{8}T\d{6}-promote-[0-9a-f]{12}\n")
+
+    def test_an_automatic_hold_keeps_its_detail_privately(self):
+        self.assertEqual(self.run_cli("2027-03-03T10:00:00+08:00", "launch", "--first-publication")[0], 0)
+        code, printed = self.run_cli("2027-03-08T07:07:00+08:00", "promote", "--unattended")  # no Friday proof
+        self.assertEqual(code, 9)
+        self.assert_clean(printed)
+        self.assertRegex(printed, r"^held: promote 2027-03-08 AUTO_NO_PROOF \d{8}T\d{6}-hold-[0-9a-f]{12}\n")
+        self.assertIn("AUTO_NO_PROOF 2027-03-08: nothing was staged", self.private_runs_text())
+
+    def test_unattended_is_only_for_stage_next_and_promote(self):
+        for op in (["stage", "--week", "2027-03-08"], ["status"], ["hold", "--reason", "r"]):
+            with self.subTest(op=op), self.assertRaises(SystemExit):
+                self.run_cli("2027-03-04T10:00:00+08:00", *op, "--unattended")
+
     def test_a_refusal_keeps_its_detail_privately(self):
         def blocking(urls):
             return LinkReport(blocking=[f"{URL}{n}: HTTP 404" for n, _ in enumerate(urls)], warnings=[])

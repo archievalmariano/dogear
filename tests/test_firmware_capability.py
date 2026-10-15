@@ -516,7 +516,7 @@ class OperationClassificationTests(unittest.TestCase):
     """Every publish operation is classified. A new one fails here until it is
     added to one side, and the registry-writing side is gated (above)."""
 
-    WRITES = {"launch", "promote", "correct", "rollback", "restore", "resume"}  # via _transact
+    WRITES = {"launch", "promote", "correct", "rollback", "restore", "hold", "resume"}  # via _transact
     PREPARES = {"stage", "stage-next"}  # staged/ only, behind _ready()
     NEVER_WRITES = {"status", "reconcile", "abandon", "reset-preflight", "attest-subjects"}
 

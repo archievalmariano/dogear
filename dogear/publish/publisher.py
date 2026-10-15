@@ -138,6 +138,25 @@ class Outcome:
     message: str
     txn: Optional[str] = None
     notices: list = field(default_factory=list)
+    # A hold that needs action (exit 9): its public reason code and week. None for
+    # every other result, including a manual stage's or promote's own "held".
+    code: Optional[str] = None
+    week: Optional[str] = None
+
+
+# Public reason codes (the only hold detail a public log carries; PUBLISHING §4b).
+AUTO_HOLD_CODES = ("AUTO_NO_PROOF", "AUTO_PROOF_CHANGED", "AUTO_PROOF_LATE")
+STAGE_CODES = ("STAGE_WRONG_WEEK", "STAGE_NOT_SAVED", "STAGE_INVALID", "STAGE_WEEK_HELD")
+HOLD_CODES = AUTO_HOLD_CODES + ("HELD",)
+
+
+# A persisted proof that is there but wrongly shaped fails with these while it is read
+# or verified (with ValueError for malformed JSON): unattended, each is a changed proof.
+_UNREADABLE_PROOF = (TypeError, KeyError, AttributeError, IndexError)
+
+
+class HoldNotProven(Exception):
+    """A transaction recorded as a hold whose registries are not hold-only: never given hold semantics."""
 
 
 _PAGE_FONT = re.compile(r"url\('\.\./fonts/([A-Za-z0-9-]+\.woff2)'\)")
@@ -481,10 +500,15 @@ class Publisher:
         if pending.get("provenance") is not None:
             rev = regmod.active_revision(reg, pending["week"])["rev"]
             self.pubdata.write_published_provenance(pending["week"], rev, provenance_bytes(pending["provenance"]))
-        entries = [e for e in (self.pubdata.read_unverified() or []) if e["txn"] != pending["txn"]]
-        if not any(v["txn"] == pending["txn"] for v in self.pubdata.verified()):
-            entries.append({"txn": pending["txn"], "since": self.clock().isoformat(), "targets": pending["verify"]})
-        self.pubdata.write_unverified(entries)
+        if pending["verify"] == []:
+            # A proven hold (checked above): nothing to serve, so settled now. It never
+            # enters unverified.json, and that file is not read or rewritten here.
+            self.pubdata.append_verified_once(pending["txn"], self.clock().isoformat())
+        else:
+            entries = [e for e in (self.pubdata.read_unverified() or []) if e["txn"] != pending["txn"]]
+            if not any(v["txn"] == pending["txn"] for v in self.pubdata.verified()):
+                entries.append({"txn": pending["txn"], "since": self.clock().isoformat(), "targets": pending["verify"]})
+            self.pubdata.write_unverified(entries)
         self.pubdata.clear_pending()
         try:
             self.pubdata.save(f"publish {pending['txn']}")
@@ -563,13 +587,18 @@ class Publisher:
         or current only while released firmware presents quiet issues (the synced
         firmware contract), whatever the policy says. What a write shows: the new
         current week's active revision and every week whose active revision changes.
-        Moving away from a quiet revision is always allowed."""
+        Moving away from a quiet revision is always allowed. A hold-only write (a hold
+        set, nothing else: _hold_only_guard, re-checked here) shows nothing new, so it
+        is authorised without reading any issue: a hold must work when they are gone."""
         shown = sorted(shown_revisions(before, after))
         objects = {key: data for key, data, _ctype in uploads}
         intended = regmod.sha256(regmod.dumps(after))
 
         def guard() -> Optional[str]:
             self._presentation_checked = None
+            if _hold_only_guard(before, after) is None and regmod.sha256(regmod.dumps(after)) == intended:
+                self._presentation_checked = intended
+                return None
             if self.mode == "production":
                 quiet = []
                 for week, rev_no in shown:
@@ -688,6 +717,10 @@ class Publisher:
         txn = new_reg["txn"]
         new_bytes = regmod.dumps(new_reg)
         intended = regmod.sha256(new_bytes)
+        try:  # before anything is uploaded or recorded: a hold must prove itself hold-only
+            verify = expected_verify(op, reg, new_reg)
+        except HoldNotProven as err:
+            raise UnguardedRegistryWrite(f"{txn}: a hold that is not hold-only ({err}); nothing recorded") from None
         # Every registry write, whatever the operation: the firmware gate on quiet issues.
         fresh = {"txn": txn, "provenance": provenance} if provenance is not None else None
         guard = self._all(self._quiet_presentation_guard(reg, new_reg, fresh, uploads), guard)
@@ -702,7 +735,7 @@ class Publisher:
                    "expectedRegistry": obj.data.decode("utf-8") if obj else None,
                    "intendedRegistrySha": intended, "intendedRegistry": new_reg,
                    "history": history, "provenance": provenance, "createdAt": self.clock().isoformat(),
-                   "verify": verification_targets(reg, new_reg)}
+                   "verify": verify}
         self.pubdata.write_pending(pending)
         try:
             self.pubdata.save(f"pending {txn}")
@@ -746,12 +779,25 @@ class Publisher:
         return self._committed(pending)
 
     def _committed(self, pending: dict) -> Outcome:
+        """The live registry is affirmatively this transaction's (every path that
+        confirms a write ends here, _stop's late confirmation included)."""
+        if pending["verify"] == []:  # recorded as a hold: _finalize proves it before anything is written
+            return self._committed_hold(pending)
         self._finalize(pending)
         failures, _settled = self._verify_outstanding()
         if failures:
             raise PublishedUnverified(f"{pending['txn']} is in the registry, but the host does not yet serve: "
                                       + "; ".join(failures) + "; each run re-checks until it does")
         return Outcome("published", f"{pending['op']} {pending['week']}: {pending['txn']}", pending["txn"])
+
+    def _committed_hold(self, pending: dict) -> Outcome:
+        """A committed hold's result is the hold (exit 9), whatever other transactions'
+        served output shows: it settles nothing else and checks no host, so earlier
+        outstanding entries stay exactly as they were for the next run to re-check."""
+        self._finalize(pending)
+        code = pending["history"].get("code") if pending["history"].get("code") in HOLD_CODES else "HELD"
+        return Outcome("held", f"{code} {pending['week']}: held ({pending['txn']}); the previous issue stays current",
+                       pending["txn"], code=code, week=pending["week"])
 
     def _registry_state(self, intended: str, expected: Optional[str]) -> str:
         try:
@@ -801,7 +847,7 @@ class Publisher:
         pending = self.pubdata.read_pending()
         in_flight = pending["txn"] if pending else None  # finalizing it writes its entry
         for txn, line in committed.items():
-            problem = targets_problem(line.get("verify"))
+            problem = targets_problem(line.get("verify"), line.get("op"))
             if problem:
                 raise CorruptState(f"history line {txn}: verification targets: {problem}")
         for txn in settled - set(committed):
@@ -811,6 +857,8 @@ class Publisher:
             line = committed.get(e["txn"])
             if line is None:
                 raise CorruptState(f"unverified.json lists {e['txn']}, which history does not record as committed")
+            if line.get("op") == "hold":
+                raise CorruptState(f"unverified.json lists {e['txn']}, a hold: a hold is never outstanding")
             if e["targets"] != line["verify"]:
                 raise CorruptState(f"unverified.json targets for {e['txn']} differ from those its history line records")
             listed.add(e["txn"])
@@ -916,33 +964,80 @@ class Publisher:
         attested = quiet_history.attested_subjects(lines, reg, self.pubdata)
         return quiet_history.build_source(lines, attested, monday)
 
-    def stage(self, monday: dt.date) -> Outcome:
-        """Stage a week (the Friday job stages next week; see stage_next)."""
+    def stage(self, monday: dt.date, unattended: bool = False) -> Outcome:
+        """Stage a week (the Friday job stages next week; see stage_next).
+
+        Unattended (the scheduled Friday run), success means an actionable proof:
+        the week's staged files, read back from the SAVED publication data, equal what
+        was generated and verify against the current inputs. Anything less is a
+        held result with its code (exit 9), never a green run."""
         self._ready()
         notices = [r.message for r in [self.reconcile()] if r]
         reg, _obj = self._read_registry()
         if reg is not None and monday.isoformat() in reg["weeks"]:
             return Outcome("noop", f"{monday} is already published", notices=notices)
+        history = self._history(reg, monday)
         try:
-            staged = self._stage(week_starting(monday), self._history(reg, monday), self.clock())
+            staged = self._stage(week_starting(monday), history, self.clock())
         except WeekHeld as held:
+            if unattended:
+                return self._stage_failed("STAGE_WEEK_HELD", monday, notices + [str(held)])
             return Outcome("held", str(held), notices=notices)
+        if unattended and (staged.week != monday or staged.provenance.get("week") != monday.isoformat()):
+            return self._stage_failed("STAGE_WRONG_WEEK", monday, notices + [f"generated for {staged.week}"])
         self._write_staged(staged, notices)
         notices += staged.validation["warnings"]
+        if unattended:
+            problem = self._saved_proof_problem(staged, monday, history)
+            if problem:
+                return self._stage_failed(problem[0], monday, notices + [problem[1]])
         return Outcome("staged", f"staged {monday}: {staged.validation['items']} items, issue {staged.issue_sha[:12]}",
                        notices=notices)
 
-    def stage_next(self) -> Outcome:
+    def _saved_proof_problem(self, staged: Staged, monday: dt.date, history: list) -> Optional[tuple]:
+        """(code, detail) unless the SAVED staged/<monday>/ is exactly what was just
+        generated, is for that week, and verifies against the current inputs."""
+        saved = self.pubdata.read_saved_staged(monday)
+        if saved is None or saved != staged.files():
+            return "STAGE_NOT_SAVED", "the staged week is not in the saved publication data exactly as generated"
+        try:
+            proof = Staged.from_files(monday, saved)
+        except (KeyError, TypeError, ValueError) as err:
+            return "STAGE_INVALID", f"the saved staged week is unreadable ({err})"
+        if proof.provenance.get("week") != monday.isoformat():
+            return "STAGE_WRONG_WEEK", f"the saved proof is for {proof.provenance.get('week')}"
+        try:
+            source = self._quiet_source(monday) if proof.provenance.get("edition") == "quiet" else None
+            problems = verify_staged(proof, self.inputs, self.policy, history, self._dataset_text(),
+                                     self.checks, self.mode, quiet_source=source)
+        except (OSError, ValueError) as err:
+            problems = [f"cannot verify the saved staged week: {err}"]
+        if problems:
+            return "STAGE_INVALID", "; ".join(problems)
+        return None
+
+    @staticmethod
+    def _stage_failed(code: str, monday: dt.date, notices: list) -> Outcome:
+        return Outcome("held", f"{code} {monday}: no actionable proof staged", notices=notices, code=code,
+                       week=monday.isoformat())
+
+    def stage_next(self, unattended: bool = False) -> Outcome:
         """The Friday job: next week only."""
         local = self.clock().astimezone(MANILA).date()
-        return self.stage(week_of(local).start + dt.timedelta(days=7))
+        return self.stage(week_of(local).start + dt.timedelta(days=7), unattended)
 
     # Operations.
 
-    def promote(self) -> Outcome:
-        """Publish the current Manila week once (Monday runs and the daily catch-up)."""
+    def promote(self, unattended: bool = False) -> Outcome:
+        """Publish the current Manila week once (Monday runs and the daily catch-up).
+
+        Unattended (the scheduled runs, D2): only the persisted, reviewed Friday proof,
+        exactly as staged, ever publishes. A missing, changed or late proof is an
+        audited hold with its code instead (exit 9); nothing is staged, selected or
+        link-checked here, and the previous issue stays current. Earlier unserved output never blocks that hold,
+        but still stops a publication, before anything is written (exit 8)."""
         self._ready()
-        notices = [r.message for r in [self.reconcile()] if r]
+        notices = [r.message for r in [self.reconcile(require_verified=not unattended)] if r]
         now = self.clock()
         week = rollover_week(now)
         if week is None:
@@ -954,12 +1049,19 @@ class Publisher:
         if key in reg["weeks"]:
             return Outcome("noop", f"{key} is already published (revision {reg['weeks'][key]['active']})", notices=notices)
         if reg["hold"] is not None:
+            if unattended:  # the current week is unpublished and held: action needed
+                return Outcome("held", f"HELD {key}: on hold since {reg['hold']['since']}", notices=notices,
+                               code="HELD", week=key)
             return Outcome("noop", f"on hold since {reg['hold']['since']}: {reg['hold']['reason']}", notices=notices)
         history = self._history(reg, week.start)
 
-        files = self.pubdata.read_staged(week.start)
-        staged = Staged.from_files(week.start, files) if files else None
-        problems = []
+        if unattended:  # loading the persisted proof is part of validating it
+            staged, problems = self._persisted_proof(week.start)
+            unreadable = _UNREADABLE_PROOF
+        else:
+            files = self.pubdata.read_staged(week.start)
+            staged = Staged.from_files(week.start, files) if files else None
+            problems, unreadable = [], ()
         if staged is not None:
             try:
                 source = self._quiet_source(week.start) if staged.provenance.get("edition") == "quiet" else None
@@ -967,7 +1069,16 @@ class Publisher:
                                          self.checks, self.mode, quiet_source=source)
             except (OSError, ValueError) as err:
                 problems = [f"cannot verify the staged week: {err}"]
-        if staged is None or problems:
+            except unreadable as err:  # unattended: a wrongly shaped proof is a changed one, never a crash
+                problems = [f"the staged proof is malformed ({type(err).__name__})"]
+        if unattended:
+            code, detail = self._proof_problem(staged, problems, week)
+            if code:
+                out = self._hold(reg, obj, code, key)
+                out.notices = notices + [f"{code} {key}: {detail}"] + out.notices
+                return out
+            self.reconcile()  # earlier output still unserved: PublishedUnverified, before anything is written
+        elif staged is None or problems:
             why = "; ".join(problems) if problems else "nothing was staged"
             try:
                 staged = self._stage(week, history, now)
@@ -987,6 +1098,52 @@ class Publisher:
                              history_line, staged.provenance)
         out.notices = notices + out.notices
         return out
+
+    def _persisted_proof(self, monday: dt.date) -> tuple:
+        """(proof, []) for a readable, well-shaped persisted Friday proof; (None, [])
+        when none was staged at all; (None, [why]) when one is there but incomplete,
+        unreadable or wrongly shaped: that is a changed proof, never a valid one and
+        never "absent"."""
+        files = self.pubdata.read_staged(monday)
+        if files is None:
+            if self.pubdata.staged_dir(monday).exists():
+                return None, ["the staged proof is incomplete (a staged file is missing or unreadable)"]
+            return None, []
+        try:
+            proof = Staged.from_files(monday, files)
+        except _UNREADABLE_PROOF + (ValueError,) as err:  # malformed JSON or text is a ValueError
+            return None, [f"the staged proof is unreadable ({type(err).__name__})"]
+        prov, inputs = proof.provenance, proof.provenance.get("inputs") if isinstance(proof.provenance, dict) else None
+        if not (isinstance(prov, dict) and isinstance(inputs, dict) and isinstance(proof.validation, dict)
+                and isinstance(prov.get("week"), str) and isinstance(prov.get("edition"), str)
+                and isinstance(prov.get("records"), list)
+                and all(isinstance(inputs.get(k), str) for k in ("generator", "datasetSha256", "affinitySha256",
+                                                                 "generatedAt"))):
+            return None, ["the staged proof has the wrong shape"]
+        return proof, []
+
+    @staticmethod
+    def _proof_problem(staged: Optional[Staged], problems: list, week: IssueWeek) -> tuple:
+        """(code, detail) for an unattended promotion that must hold, or (None, None).
+        It judges only the persisted Friday proof: with none at all, the reason is simply
+        that (a held week shows on Friday, as STAGE_WEEK_HELD); nothing is generated here.
+        One that is there but unreadable or wrongly shaped is a changed proof."""
+        if staged is None:
+            if problems:
+                return "AUTO_PROOF_CHANGED", "; ".join(problems)
+            return "AUTO_NO_PROOF", "nothing was staged"
+        if problems:
+            return "AUTO_PROOF_CHANGED", "; ".join(problems)
+        try:
+            generated = dt.datetime.fromisoformat(staged.provenance["inputs"]["generatedAt"])
+        except (KeyError, TypeError, ValueError):
+            return "AUTO_PROOF_LATE", "the proof's generatedAt is unreadable"
+        opens = dt.datetime.combine(week.start - dt.timedelta(days=3), dt.time(0, 0), tzinfo=MANILA)
+        closes = dt.datetime.combine(week.start, ROLLOVER, tzinfo=MANILA)
+        if generated.tzinfo is None or not opens <= generated < closes:
+            return "AUTO_PROOF_LATE", f"generated at {staged.provenance['inputs']['generatedAt']}, outside " \
+                                      f"[{opens.isoformat()}, {closes.isoformat()})"
+        return None, None
 
     def launch(self, first_publication: bool) -> Outcome:
         """The inaugural issue: the current Manila week, into an empty store, once."""
@@ -1067,6 +1224,32 @@ class Publisher:
         line = dict(detail, txn=txn, op=op, week=week, at=now.isoformat())
         return self._transact(op, week, reg, obj, new_reg, [], guard, line, None)
 
+    def hold(self, reason: str) -> Outcome:
+        """Operator: hold automatic promotion. Nothing visible changes; `resume` releases."""
+        self.reconcile(require_verified=False)  # earlier unserved output never blocks a hold
+        reg, obj = self._read_registry()
+        return self._hold(reg, obj, "HELD", reg["current"] if reg else "", reason)
+
+    def _hold(self, reg: Optional[dict], obj, code: str, week: str, reason: Optional[str] = None) -> Outcome:
+        """The hold-only write (an operator's hold, and unattended promotion's automatic
+        ones): it reads no issue object, provenance or eligibility (only the registry,
+        for its conditional write), so it works exactly when those are what is broken;
+        its own guard re-proves, before every attempt, that the write changes nothing
+        but the hold."""
+        if reg is None:
+            raise Refused("nothing is published")
+        if code not in HOLD_CODES:
+            raise ValueError(f"unknown hold code {code}")
+        now = self.clock()
+        reason = reason or f"{code}: {week} was not published automatically"
+        txn = regmod.make_txn(now, "hold", [obj.etag, code, week, reason])
+        try:
+            new_reg = regmod.hold(reg, reason, now.isoformat(), txn)
+        except NoOp as noop:
+            return Outcome("noop", str(noop))
+        line = {"txn": txn, "op": "hold", "week": week, "at": now.isoformat(), "code": code, "reason": reason}
+        return self._transact("hold", week, reg, obj, new_reg, [], lambda: _hold_only_guard(reg, new_reg), line, None)
+
     def rollback(self, monday: dt.date, rev: Optional[int], reason: str) -> Outcome:
         since = self.clock().isoformat()
         return self._control("rollback", lambda reg, txn: regmod.rollback(reg, monday, rev, reason, since, txn),
@@ -1092,10 +1275,47 @@ def shown_revisions(before: Optional[dict], after: dict) -> set:
     return out
 
 
+def _hold_only_guard(before: Optional[dict], after: dict) -> Optional[str]:
+    """None if ``after`` only sets a hold on ``before``: it validates, the hold goes
+    from none to one naming this transaction, and the current week, every week's
+    revisions and active number, and the device manifest's bytes are identical. Then
+    nothing the host serves changes. Otherwise what differs. Reads no store."""
+    if before is None:
+        return "nothing is published"
+    try:
+        regmod.validate(after)
+    except regmod.CorruptRegistry as err:
+        return f"the new registry is invalid ({err})"
+    if before.get("hold") is not None or after["hold"] is None or after["hold"]["txn"] != after["txn"]:
+        return "it does not set a new hold of its own"
+    if after["current"] != before["current"] or after["weeks"] != before["weeks"]:
+        return "it changes the current week or a revision"
+    if regmod.manifest_bytes(after) != regmod.manifest_bytes(before):
+        return "it changes the device manifest"
+    if set(after) != set(before) or any(after[k] != before[k] for k in after if k not in ("hold", "txn")):
+        return "it changes more than the hold"
+    return None
+
+
+def expected_verify(op: Optional[str], before: Optional[dict], after: dict) -> list:
+    """The verification targets a registry change must record. Empty only for a hold
+    proven hold-only on exactly these registries; an "op hold" without that proof
+    raises HoldNotProven and never falls back to a full list. Every other operation:
+    verification_targets, which always names the manifest."""
+    if op == "hold":
+        problem = _hold_only_guard(before, after)
+        if problem:
+            raise HoldNotProven(problem)
+        return []
+    return verification_targets(before, after)
+
+
 def _expected_targets_problem(pending: dict) -> Optional[str]:
     """Recompute the complete target list from the registries before and after the
     switch, each bound to its recorded hash, and require ``pending["verify"]`` to equal
-    it exactly: a target that is missing, extra or altered is a problem, not a smaller job."""
+    it exactly: a target that is missing, extra or altered is a problem, not a smaller job.
+    The list depends on the operation (expected_verify): a hold's is [] only if the
+    registries prove it hold-only; anything else claiming to be a hold is a problem."""
     before_text, before_sha = pending.get("expectedRegistry"), pending.get("expectedRegistrySha")
     try:
         if before_text is None:
@@ -1110,7 +1330,9 @@ def _expected_targets_problem(pending: dict) -> Optional[str]:
         after_bytes = regmod.dumps(pending["intendedRegistry"])
         if regmod.sha256(after_bytes) != pending["intendedRegistrySha"]:
             return "the registry it published does not match its recorded hash"
-        expected = verification_targets(before, regmod.parse(after_bytes))
+        expected = expected_verify(pending.get("op"), before, regmod.parse(after_bytes))
+    except HoldNotProven as err:
+        return f"it is recorded as a hold, but its registries are not hold-only ({err})"
     except (regmod.CorruptRegistry, TypeError, ValueError, KeyError, AttributeError) as err:
         return f"its registries are unreadable: {err}"
     if pending["verify"] != expected:

@@ -1,9 +1,9 @@
 """``dogear publish``: run the publisher against a store and a publication-data directory.
 
     python3 -m dogear.cli publish --store DIR --pubdata DIR status
-    ... stage-next | stage --week 2026-11-09 | promote | launch --first-publication
+    ... stage-next [--unattended] | stage --week 2026-11-09 | promote [--unattended] | launch --first-publication
     ... correct --week W --expect-rev N --reason TEXT | rollback --week W [--rev N] --reason TEXT
-    ... restore --week W --rev N | resume | reconcile | abandon TXN
+    ... restore --week W --rev N | hold --reason TEXT | resume | reconcile | abandon TXN
 
 ``--store DIR`` is a local directory standing in for the bucket, verified
 through the reference router. ``--store r2:BUCKET`` is R2 (credentials from
@@ -20,7 +20,12 @@ Exit codes: 0 done or nothing to do; 2 aborted (nothing new published);
 3 needs a human; 4 not ready (policy or checks unset, or a test-only flag in
 production); 5 published but its record not saved (the next run records it);
 6 refused; 7 stage refused; 8 published but the host does not serve it yet
-(each run re-checks, read-only, until it does).
+(each run re-checks, read-only, until it does); 9 held, action needed (a hold was
+written, or an unattended promote found the current week held, or an unattended
+stage-next saved no verified proof for next week; PUBLISHING §4b).
+
+``--unattended`` (stage-next and promote only) is set by the workflows for a
+first-attempt scheduled run on main and nothing else (_dogear-publish.yml route).
 """
 
 from __future__ import annotations
@@ -40,7 +45,7 @@ from .checks import http_link_checker, http_served, mock_fit_checker
 from .drills import DRILLS, DrillStore, failing_once
 from .policy import PolicyError, load_policy
 from .publisher import Aborted, NeedsHuman, NotReady, Publisher, PublishedUnrecorded, PublishedUnverified
-from .pubdata import CorruptState, PubData, SaveFailed, git_committer
+from .pubdata import CorruptState, PubData, SaveFailed, git_committer, git_saved_reader
 from .registry import CorruptRegistry, Refused
 from .staging import Checks, StageInputs, StageRefused
 from .r2 import R2Store
@@ -83,8 +88,14 @@ def add_parser(sub) -> None:
     p.add_argument("--public-log", action="store_true",
                    help="print only result, operation, week and transaction (the workflows: public Actions logs)")
     ops = p.add_subparsers(dest="op", required=True)
-    for name in ("status", "reconcile", "stage-next", "promote", "resume"):
+    for name in ("status", "reconcile", "resume"):
         ops.add_parser(name)
+    for name in ("stage-next", "promote"):
+        s = ops.add_parser(name)
+        s.add_argument("--unattended", action="store_true",
+                       help="the scheduled run: only an actionable, reviewed proof counts (PUBLISHING §4b)")
+    s = ops.add_parser("hold", help="hold automatic promotion; nothing visible changes (resume releases it)")
+    s.add_argument("--reason", required=True)
     s = ops.add_parser("stage")
     s.add_argument("--week", required=True)
     s = ops.add_parser("launch")
@@ -211,11 +222,12 @@ def _configure(args) -> tuple:
     except ValueError as err:
         return None, str(err)
     committer = git_committer(args.pubdata) if args.git else None
+    saved_reader = git_saved_reader(args.pubdata) if args.git else None
     if args.drill == "unsaved-record":
         committer = failing_once(committer)
     elif args.drill:
         store = DrillStore(store, args.drill)
-    return Publisher(store, PubData(args.pubdata, committer),
+    return Publisher(store, PubData(args.pubdata, committer, saved_reader),
                      StageInputs(args.dataset, args.affinity, args.base_url, _generator()), policy, checks, clock,
                      mode=args.mode, assets=assets, served=served, separation=separation), None
 
@@ -269,17 +281,21 @@ class _Report:
         return code
 
     def success(self, out) -> int:
+        code = 9 if out.status == "held" and out.code else 0  # held, action needed
         if not self.args.public_log:
             print(f"{out.status}: {out.message}")
             for note in out.notices:
                 print(f"  notice: {note}")
-            return 0
+            return code
         txns = [out.txn] if getattr(out, "txn", None) else sorted(set(_TXN_ID.findall(out.message)))
-        print(self._line(out.status, txns))
+        if code:  # only the week and the public reason code; never the reason itself
+            print(" ".join(part for part in (f"{out.status}: {self.args.op}", out.week, out.code, *txns) if part))
+        else:
+            print(self._line(out.status, txns))
         if out.notices:
             kept = self._keep("\n".join(["notices:", *out.notices]))
             print(f"  {len(out.notices)} notice(s) {'saved in the private publication data (runs/)' if kept else 'withheld'}")
-        return 0
+        return code
 
 
 def _public_status(status: dict) -> dict:
@@ -385,13 +401,14 @@ def run(args) -> int:
             return _attest_subjects(args, pub)
         out = {
             "reconcile": lambda: pub.reconcile(detect=True),
-            "stage-next": pub.stage_next,
+            "stage-next": lambda: pub.stage_next(unattended=args.unattended),
             "stage": lambda: pub.stage(week),
-            "promote": pub.promote,
+            "promote": lambda: pub.promote(unattended=args.unattended),
             "launch": lambda: pub.launch(args.first_publication),
             "correct": lambda: pub.correct(week, args.expect_rev, args.reason),
             "rollback": lambda: pub.rollback(week, args.rev, args.reason),
             "restore": lambda: pub.restore(week, args.rev),
+            "hold": lambda: pub.hold(args.reason),
             "resume": pub.resume,
             "abandon": lambda: pub.abandon(args.txn),
         }[args.op]()

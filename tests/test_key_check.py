@@ -137,20 +137,25 @@ class KeyCheckWorkflowTests(unittest.TestCase):
         for trigger in ("push:", "pull_request", "schedule:", "workflow_call", "workflow_run"):
             self.assertNotIn(trigger, on)
         self.assertIn("options: [editorial-gate, staging, production]", on)
-        self.assertEqual(self.TEXT.count("environment: ${{ inputs.environment }}"), 1)
-        self.assertEqual(self.TEXT.count("runs-on:"), 1)  # one job, one Environment
-        self.assertIn("if: ${{ github.ref == 'refs/heads/main' }}", self.TEXT)
+        # One job per Environment, named literally; exactly one runs per dispatch.
+        self.assertNotIn("environment: ${{", self.TEXT)
+        self.assertEqual(self.TEXT.count("runs-on:"), 3)
+        for env in ("editorial-gate", "staging", "production"):
+            self.assertEqual(self.TEXT.count(f"\n    environment: {env}\n"), 1, env)
+            self.assertEqual(self.TEXT.count(f"          ENVIRONMENT: {env}\n"), 1, env)
+            self.assertEqual(self.TEXT.count(
+                f"if: ${{{{ github.ref == 'refs/heads/main' && inputs.environment == '{env}' }}}}"), 1, env)
 
     def test_holds_only_the_two_deploy_keys_and_checks_out_only_the_source(self):
         self.assertEqual(sorted(set(re.findall(r"secrets\.([A-Z_]+)", self.TEXT))),
                          ["EDITORIAL_DEPLOY_KEY", "PUBLICATION_DATA_DEPLOY_KEY"])
         self.assertNotIn("DOGEAR_R2", self.TEXT)
         self.assertNotIn("vars.", self.TEXT)
-        self.assertEqual(self.TEXT.count("uses: actions/checkout@v4"), 1)
+        self.assertEqual(self.TEXT.count("uses: actions/checkout@v4"), 3)  # one per job
         self.assertNotIn("repository:", self.TEXT)
         self.assertNotIn("ssh-key:", self.TEXT)
-        self.assertIn("persist-credentials: false", self.TEXT)
-        self.assertIn("run: bash tools/key_check.sh", self.TEXT)
+        self.assertEqual(self.TEXT.count("persist-credentials: false"), 3)
+        self.assertEqual(self.TEXT.count("run: bash tools/key_check.sh"), 3)
         self.assertNotIn("run_publish", self.TEXT)
 
 

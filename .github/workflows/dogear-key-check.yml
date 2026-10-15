@@ -4,6 +4,9 @@
 # against all three private repositories, and the access must match the design
 # exactly (tools/key_check.sh). The log shows only that matrix.
 # The production Environment asks its required reviewer before this job starts.
+# One job per Environment, each naming it literally (never from an input), so no
+# dispatch can reach any other Environment, production-scheduled included
+# (PUBLISHING §4b; tests/test_hosting.py RoutingBoundaryTests). Exactly one runs.
 name: DOGEAR deploy-key check
 
 on:
@@ -19,10 +22,10 @@ permissions:
   contents: read
 
 jobs:
-  keys:
-    if: ${{ github.ref == 'refs/heads/main' }}
+  keys-editorial-gate:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.environment == 'editorial-gate' }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: editorial-gate
     timeout-minutes: 5
     concurrency:
       group: dogear-key-check
@@ -35,7 +38,51 @@ jobs:
 
       - name: Check deploy-key access (dry runs only)
         env:
-          ENVIRONMENT: ${{ inputs.environment }}
+          ENVIRONMENT: editorial-gate
+          OWNER: ${{ github.repository_owner }}
+          EDITORIAL_KEY: ${{ secrets.EDITORIAL_DEPLOY_KEY }}
+          DATA_KEY: ${{ secrets.PUBLICATION_DATA_DEPLOY_KEY }}
+        run: bash tools/key_check.sh
+
+  keys-staging:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.environment == 'staging' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 5
+    concurrency:
+      group: dogear-key-check
+      cancel-in-progress: false
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check deploy-key access (dry runs only)
+        env:
+          ENVIRONMENT: staging
+          OWNER: ${{ github.repository_owner }}
+          EDITORIAL_KEY: ${{ secrets.EDITORIAL_DEPLOY_KEY }}
+          DATA_KEY: ${{ secrets.PUBLICATION_DATA_DEPLOY_KEY }}
+        run: bash tools/key_check.sh
+
+  keys-production:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.environment == 'production' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    concurrency:
+      group: dogear-key-check
+      cancel-in-progress: false
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check deploy-key access (dry runs only)
+        env:
+          ENVIRONMENT: production
           OWNER: ${{ github.repository_owner }}
           EDITORIAL_KEY: ${{ secrets.EDITORIAL_DEPLOY_KEY }}
           DATA_KEY: ${{ secrets.PUBLICATION_DATA_DEPLOY_KEY }}

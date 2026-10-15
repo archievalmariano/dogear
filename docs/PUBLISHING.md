@@ -236,6 +236,7 @@ start runs.
 | **correct** | manual | week W published; `--expect-rev` equals W's active revision; a reason | Appends a new revision and makes it active. Devices see it only if W is the current week; a past week's correction changes only its web page. |
 | **rollback** | manual | a target revision that was published | Within a week: active = an earlier revision. To an earlier week: current = that week **and `hold` is set** with a reason. |
 | **restore** | manual | `hold` set; an explicit published `--week` and `--rev` | Makes that revision current and clears `hold`. This is how "put this week back" is done after a rollback, since promote would skip a week already in the registry. |
+| **hold** | manual (`operate hold --reason`), or unattended promote (§4b) | a registry; no `hold` (otherwise a green no-op) | Sets `hold` only: `current`, every revision and every `active`, and the device manifest stay byte-identical. Audited like any write (pending, conditional write, read-back, history), with `verify: []`, settled in `verified.jsonl` at once. Result: `held` with its code, **exit 9**. |
 | **resume** | manual | `hold` set | Clears `hold` only. The current week stays whatever the rollback left, and automatic promotion resumes with the **next unpublished** week. |
 
 - **Catch-up publishes only the current Manila week, and only once.** After
@@ -251,6 +252,74 @@ start runs.
 - **Late but valid:** a promotion that lands late is still correct, because
   the issue's dates come from the week, not the run time. Devices switch only
   when the pointer changes, never by their own clock.
+
+### 4b. Review by exception: unattended Friday stage and Monday promote
+
+The owner's operating model (review-by-exception plan, revision 3.1, Codex PLAN
+CLEAR, 15 October 2026). **Not enabled by this code:** the owner creates the
+`production-scheduled` environment and enables the schedules separately.
+
+- **Routing.** `_dogear-publish.yml`'s `route` job (no environment, no secrets)
+  sends a run to the unattended `production-scheduled` environment (no reviewer)
+  only for a **first-attempt `schedule` event on `main`** of this repository, from
+  exactly `dogear-stage.yml` with `stage-next` or `dogear-promote.yml` with
+  `promote`. Everything else (reruns, `workflow_dispatch`, every `operate` op) is
+  the reviewed `production` environment. The publish job's first step re-asserts
+  the route against its own context before any secret is used (a rerun of only that
+  job reuses the route's outputs) and fails closed on any mismatch. Staging's
+  scheduled runs rehearse the same unattended rules in the `staging` environment.
+- **The trust boundary is all of `main`'s workflow code.** GitHub restricts
+  `production-scheduled` to `main`, not to an event or a workflow: any job in any
+  workflow on `main` that names it receives its secrets. The route limits the
+  intended path; it is not an access control. What holds the boundary is the
+  `main` ruleset (pull request plus required CI), **owner review before merging any
+  change to `.github/workflows/**`, `tools/run_publish.py`, the publisher CLI's
+  argument routing, `tests/test_route.py` or `RoutingBoundaryTests`** (and Codex
+  review for routing changes), and the required test
+  `tests/test_hosting.py` `RoutingBoundaryTests`: `production-scheduled` is named
+  only by the route and the assertion step; the only expression-valued
+  environment is the publish job's, from the route; only stage and promote are
+  scheduled publishers; secrets are inherited only into the reusable publisher.
+- **Friday (`stage-next --unattended`).** Success means an actionable proof: the
+  next week's staged files, **read back from the saved publication data** (the
+  remote's committed `main`, not the working tree), equal what was generated, are
+  for exactly that week and verify against the current inputs. Otherwise the run
+  ends `held` with a code, **exit 9**: `STAGE_WEEK_HELD`, `STAGE_WRONG_WEEK`,
+  `STAGE_NOT_SAVED`, `STAGE_INVALID`. The owner previews `staged/<week>/web.html`.
+- **Monday (`promote --unattended`, D2).** Only the persisted, reviewed Friday
+  proof publishes, exactly as staged. It never stages inline, and runs no selector
+  or link check of its own. A missing proof (`AUTO_NO_PROOF`, whatever the cause: a
+  week held on Friday shows there as `STAGE_WEEK_HELD`), one that no longer verifies
+  (`AUTO_PROOF_CHANGED`: approval withdrawn, policy, generator or history changed),
+  or one generated outside [Friday 00:00, Monday 06:00) Manila (`AUTO_PROOF_LATE`)
+  becomes an **audited hold** with that code (exit 9); the previous issue stays
+  current. A week already held gives `HELD` (exit 9). Earlier
+  unserved output never blocks that hold (its entries stay outstanding, retried by
+  later runs), but still stops a publication before anything is written (exit 8).
+- **Affinity (final).** An affinity change after Friday does not invalidate the
+  Friday proof: Monday publishes that frozen, reviewed issue if every other check
+  passes, and the change takes effect from the next staging cycle.
+- **The hold.** `hold` writes only the hold, through a hold-only path that reads
+  no issue object, provenance or eligibility (so it works when those are what is
+  broken), re-proving before every attempt that nothing else changes. It is the
+  only transaction with empty verification targets: `verify: []` is accepted only
+  for a hold whose recorded registries prove it hold-only (otherwise, before the
+  pending record is saved: `UnguardedRegistryWrite`; while recovering one:
+  `NeedsHuman`; never a fall-back to a full target list). It is settled in
+  `verified.jsonl` when it commits and never appears in `unverified.json`; an
+  audit finding otherwise is `CorruptState`. A committed hold's result is the hold
+  (exit 9), whatever other transactions' served output shows: it settles and
+  checks nothing else. Manual and test-mode `stage` and `promote` are unchanged.
+- **Recovery (reviewed):** optionally re-stage the week manually and preview it;
+  `operate resume`; then a manual `DOGEAR promote` (which uses a valid proof or
+  stages inline, as before).
+- **Exit 9 "held, action needed"** turns the run red, so GitHub notifies the owner;
+  daily catch-ups keep failing while held. The public log shows only
+  `held: <op> <week> <CODE> [txn]`; details go to the private `runs/`.
+- **Emergency stop** (only): `PUBLICATION_ENABLED` not `true`, or disable
+  `dogear-promote.yml`. Normal holds use `operate hold`.
+- **Not dependable until** the watch-only `dogear-scheduler` watchdog is deployed
+  (review-by-exception plan §6; a separate change).
 
 ---
 
@@ -597,6 +666,10 @@ review, none adopted here:
 | Run delayed past the week boundary | Aborts at the recheck | unchanged | Next run targets the new week |
 | Sparse week | **Pending editorial decision (§14)** | — | — |
 | Wrong issue published | — | — | `rollback` (sets `hold` when going back a week), then `resume` |
+| Unattended Friday stage saved no verified proof (§4b) | Run red, exit 9 with a `STAGE_*` code | unchanged | Fix the cause; re-run stage manually and preview |
+| Unattended Monday promote: no, changed or late proof, or a held week (§4b) | Audited hold, exit 9 with an `AUTO_*` code | the previous issue | `operate resume`, then a manual promote |
+| Owner wants to stop next Monday's issue | `operate hold --reason` (exit 9) | unchanged | `operate resume` |
+| Hold write interrupted after the switch | `pending.json` left | unchanged (a hold shows nothing) | Next run's reconcile records it, settled, exactly once |
 | Device offline or server down | Card copy (`CACHED`), else the built-in sample (`OFFLINE`) | — | Already proven on hardware |
 
 Last week's issue staying current after a failed promotion is accepted

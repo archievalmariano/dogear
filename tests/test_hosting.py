@@ -132,7 +132,7 @@ class WorkflowTests(unittest.TestCase):
     def test_publication_runs_only_through_the_reusable_job(self):
         reusable = (self.WORKFLOWS / "_dogear-publish.yml").read_text(encoding="utf-8")
         self.assertIn("run: python tools/run_publish.py", reusable)
-        self.assertIn("environment: ${{ inputs.target }}", reusable)
+        self.assertIn("environment: ${{ needs.route.outputs.environment }}", reusable)  # routed (RouteTests)
         self.assertIn("group: dogear-publication-${{ inputs.target }}", reusable)
         self.assertIn("cancel-in-progress: false", reusable)
         for name in ("dogear-stage.yml", "dogear-promote.yml", "dogear-operate.yml"):
@@ -186,7 +186,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_production_needs_the_gate_and_its_exact_pair(self):
         _, gate, publish = self.jobs()
-        self.assertIn("needs: editorial-gate", publish)
+        self.assertIn("needs: [route, editorial-gate]", publish)
         self.assertIn("needs.editorial-gate.result == 'success'", publish)
         self.assertIn("run: python tools/editorial_gate.py", gate)
         self.assertIn("public_sha: ${{ steps.pair.outputs.public_sha }}", gate)
@@ -255,6 +255,118 @@ class WorkflowTests(unittest.TestCase):
                         else str(ROOT.resolve()).startswith(str(Path(top).resolve())))
         self.assertFalse((Path(top) / ".github" / "workflows" / "dogear-promote.yml").exists())
 
+class RoutingBoundaryTests(unittest.TestCase):
+    """The credential trust boundary (PUBLISHING §4b). GitHub restricts the
+    production-scheduled environment to main, not to an event or a workflow: any job
+    on main that names it gets its secrets. So, across every workflow file (comment
+    lines aside): it is named only by the reusable publisher's route job and its
+    assertion step; the only expression-valued environment is the publish job's,
+    from the route; only stage and promote are scheduled publishers (any other
+    scheduled workflow holds no environment, secret or publisher); operate is
+    never scheduled; and secrets are inherited only into the reusable publisher.
+    Each rule is shown to catch a stray change (the mutations below)."""
+
+    WORKFLOWS = ROOT / ".github" / "workflows"
+    PUBLISH = "_dogear-publish.yml"
+    ROUTED = "${{ needs.route.outputs.environment }}"
+
+    def files(self) -> dict:
+        return {p.name: p.read_text(encoding="utf-8") for p in sorted(self.WORKFLOWS.glob("*.yml"))}
+
+    @staticmethod
+    def code(text: str) -> str:
+        return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#")) + "\n"
+
+    @staticmethod
+    def jobs(code: str) -> dict:
+        body = code.split("\njobs:\n", 1)[1] if "\njobs:\n" in code else ""
+        parts = re.split(r"^  ([A-Za-z0-9_-]+):\n", body, flags=re.M)
+        return dict(zip(parts[1::2], parts[2::2]))
+
+    def problems(self, files: dict) -> list:
+        out = []
+        for name, text in files.items():
+            code = self.code(text)
+            jobs = self.jobs(code)
+            for job, body in jobs.items():
+                allowed = ""
+                if name == self.PUBLISH and job == "route":
+                    allowed = body
+                elif name == self.PUBLISH and job == "publish":
+                    allowed = body.split("- name: Assert the route\n", 1)[1].split("\n      - name:", 1)[0] \
+                        if "- name: Assert the route\n" in body else ""
+                if "production-scheduled" in body.replace(allowed, ""):
+                    out.append(f"{name} {job}: names production-scheduled outside the route")
+                for value in re.findall(r"^    environment:\s*(.*)$", body, flags=re.M):
+                    value = value.strip()
+                    if "${{" in value and not (name == self.PUBLISH and job == "publish" and value == self.ROUTED):
+                        out.append(f"{name} {job}: an expression-valued environment ({value})")
+                    if "production-scheduled" in value:
+                        out.append(f"{name} {job}: environment production-scheduled")
+                if "secrets: inherit" in body and f"uses: ./.github/workflows/{self.PUBLISH}" not in body:
+                    out.append(f"{name} {job}: inherits secrets into something other than the publisher")
+            if "production-scheduled" in code.split("\njobs:\n", 1)[0]:
+                out.append(f"{name}: names production-scheduled outside its jobs")
+            on = code.split("\non:\n", 1)[1].split("\npermissions:", 1)[0] if "\non:\n" in code else ""
+            if "schedule:" in on and name not in ("dogear-stage.yml", "dogear-promote.yml"):
+                if name == "dogear-operate.yml" or "environment:" in code or "secrets." in code or \
+                        "secrets: inherit" in code or self.PUBLISH in code:
+                    out.append(f"{name}: scheduled, and reaches an environment, a secret or the publisher")
+        publish_jobs = self.jobs(self.code(files.get(self.PUBLISH, "")))
+        if publish_jobs.get("route", "").count("production-scheduled") != 1:
+            out.append("the route must name production-scheduled exactly once")
+        if re.findall(r"^    environment:\s*(.*)$", publish_jobs.get("publish", ""), flags=re.M) != [self.ROUTED]:
+            out.append("the publish job must take its environment from the route")
+        return out
+
+    def test_the_workflows_keep_the_boundary(self):
+        self.assertEqual(self.problems(self.files()), [])
+
+    def test_the_route_is_the_only_job_that_names_production_scheduled(self):
+        code = self.code(self.files()[self.PUBLISH])
+        jobs = self.jobs(code)
+        assertion = jobs["publish"].split("- name: Assert the route\n", 1)[1].split("\n      - name:", 1)[0]
+        self.assertEqual(jobs["route"].count("production-scheduled"), 1)
+        self.assertEqual(assertion.count("production-scheduled"), 4)
+        self.assertEqual(code.count("production-scheduled"), 5)  # nowhere else
+
+    def test_each_rule_catches_a_stray_change(self):
+        files = self.files()
+
+        def with_change(name, old, new):
+            changed = dict(files)
+            self.assertEqual(changed[name].count(old), 1, (name, old))
+            changed[name] = changed[name].replace(old, new)
+            return self.problems(changed)
+
+        operate_job = "  operate:\n    needs: confirm\n"
+        mutations = {
+            "operate names the environment": ("dogear-operate.yml", operate_job,
+                                              operate_job + "    environment: production-scheduled\n"),
+            "a later publish step names it": (self.PUBLISH, "      - name: Publication-data identity\n",
+                                              "      - name: Publication-data identity\n        # x\n"
+                                              "        if: ${{ 'production-scheduled' != '' }}\n"),
+            "the gate names it": (self.PUBLISH, "    environment: editorial-gate\n",
+                                  "    environment: production-scheduled\n"),
+            "key-check takes its environment from an input": (
+                "dogear-key-check.yml", "    environment: production\n", "    environment: ${{ inputs.environment }}\n"),
+            "operate is scheduled": ("dogear-operate.yml", "on:\n  workflow_dispatch:\n",
+                                     "on:\n  schedule:\n    - cron: \"0 0 * * *\"\n  workflow_dispatch:\n"),
+            "the chain check gains an environment": ("dogear-chain-check.yml", "    runs-on: ubuntu-latest\n",
+                                                     "    runs-on: ubuntu-latest\n    environment: production\n"),
+            "secrets inherited elsewhere": ("dogear-operate.yml", "  confirm:\n    runs-on: ubuntu-latest\n",
+                                            "  confirm:\n    runs-on: ubuntu-latest\n    secrets: inherit\n"),
+            "publish not routed": (self.PUBLISH, "    environment: " + self.ROUTED + "\n",
+                                   "    environment: ${{ inputs.target }}\n"),
+        }
+        for name, (path, old, new) in mutations.items():
+            with self.subTest(name):
+                self.assertNotEqual(with_change(path, old, new), [])
+        # A new workflow file naming it is caught too.
+        self.assertNotEqual(self.problems(dict(files, **{"extra.yml": "on:\n  workflow_dispatch:\njobs:\n  x:\n"
+                                                                       "    environment: production-scheduled\n"})), [])
+
+
 class RunPublishTests(unittest.TestCase):
     def setUp(self):
         import sys
@@ -286,6 +398,28 @@ class RunPublishTests(unittest.TestCase):
                 self.argv(**env)
         with self.assertRaises(self.rp.BadInput):
             self.rp.build_argv({"DOGEAR_TARGET": "staging", "DOGEAR_OP": "status"})  # no PUBDATA
+
+    def test_unattended_only_for_the_two_scheduled_operations(self):
+        self.assertEqual(self.argv(DOGEAR_OP="stage-next", DOGEAR_UNATTENDED="1")[-2:], ["stage-next", "--unattended"])
+        self.assertEqual(self.argv(DOGEAR_OP="promote", DOGEAR_UNATTENDED="1")[-2:], ["promote", "--unattended"])
+        for flag in ("0", ""):
+            self.assertNotIn("--unattended", self.argv(DOGEAR_OP="promote", DOGEAR_UNATTENDED=flag))
+        for env in (dict(DOGEAR_OP="status"), dict(DOGEAR_OP="resume"), dict(DOGEAR_OP="hold", DOGEAR_REASON="r"),
+                    dict(DOGEAR_OP="stage", DOGEAR_WEEK="2027-03-01"), dict(DOGEAR_OP="reconcile"),
+                    dict(DOGEAR_OP="correct", DOGEAR_WEEK="2027-03-01", DOGEAR_EXPECT_REV="0", DOGEAR_REASON="r")):
+            with self.subTest(env), self.assertRaises(self.rp.BadInput):
+                self.argv(DOGEAR_UNATTENDED="1", **env)
+        for bad in ("true", "yes", "2", " 1"):
+            with self.subTest(bad=bad), self.assertRaises(self.rp.BadInput):
+                self.argv(DOGEAR_OP="promote", DOGEAR_UNATTENDED=bad)
+
+    def test_hold_needs_a_one_line_reason(self):
+        self.assertEqual(self.argv(DOGEAR_OP="hold", DOGEAR_REASON="check W2")[-3:], ["hold", "--reason", "check W2"])
+        for env in (dict(DOGEAR_OP="hold"), dict(DOGEAR_OP="hold", DOGEAR_REASON="a\nb"),
+                    dict(DOGEAR_OP="hold", DOGEAR_REASON="x" * 301), dict(DOGEAR_OP="hold", DOGEAR_REASON="r",
+                                                                           DOGEAR_WEEK="2027-03-01")):
+            with self.subTest(env), self.assertRaises(self.rp.BadInput):
+                self.argv(**env)
 
     def test_launch_and_optional_rollback_revision(self):
         self.assertEqual(self.argv(DOGEAR_OP="launch")[-2:], ["launch", "--first-publication"])
