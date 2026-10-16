@@ -15,7 +15,7 @@ from dogear import select as sel
 from dogear.affinity import parse_affinity
 from dogear.balance import balance, render_balance
 from dogear.cli import load_issues, stage
-from dogear.dataset import DatasetError, approve, fingerprint, load_dataset, parse_dataset
+from dogear.dataset import DatasetError, approve, fingerprint, load_dataset, parse_dataset, same_url
 from dogear.issue import build_issue, build_web, kicker, typeset
 from dogear.select import History, select_issue
 from dogear.web import render_web
@@ -910,6 +910,51 @@ class WithheldCopyTests(unittest.TestCase):
         self.assertEqual([c.record.id for c in s.runners_up], ["born"])
         self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
         self.assertNotLinked(html, copy)
+
+
+    def runner_up(self, copy, sources):
+        born = rec("born", 11, 24, person="Mara Ilagan", personId="dogear:mara-ilagan",
+                   link=book("The Salt Orchard", "Mara Ilagan", "representative_work", rights="public-domain-us", url=copy),
+                   sources=sources)
+        book_ = rec("book", 11, 26, type="publication", person="Mara Ilagan", personId="dogear:mara-ilagan",
+                    work="The Salt Orchard", significance=5)
+        s, _, web, html = self.html(born, book_)
+        self.assertEqual([c.record.id for c in s.runners_up], ["born"])
+        return web, html
+
+    def test_a_fragment_does_not_unlock_a_withheld_copy(self):
+        # Visible sources: the copy cited with a #fragment.
+        r = self.pooh(sources=[{"title": "PG", "url": self.POOH + "#introduction", "kind": "institutional"},
+                               self.LIBRARY, WIKIPEDIA])
+        self.assertNotLinked(self.html(r)[3], self.POOH)
+        # The written link carries the fragment, the source does not.
+        r = self.pooh(url=self.POOH + "#chapter-1", sources=[
+            {"title": "PG", "url": self.POOH, "kind": "institutional"}, self.LIBRARY])
+        self.assertNotLinked(self.html(r)[3], self.POOH)
+        # A derived READ MORE: the copy off the full-text hosts, cited with a fragment.
+        copy = "https://digital.library.example/milne/pooh"
+        r = self.pooh(url=copy, sources=[{"title": "Digital library", "url": copy + "#chapter-1",
+                                          "kind": "institutional"}, WIKIPEDIA])
+        _, _, web, html = self.html(r)
+        self.assertEqual(web["entries"][0]["links"], [])
+        self.assertNotLinked(html, copy)
+        # Also this week.
+        copy = "https://digital.library.example/salt-orchard"
+        web, html = self.runner_up(copy, [{"title": "Copy", "url": copy + "#x", "kind": "institutional"}, WIKIPEDIA])
+        self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
+        self.assertNotLinked(html, copy)
+
+    def test_a_different_path_case_is_a_different_document(self):
+        self.assertFalse(same_url("https://example.org/Pooh", "https://example.org/pooh"))
+        self.assertFalse(same_url("https://example.org/x?id=A", "https://example.org/x?id=a"))
+        self.assertTrue(same_url("https://WWW.Example.org/Pooh/", "http://example.org/Pooh#top"))
+        # So a distinct page that differs from the withheld copy only in path case stays usable.
+        withheld, other = "https://digital.library.example/Pooh", "https://digital.library.example/pooh"
+        r = self.pooh(url=withheld, sources=[{"title": "Library page", "url": other, "kind": "institutional"},
+                                             WIKIPEDIA])
+        _, _, web, html = self.html(r)
+        self.assertEqual([(l["label"], l["url"]) for l in web["entries"][0]["links"]], [("READ MORE", other)])
+        self.assertNotIn(f'href="{withheld}"', html)
 
 
 class RolesAndQrTests(unittest.TestCase):

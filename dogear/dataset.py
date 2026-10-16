@@ -166,12 +166,19 @@ def _host_in(url: str, hosts) -> bool:
 
 
 def same_url(a: str, b: str) -> bool:
-    """The same page, ignoring scheme, case, a leading www. and a trailing slash."""
-    def norm(u: str) -> str:
-        u = u.strip()
-        u = u.split("://", 1)[-1].lower() if "://" in u else u.lower()
-        return u[4:].rstrip("/") if u.startswith("www.") else u.rstrip("/")
-    return norm(a) == norm(b)
+    """The same document: http and https alike, the host without case or a leading
+    www., the path's trailing slash and any #fragment ignored. The path and query
+    keep their case: they can name different resources."""
+    def key(u: str) -> tuple:
+        parts = urlsplit(u.strip())
+        scheme = parts.scheme.lower()
+        try:
+            port = parts.port
+        except ValueError:
+            port = parts.netloc  # unparseable: compare it as written
+        return ("http" if scheme in ("http", "https") else scheme, _host(u.strip()), port,
+                parts.path.rstrip("/"), parts.query)
+    return key(a) == key(b)
 
 
 def _provider_name(url: str) -> str:
