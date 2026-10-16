@@ -165,6 +165,15 @@ def _host_in(url: str, hosts) -> bool:
     return any(host == h or host.endswith("." + h) for h in hosts)
 
 
+def same_url(a: str, b: str) -> bool:
+    """The same page, ignoring scheme, case, a leading www. and a trailing slash."""
+    def norm(u: str) -> str:
+        u = u.strip()
+        u = u.split("://", 1)[-1].lower() if "://" in u else u.lower()
+        return u[4:].rstrip("/") if u.startswith("www.") else u.rstrip("/")
+    return norm(a) == norm(b)
+
+
 def _provider_name(url: str) -> str:
     host = _host(url)
     return next((name for h, name in _PROVIDER_NAMES.items() if host == h or host.endswith("." + h)), host)
@@ -303,7 +312,8 @@ class Record:
         never an access link, so it never reaches the device or its QR budget."""
         if self.link is not None:
             return None
-        usable = [s for s in self.sources if not _host_in(s.url, NEVER_CONTEXT_HOSTS)]
+        usable = [s for s in self.sources if not _host_in(s.url, NEVER_CONTEXT_HOSTS)
+                  and not any(same_url(s.url, u) for u in self.withheld_reading_urls)]
         for kind, link_type, hosts in (("institutional", "read-more", None),
                                        ("secondary", "read-more", CONTEXT_AUTHORITIES),
                                        ("primary", "source", None)):
@@ -315,6 +325,12 @@ class Record:
                         title = title[len(provider) + 2:]
                     return Link(type=link_type, url=s.url, title=title, provider=provider)
         return None
+
+    @property
+    def withheld_reading_urls(self) -> tuple[str, ...]:
+        """Free copies listed but not offered (not public domain everywhere): the web
+        edition never links them, as an action or as a source."""
+        return tuple(l.url for l in self.links if l.type == "read-online" and l.access_tier is None)
 
     @property
     def free_reading_withheld(self) -> bool:

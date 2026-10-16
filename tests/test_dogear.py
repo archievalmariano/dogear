@@ -853,6 +853,65 @@ class ContextLinkTests(unittest.TestCase):
                 self.assertEqual(self.action(r)[0][:2], ("READ MORE", NOBEL_2000["url"]))
 
 
+class WithheldCopyTests(unittest.TestCase):
+    """A free copy withheld by the territory rule (not public domain everywhere) is
+    never actionable in the rendered web edition: not as the action, not as a source,
+    not in Also this week. The explanatory note stays; the dataset keeps the source."""
+
+    POOH = "https://www.gutenberg.org/ebooks/67098"
+    LIBRARY = {"title": "Library: Winnie-the-Pooh", "url": "https://library.test/pooh", "kind": "institutional"}
+
+    def html(self, *records):
+        s = select_issue(dataset(*records), WEEK)
+        issue = build_issue(s, NOW)
+        web = build_web(s, issue)
+        return s, issue, web, render_web(web)
+
+    def pooh(self, url=None, sources=None):
+        return pub("pooh", 24, significance=5, link=book("pooh", "A. A. Milne", rights="public-domain-us", url=url or self.POOH),
+                   sources=sources if sources is not None else [
+                       {"title": "Project Gutenberg #67098", "url": self.POOH, "kind": "institutional"},
+                       self.LIBRARY, WIKIPEDIA])
+
+    def assertNotLinked(self, html, url):
+        bare = url.split("://", 1)[1].removeprefix("www.").rstrip("/")
+        self.assertNotIn(bare, html.lower())
+
+    def test_a_withheld_copy_listed_as_a_source_is_not_linked(self):
+        _, issue, web, html = self.html(self.pooh())
+        self.assertNotLinked(html, self.POOH)
+        self.assertIn("A free copy exists online", html)  # the explanation stays
+        self.assertIn('href="https://library.test/pooh"', html)  # the action: its institutional page
+        self.assertNotIn("READ ONLINE", html)
+        self.assertIsNone(issue["entries"][0]["cta"])  # the device is unchanged
+        self.assertEqual(len(dataset(self.pooh()).records[0].sources), 3)  # provenance kept
+
+    def test_however_the_source_spells_the_url(self):
+        for spelled in ("https://gutenberg.org/ebooks/67098/", "https://WWW.Gutenberg.org/ebooks/67098"):
+            with self.subTest(spelled):
+                r = self.pooh(sources=[{"title": "PG", "url": spelled, "kind": "institutional"}, WIKIPEDIA])
+                self.assertNotLinked(self.html(r)[3], self.POOH)
+
+    def test_a_withheld_copy_off_the_full_text_hosts_is_not_derived_either(self):
+        copy = "https://digital.library.example/milne/pooh"
+        r = self.pooh(url=copy, sources=[{"title": "Digital library", "url": copy, "kind": "institutional"}, WIKIPEDIA])
+        _, _, web, html = self.html(r)
+        self.assertEqual(web["entries"][0]["links"], [])
+        self.assertNotLinked(html, copy)
+
+    def test_also_this_week_never_carries_a_withheld_copy(self):
+        copy = "https://digital.library.example/salt-orchard"
+        born = rec("born", 11, 24, person="Mara Ilagan", personId="dogear:mara-ilagan",
+                   link=book("The Salt Orchard", "Mara Ilagan", "representative_work", rights="public-domain-us", url=copy),
+                   sources=[{"title": "Copy", "url": copy, "kind": "institutional"}, WIKIPEDIA])
+        book_ = rec("book", 11, 26, type="publication", person="Mara Ilagan", personId="dogear:mara-ilagan",
+                    work="The Salt Orchard", significance=5)
+        s, _, web, html = self.html(born, book_)
+        self.assertEqual([c.record.id for c in s.runners_up], ["born"])
+        self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
+        self.assertNotLinked(html, copy)
+
+
 class RolesAndQrTests(unittest.TestCase):
     def test_lead_is_intrinsic_not_lifted(self):
         ds = dataset(pub("major", 24, significance=5, recognition="anchor"),

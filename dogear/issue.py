@@ -13,7 +13,7 @@ import datetime as dt
 import json
 import re
 
-from .dataset import SOURCE_RANK, Record
+from .dataset import SOURCE_RANK, Record, same_url
 from .quiet import QUIET_SCHEMA_VERSION, REGULAR_SCHEMA_VERSION, quiet_object
 from .select import CTA_LABELS, Candidate, Selection, anniversary_bonus, offers_free_reading, qr_eligible
 from .week import day_month, long_date, range_dateline, range_dateline_short, short_date
@@ -150,26 +150,21 @@ def _reading_links(rec: Record) -> list[dict]:
     return []
 
 
-def _same_url(a: str, b: str) -> bool:
-    def norm(u: str) -> str:
-        u = u.strip()
-        u = u.split("://", 1)[-1].lower() if "://" in u else u.lower()
-        return u[4:].rstrip("/") if u.startswith("www.") else u.rstrip("/")
-    return norm(a) == norm(b)
-
-
 def visible_sources(rec: Record, links: list[dict]) -> list[dict]:
     """The sources a reader sees: the dataset keeps every one for provenance,
     the publication stays selective.
 
     * A source that is the page the entry's reading action already opens is
       not listed again.
+    * A free copy that is withheld (not public domain everywhere) is never
+      linked, so it is not listed; the dataset keeps it as provenance.
     * Wikidata is not listed when any other source remains: it backs the
       record, but a human-readable page serves a reader better.
     * Primary and institutional sources come first, then secondary, then
       reference.
     """
-    shown = [s for s in rec.sources if not any(_same_url(s.url, l["url"]) for l in links)]
+    hidden = [l["url"] for l in links] + list(rec.withheld_reading_urls)
+    shown = [s for s in rec.sources if not any(same_url(s.url, u) for u in hidden)]
     readable = [s for s in shown if "wikidata.org" not in s.url]
     shown = sorted(readable or shown, key=lambda s: -SOURCE_RANK[s.kind])  # strongest first; stable
     return [{"title": s.title, "url": s.url} for s in shown]
@@ -199,7 +194,8 @@ def build_web(selection: Selection, issue: dict) -> dict:
             "kicker": kicker(c),
             "contentsLabel": event_label(c.record),
             "headline": typeset(c.record.headline),
-            "sources": [{"title": s.title, "url": s.url} for s in c.record.sources],
+            "sources": [{"title": s.title, "url": s.url} for s in c.record.sources
+                        if not any(same_url(s.url, u) for u in c.record.withheld_reading_urls)],
         }
         for c in sorted(selection.runners_up, key=lambda c: (c.date, c.record.id))
     ]

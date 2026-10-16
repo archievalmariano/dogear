@@ -52,7 +52,9 @@ edition**.
   READ MORE; else the first primary source is VIEW SOURCE; else there is no
   action. Wikipedia and Wikidata stay supporting sources, a full-text host is
   never derived, and a derived action is web only: never on the device, never
-  in the QR budget. It is link-checked like a written link.
+  in the QR budget. It is link-checked like a written link. A free copy withheld
+  by the territory rule is never linked on the web, as the action or as a
+  source; its note stays, and the dataset keeps the source as provenance.
 * **Contents say what happened, in words** (first hardware pass): cover rows
   read `24 NOV · PUBLISHED` / `BORN` / `DIED` / `NOBEL PRIZE` over the title,
   never single letters, icons or a dagger. A national observance shows its
