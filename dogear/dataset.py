@@ -165,19 +165,48 @@ def _host_in(url: str, hosts) -> bool:
     return any(host == h or host.endswith("." + h) for h in hosts)
 
 
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+_DOT, _DOT_DOT = {".", "%2e"}, {"..", ".%2e", "%2e.", "%2e%2e"}
+
+
+def _resolve_dot_segments(path: str) -> str:
+    """An http(s) path as a browser resolves it (RFC 3986 section 5.2.4, WHATWG URL):
+    "." and ".." segments, also spelled with %2e, and a backslash separates
+    segments like a slash. Nothing else in the path changes."""
+    segments = path.replace("\\", "/").split("/")
+    out = []
+    for i, segment in enumerate(segments):
+        lowered = segment.lower()
+        if lowered in _DOT or lowered in _DOT_DOT:
+            if lowered in _DOT_DOT and len(out) > 1:
+                out.pop()
+            if i == len(segments) - 1:
+                out.append("")  # "/a/.." is "/", a directory
+            continue
+        out.append(segment)
+    return "/".join(out)
+
+
 def same_url(a: str, b: str) -> bool:
-    """The same document: http and https alike, the host without case or a leading
-    www., the path's trailing slash and any #fragment ignored. The path and query
-    keep their case: they can name different resources."""
+    """The same document, for keeping a withheld copy unlinked. The contract:
+    http and https alike; the host without case or a leading www.; a default port
+    (80 for http, 443 for https) the same as none, any other port significant; the
+    path's "." and ".." segments resolved as a browser does, and its trailing slash
+    ignored; the #fragment ignored. The path and query keep their case, and the
+    query is compared exactly as written."""
     def key(u: str) -> tuple:
-        parts = urlsplit(u.strip())
+        u = u.strip()
+        parts = urlsplit(u)
         scheme = parts.scheme.lower()
+        web = scheme in _DEFAULT_PORTS
         try:
             port = parts.port
         except ValueError:
             port = parts.netloc  # unparseable: compare it as written
-        return ("http" if scheme in ("http", "https") else scheme, _host(u.strip()), port,
-                parts.path.rstrip("/"), parts.query)
+        if web and port == _DEFAULT_PORTS[scheme]:
+            port = None
+        path = _resolve_dot_segments(parts.path) if web else parts.path
+        return ("http" if web else scheme, _host(u), port, path.rstrip("/"), parts.query)
     return key(a) == key(b)
 
 

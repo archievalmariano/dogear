@@ -6,7 +6,10 @@
 from __future__ import annotations
 
 import datetime as dt
+import itertools
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -955,6 +958,94 @@ class WithheldCopyTests(unittest.TestCase):
         _, _, web, html = self.html(r)
         self.assertEqual([(l["label"], l["url"]) for l in web["entries"][0]["links"]], [("READ MORE", other)])
         self.assertNotIn(f'href="{withheld}"', html)
+
+
+    # A browser opens each of these as the withheld copy https://digital.library.example/milne/pooh.
+    BROWSER_SAME = (
+        "https://digital.library.example:443/milne/pooh",
+        "https://digital.library.example/milne/x/../pooh",
+        "https://Digital.Library.Example/milne/./pooh/#chapter-1",  # records take https only; http:80 is below
+        "https://www.digital.library.example:443/a/b/../../milne/x/%2E./pooh/",
+        "https://digital.library.example/milne\\x\\..\\pooh",
+        "https://digital.library.example/../milne/pooh",
+    )
+
+    def assertHostAbsent(self, html):
+        self.assertNotIn("digital.library.example", html.lower())
+
+    def test_browser_equivalent_spellings_never_become_a_derived_action(self):
+        copy = "https://digital.library.example/milne/pooh"
+        for spelled in self.BROWSER_SAME:
+            with self.subTest(spelled):
+                r = self.pooh(url=copy, sources=[{"title": "Digital library", "url": spelled, "kind": "institutional"},
+                                                 WIKIPEDIA])
+                _, _, web, html = self.html(r)
+                self.assertEqual(web["entries"][0]["links"], [])
+                self.assertHostAbsent(html)
+
+    def test_browser_equivalent_spellings_never_become_a_visible_source(self):
+        copy = "https://digital.library.example/milne/pooh"
+        for spelled in self.BROWSER_SAME:
+            with self.subTest(spelled):
+                r = self.pooh(url=copy, sources=[self.LIBRARY, {"title": "Copy", "url": spelled, "kind": "secondary"},
+                                                 WIKIPEDIA])
+                _, _, web, html = self.html(r)
+                self.assertEqual([s["url"] for s in web["entries"][0]["sources"]], [WIKIPEDIA["url"]])
+                self.assertHostAbsent(html)
+        # And the other way round: the written link spelled oddly, the source plainly.
+        r = self.pooh(url=self.BROWSER_SAME[3], sources=[self.LIBRARY, {"title": "Copy", "url": copy, "kind": "secondary"}])
+        self.assertHostAbsent(self.html(r)[3])
+
+    def test_browser_equivalent_spellings_never_reach_also_this_week(self):
+        copy = "https://digital.library.example/milne/pooh"
+        for spelled in self.BROWSER_SAME:
+            with self.subTest(spelled):
+                web, html = self.runner_up(copy, [{"title": "Copy", "url": spelled, "kind": "institutional"}, WIKIPEDIA])
+                self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
+                self.assertHostAbsent(html)
+
+    def test_default_ports_match_and_other_ports_do_not(self):
+        base = "https://example.org/pooh"
+        self.assertTrue(same_url("https://example.org:443/pooh", base))
+        self.assertTrue(same_url("http://example.org:80/pooh", base))
+        self.assertTrue(same_url("https://example.org:/pooh", base))  # an empty port is the default
+        self.assertFalse(same_url("https://example.org:8443/pooh", base))
+        self.assertFalse(same_url("http://example.org:443/pooh", base))  # 443 is not http's default
+        self.assertFalse(same_url("https://example.org:80/pooh", base))
+        self.assertFalse(same_url("https://example.org/x/../Pooh", base))  # resolved, the case still counts
+        self.assertFalse(same_url("https://example.org/pooh?q=A", "https://example.org/pooh?q=a"))
+        self.assertFalse(same_url("https://example.org/pooh?q=a&r=b", "https://example.org/pooh?r=b&q=a"))
+
+
+@unittest.skipUnless(shutil.which("node"), "needs node for the WHATWG URL parser")
+class SameUrlAgainstTheBrowserTests(unittest.TestCase):
+    """same_url against the URL parser browsers use (WHATWG URL, through node): for
+    every pair of generated spellings, same_url agrees with the browser's resolved
+    URL under the contract (http and https alike, no leading www., no trailing
+    slash, no fragment)."""
+
+    def test_same_url_agrees_with_the_browser(self):
+        hosts = ("digital.library.example", "WWW.Digital.Library.Example")
+        ports = ("", ":", ":80", ":443", ":8443")
+        paths = ("/milne/pooh", "/milne/Pooh", "/milne/pooh/", "/milne/x/../pooh", "/milne/./pooh",
+                 "/a/../milne/%2e%2e/milne/pooh", "/milne/x/%2E./pooh", "/milne\\x\\..\\pooh", "/x/..", "/../milne/pooh")
+        suffixes = ("", "#chapter-1", "?id=A", "?id=a", "?id=A#top")
+        urls = [f"{scheme}://{host}{port}{path}{suffix}" for scheme, host, port, path, suffix
+                in itertools.product(("http", "https"), hosts, ports, paths, suffixes)]
+        script = ("const urls = JSON.parse(require('fs').readFileSync(0, 'utf8'));"
+                  "process.stdout.write(JSON.stringify(urls.map((u) => { const x = new URL(u);"
+                  " return [x.hostname, x.port, x.pathname, x.search]; })));")
+        resolved = json.loads(subprocess.run(["node", "-e", script], input=json.dumps(urls), capture_output=True,
+                                             text=True, check=True).stdout)
+
+        def browser_key(r):
+            host, port, path, search = r
+            return (host[4:] if host.startswith("www.") else host, port, path.rstrip("/"), search.lstrip("?"))
+
+        keys = [browser_key(r) for r in resolved]
+        disagree = [(a, b) for (a, ka), (b, kb) in itertools.combinations(zip(urls, keys), 2)
+                    if same_url(a, b) != (ka == kb)]
+        self.assertEqual(disagree[:5], [], f"{len(disagree)} disagreements of {len(urls) * (len(urls) - 1) // 2}")
 
 
 class RolesAndQrTests(unittest.TestCase):
