@@ -19,7 +19,7 @@ needed. Everything here runs and tests on synthetic fixtures.
 dogear/              stdlib-only Python: dataset, affinity, week, select, issue, web, balance, cli
 dogear/publish/      the weekly publisher: registry, transactions, R2, verification (docs/PUBLISHING.md)
 hosting/dogear-site/ Pages Worker serving the registry (shared route vectors with dogear/publish/routes.py)
-hosting/dogear-scheduler/  Cron Triggers that dispatch the stage and promote workflows
+hosting/dogear-scheduler/  the read-only watchdog: Cron Triggers that check the weekly runs and alert (never dispatch)
 tests/               unittest (Python 3.9+), synthetic data only
 fixtures/            synthetic staging datasets, affinity and policy (never editorial records)
 data/                the publication policy, the firmware contract and the device's trust roots

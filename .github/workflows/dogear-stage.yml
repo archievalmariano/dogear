@@ -2,8 +2,8 @@
 # A first-attempt SCHEDULED run on main is routed to the unattended production-scheduled
 # environment by _dogear-publish.yml's route job (PUBLISHING §4b); a manual run is reviewed.
 # Scheduled runs act only when PUBLICATION_ENABLED == 'true', on PUBLICATION_TARGET
-# (default staging). dogear-scheduler dispatches this at 10:02 and 10:17 PHT; these
-# GitHub crons are the redundant fallback, off the top of the hour.
+# (default staging). Nothing else starts it on a schedule: the dogear-scheduler Worker is
+# a watch-only watchdog that alerts when a run is missing or red (PUBLISHING §4c).
 name: DOGEAR stage
 
 on:

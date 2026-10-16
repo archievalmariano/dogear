@@ -1,21 +1,26 @@
-// dogear-scheduler: a standalone Worker (Pages has no Cron Triggers) that dispatches
-// DOGEAR's workflows on time. NOT CREATED, NOT DEPLOYED (gate G10, the user's).
-// Its one secret, GITHUB_TOKEN (a fine-grained PAT: Actions read+write on the dogear
-// repository only), is set with `wrangler secret put GITHUB_TOKEN`, never committed.
-// The crons MUST equal DECLARED_CRONS in src/dispatch.js (a test enforces it).
+// dogear-scheduler: DOGEAR's read-only watchdog (DOGEAR-WATCHDOG-PLAN, Codex CLEAR rev 4).
+// NOT DEPLOYED. It never starts or changes a publication: GitHub GET only, the public
+// host GET only, and an email alert. Inert until WATCH_ENABLED is "true" (a reviewed PR).
+// Secrets, set by the owner with `wrangler secret put`, never committed:
+//   ALERT_TO           the alert recipient (a destination verified in Cloudflare Email)
+//   GITHUB_READ_TOKEN  fine-grained, archievalmariano/dogear only: Actions, Contents and
+//                      Metadata READ; check it first with tools/watchdog_token_check.sh
+// The crons MUST equal DECLARED_CRONS in src/index.js (a test enforces it).
 {
   "name": "dogear-scheduler",
   "main": "src/index.js",
-  "compatibility_date": "2026-10-07",
+  "compatibility_date": "2026-10-16",
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "triggers": {
-    "crons": ["2 2 * * 5", "17 2 * * 5", "2 22 * * 0", "17 22 * * 0", "32 22 * * *"]
+    "crons": ["0 6 * * 5", "0 12 * * 5", "0 1 * * 1", "0 4 * * 1", "0 5 * * *"]
   },
   "vars": {
     "GITHUB_OWNER": "archievalmariano",
     "GITHUB_REPO": "dogear",
-    "GITHUB_REF": "main",
-    "PUBLICATION_TARGET": "staging",
-    "PUBLICATION_ENABLED": "false"
-  }
+    "WATCH_TARGET": "staging",
+    "WATCH_ENABLED": "false"
+  },
+  "send_email": [
+    { "name": "ALERT_EMAIL", "allowed_sender_addresses": ["dogear-watchdog@archievalmariano.com"] }
+  ]
 }

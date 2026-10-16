@@ -44,11 +44,11 @@ X4 / X4 Pro: GET /current.json (built from the registry) → GET /issues/<conten
 Phone (final QR): GET /2026-10-12/ (the week's active web revision, looked up in the registry)
 ```
 
-A standalone `dogear-scheduler` Cloudflare Worker (cron triggers →
-`workflow_dispatch`) triggers the workflows on time, as `goto-scheduler`
-does for GOTO. GitHub's own `on: schedule` crons stay as a redundant
-fallback. The reason is GOTO's experience: GitHub runs scheduled jobs hours
-late and sometimes drops them silently.
+GitHub's own `on: schedule` crons start the stage and promote workflows. GitHub
+runs scheduled jobs late and sometimes drops them silently (GOTO's experience), so a
+standalone `dogear-scheduler` Cloudflare Worker **watches** them and alerts (§4c). It
+never starts a run: a dispatched run would be reviewed production (§4b), and the
+watchdog holds no credential that could start or change anything.
 
 **Kept separate from GOTO:**
 
@@ -213,17 +213,19 @@ approval like any other edit.
 
 ## 4. Scheduler and state transitions
 
-**Triggers** (Philippine time; Manila is UTC+8 with no DST):
+**Triggers** (Philippine time; Manila is UTC+8 with no DST): the GitHub crons in the
+workflows, and the watchdog's checks (§4c), which only read and alert.
 
-| When (PHT) | Cron (UTC) | Job |
+| When (PHT) | Cron (UTC) | What |
 |---|---|---|
-| Fri 10:02 | `2 2 * * 5` | stage W+1 |
-| Fri 10:17 | `17 2 * * 5` | stage W+1 (backup) |
-| Mon 06:02 | `2 22 * * 0` | promote |
-| Mon 06:17 | `17 22 * * 0` | promote (backup) |
-| Daily 06:32 | `32 22 * * *` | promote (catch-up) |
+| Fri 11:07 | `7 3 * * 5` | `dogear-stage.yml`: stage W+1 |
+| Mon 07:07 | `7 23 * * 0` | `dogear-promote.yml`: promote |
+| Daily 08:07 | `7 0 * * *` | `dogear-promote.yml`: catch-up (the current week only) |
+| Fri 14:00 / 20:00 | `0 6 * * 5` / `0 12 * * 5` | watchdog: Friday, first look / final |
+| Mon 09:00 / 12:00 | `0 1 * * 1` / `0 4 * * 1` | watchdog: Monday, first look / final |
+| Daily 13:00 | `0 5 * * *` | watchdog: today's run (the deadline) |
 
-The UTC day-of-week matters: Monday 06:02 PHT is **Sunday** 22:02 UTC.
+The UTC day-of-week matters: Monday 07:07 PHT is **Sunday** 23:07 UTC.
 
 **Transitions.** The CLI holds all window and state rules; the crons only
 start runs.
@@ -318,8 +320,47 @@ CLEAR, 15 October 2026). **Not enabled by this code:** the owner creates the
   `held: <op> <week> <CODE> [txn]`; details go to the private `runs/`.
 - **Emergency stop** (only): `PUBLICATION_ENABLED` not `true`, or disable
   `dogear-promote.yml`. Normal holds use `operate hold`.
-- **Not dependable until** the watch-only `dogear-scheduler` watchdog is deployed
-  (review-by-exception plan §6; a separate change).
+- **Not dependable until** the watch-only `dogear-scheduler` watchdog (§4c) is
+  deployed, its token checked, and each alert path seen once in the staging rehearsal.
+
+### 4c. The watchdog (`hosting/dogear-scheduler`; DOGEAR-WATCHDOG-PLAN rev 4, Codex CLEAR)
+
+A Cloudflare Worker with Cron Triggers. **Read-only:** GitHub `GET` only, to five
+allowlisted endpoints, with a fine-grained token (Actions, Contents, Metadata: **read**;
+the job-log redirect is fetched without it), and the public host's `/current.json` and
+issue. It never dispatches, reruns, stages, promotes, holds or resumes; its source holds
+no request method (tested). **Inert** until `WATCH_ENABLED` is `"true"` (a reviewed PR);
+`WATCH_TARGET` is `staging` or `production`, and the host comes from code.
+
+- **Run rules, for every check:** only a run that **completed with `success`** is healthy;
+  a run not finished by the check's deadline alerts; a missing one alerts; a skipped
+  caller job is `EMERGENCY_STOP`. A run's **target** is read from its
+  `<caller> / editorial-gate` job (it runs only for production: present = production,
+  skipped = staging); a run for the other target alerts `WRONG_TARGET` and is never
+  evidence.
+- **Friday 14:00 (first look) and 20:00 (final):** the scheduled `stage-next` run since
+  Friday 00:00 succeeded on its first attempt, with `route`, `publish` (and, for
+  production, `editorial-gate`) green, and its public result line, the one after
+  `running: dogear publish stage-next --target <t>`, is `staged: stage-next` (a `noop`
+  is `STAGE_NOOP`). Under §4b that means a saved, verified proof for next week.
+- **Monday 09:00 and 12:00:** `/current.json` names this week, the issue it names is
+  served with its recorded SHA-256, and the latest right-target promote run since Monday
+  06:00 (scheduled or manual) succeeded. Otherwise `ISSUE_UNSERVED`,
+  `MONDAY_UNVERIFIED`, `MONDAY_HELD`, `MONDAY_NOT_PUBLISHED` or `HOST_UNREADABLE`.
+- **Daily 13:00:** today's scheduled promote run (Manila day; 4 h 53 min of grace after
+  08:07) completed with `success` (`SCHEDULE_DROPPED`, `PROMOTE_RUN_FAILED`,
+  `PROMOTE_RUN_PENDING`, `EMERGENCY_STOP`); stage and promote are `active`
+  (`WORKFLOW_DISABLED`); `main`'s last commit is under 50 days old (`INACTIVITY_SOON`).
+- **Its own failures:** `WATCHDOG_CANNOT_READ` (GitHub unreadable, rate-limited, a result
+  line missing), `WATCHDOG_ERROR` (then the invocation fails).
+- **Alerts:** one email per finding through the `send_email` binding, from
+  `dogear-watchdog@archievalmariano.com` to the secret `ALERT_TO`: the check, target,
+  week, code, a fixed sentence and run links built from numeric ids. Never run titles,
+  commit messages, branch names or log text.
+- **Owner steps (later, each approved):** onboard the domain to Email Sending and verify
+  the recipient; create the token and run `tools/watchdog_token_check.sh` (status codes
+  only; all must match); `wrangler secret put ALERT_TO` and `GITHUB_READ_TOKEN`; deploy
+  from an empty directory; a PR enabling it on staging for the rehearsal.
 
 ---
 
@@ -739,7 +780,7 @@ data/              dataset + affinity (monthly files later)
 tests/             unit tests (+ publish pipeline, manifest, window authority)
 mock/              render/fitcheck, with the device's Noto TTFs vendored (OFL)
 hosting/dogear-site/        Pages advanced-mode Worker + tests
-hosting/dogear-scheduler/   cron → workflow_dispatch Worker + tests
+hosting/dogear-scheduler/   read-only watchdog Worker (§4c) + tests
 hosting/staging/            pinned Wrangler for staging (S1 reuses GOTO's installed 4.138.0)
 fixtures/                   synthetic staging fixture
 .github/workflows/          dogear-stage.yml, dogear-promote.yml, dogear-correct.yml
