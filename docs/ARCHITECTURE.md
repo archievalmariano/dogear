@@ -43,6 +43,16 @@ edition**.
   (archive or primary document). The item page never says FREE; the reading
   screen names the work, the author and the provider ("Free on Project
   Gutenberg"). Reading links follow the work hierarchy in §6.
+* **One rule for the web action** (owner decision, 16 October 2026). A written
+  link wins: READ ONLINE only for a rights-checked full legal text, FIND THE
+  BOOK only when written. With none, the web edition derives the action from
+  the record's approved sources (`Record.context_link`, so no record changes
+  and no re-approval): the first institutional source, else the first
+  secondary source on the short `CONTEXT_AUTHORITIES` list (Britannica), is
+  READ MORE; else the first primary source is VIEW SOURCE; else there is no
+  action. Wikipedia and Wikidata stay supporting sources, a full-text host is
+  never derived, and a derived action is web only: never on the device, never
+  in the QR budget. It is link-checked like a written link.
 * **Contents say what happened, in words** (first hardware pass): cover rows
   read `24 NOV · PUBLISHED` / `BORN` / `DIED` / `NOBEL PRIZE` over the title,
   never single letters, icons or a dagger. A national observance shows its

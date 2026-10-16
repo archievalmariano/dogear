@@ -747,6 +747,112 @@ class CtaTests(unittest.TestCase):
         self.assertEqual(cta["edition"], "the 1900 text")
 
 
+NOBEL_2000 = {"title": "Nobel Prize in Literature 2000: Gao Xingjian",
+              "url": "https://www.nobelprize.org/prizes/literature/2000/summary/", "kind": "institutional"}
+BRITANNICA = {"title": "Britannica: Italo Calvino", "url": "https://www.britannica.com/biography/Italo-Calvino",
+              "kind": "secondary"}
+WIKIPEDIA = {"title": "Wikipedia: X", "url": "https://en.wikipedia.org/wiki/X", "kind": "reference"}
+WIKIDATA = {"title": "Wikidata Q1", "url": "https://www.wikidata.org/wiki/Q1", "kind": "reference"}
+BLOG = {"title": "Interesting Literature", "url": "https://interestingliterature.com/x", "kind": "secondary"}
+LAWPHIL = {"title": "Republic Act No. 10556 (Lawphil)", "url": "https://lawphil.net/ra10556.html", "kind": "primary"}
+GUTENBERG = {"title": "Project Gutenberg #9", "url": "https://www.gutenberg.org/ebooks/9", "kind": "institutional"}
+
+
+class ContextLinkTests(unittest.TestCase):
+    """With no written link, the web edition's action is derived from the record's
+    approved sources (Record.context_link): consistent across records and event
+    types, web only, and never a free-reading link."""
+
+    def web(self, *records):
+        s = select_issue(dataset(*records), WEEK)
+        return s, build_issue(s, NOW), build_web(s, build_issue(s, NOW))
+
+    def action(self, r):
+        links = self.web(r)[2]["entries"][0]["links"]
+        return [(l["label"], l["url"], l["title"], l["note"]) for l in links]
+
+    def nobel(self, rid, **kw):
+        return rec(rid, 11, 24, type="literary-event", label="NOBEL PRIZE", **kw)
+
+    def test_nobel_without_a_written_link_reads_more_like_one_with(self):
+        gao = self.action(self.nobel("gao", sources=[NOBEL_2000, WIKIPEDIA]))
+        self.assertEqual(gao, [("READ MORE", NOBEL_2000["url"], NOBEL_2000["title"], "NobelPrize.org")])
+        written = {"type": "read-more", "url": NOBEL_2000["url"], "title": "The Nobel Prize in Literature 2000",
+                   "provider": "NobelPrize.org"}
+        soyinka = self.action(self.nobel("soyinka", sources=[NOBEL_2000, WIKIPEDIA], link=written))
+        self.assertEqual([(a[0], a[1], a[3]) for a in soyinka], [(a[0], a[1], a[3]) for a in gao])
+
+    def test_an_authority_biography_reads_more_there(self):
+        self.assertEqual(self.action(rec("calvino", 11, 25, sources=[BRITANNICA, WIKIPEDIA])),
+                         [("READ MORE", BRITANNICA["url"], "Italo Calvino", "Britannica")])
+
+    def test_wikipedia_and_wikidata_are_never_the_action(self):
+        self.assertEqual(self.action(rec("w", 11, 25, sources=[WIKIDATA, WIKIPEDIA])), [])
+        mislabeled = {**WIKIPEDIA, "kind": "institutional"}  # the host decides, not only the kind
+        self.assertEqual(self.action(rec("m", 11, 25, sources=[mislabeled])), [])
+        encyclopedia = {"title": "New World Encyclopedia", "url": "https://www.newworldencyclopedia.org/entry/X",
+                        "kind": "reference"}  # and any reference source stays supporting
+        self.assertEqual(self.action(rec("e", 11, 25, sources=[encyclopedia, WIKIPEDIA])), [])
+
+    def test_a_secondary_source_off_the_authority_list_is_not_elevated(self):
+        self.assertEqual(self.action(rec("lewis", 11, 25, sources=[BLOG, WIKIPEDIA])), [])
+
+    def test_a_primary_source_alone_is_view_source(self):
+        obs = rec("pagbasa", 11, 27, type="observance", person=None, year=2013, sources=[LAWPHIL])
+        self.assertEqual(self.action(obs), [("VIEW SOURCE", LAWPHIL["url"], LAWPHIL["title"], "lawphil.net")])
+
+    def test_institutional_before_authority_before_primary(self):
+        r = rec("o", 11, 25, sources=[LAWPHIL, BRITANNICA, WIKIPEDIA, NOBEL_2000])
+        self.assertEqual(self.action(r)[0][1], NOBEL_2000["url"])
+        self.assertEqual(self.action(rec("p", 11, 25, sources=[LAWPHIL, BRITANNICA]))[0][1], BRITANNICA["url"])
+
+    def test_a_full_text_host_is_never_derived(self):
+        self.assertEqual(self.action(rec("g", 11, 25, sources=[GUTENBERG, WIKIPEDIA])), [])
+        pooh = pub("pooh", 24, link=book("pooh", "A. A. Milne", rights="public-domain-us"),
+                   sources=[GUTENBERG, NOBEL_2000])
+        self.assertEqual([(a[0], a[1]) for a in self.action(pooh)], [("READ MORE", NOBEL_2000["url"])])
+
+    def test_a_written_link_wins(self):
+        wilde = rec("wilde", 11, 25, person="Oscar Wilde",
+                    link=book("Dorian Gray", "Oscar Wilde", "representative_work", url=GUTENBERG["url"]),
+                    sources=[NOBEL_2000, GUTENBERG])
+        self.assertEqual([(a[0], a[1]) for a in self.action(wilde)], [("READ ONLINE", GUTENBERG["url"])])
+        self.assertIsNone(dataset(wilde).records[0].context_link)
+        other = {"type": "read-more", "url": "https://poets.org/x", "title": "X", "provider": "Poets.org"}
+        self.assertEqual(self.action(self.nobel("n", sources=[NOBEL_2000], link=other))[0][1], "https://poets.org/x")
+        self.assertIsNone(dataset(self.nobel("n", sources=[NOBEL_2000], link=other)).records[0].context_link)
+
+    def test_the_derived_page_is_not_listed_again_as_a_source(self):
+        sources = self.web(self.nobel("gao", sources=[NOBEL_2000, WIKIPEDIA]))[2]["entries"][0]["sources"]
+        self.assertEqual([s["url"] for s in sources], [WIKIPEDIA["url"]])
+
+    def test_a_derived_action_never_reaches_the_device(self):
+        s, issue, _ = self.web(self.nobel("gao", sources=[NOBEL_2000]))
+        self.assertIsNone(issue["entries"][0]["cta"])
+        self.assertFalse(s.picked[0].qr)
+        # The QR budget still goes to reading links only.
+        ds = [pub(f"b{i}", 23 + i, link=book(f"b{i}", "Author")) for i in range(2)] + \
+             [self.nobel(f"n{i}", sources=[NOBEL_2000]) for i in range(2)]
+        s = select_issue(dataset(*ds), WEEK)
+        self.assertEqual(sorted(c.record.id for c in s.picked if c.qr), ["b0", "b1"])
+
+    def test_a_derived_action_is_link_checked_like_a_written_one(self):
+        from dogear.publish.staging import external_links
+        s = select_issue(dataset(self.nobel("gao", sources=[NOBEL_2000, WIKIPEDIA]),
+                                 rec("w", 11, 25, sources=[WIKIDATA, WIKIPEDIA])), WEEK)
+        self.assertEqual(external_links(s), [NOBEL_2000["url"]])
+
+    def test_the_rule_is_the_same_for_every_event_type(self):
+        records = [rec("born", 11, 24, sources=[NOBEL_2000]),
+                   rec("died", 11, 25, type="death", sources=[NOBEL_2000]),
+                   pub("book", 26, sources=[NOBEL_2000]),
+                   self.nobel("prize", sources=[NOBEL_2000]),
+                   rec("day", 11, 28, type="observance", person=None, year=2013, sources=[NOBEL_2000])]
+        for r in records:
+            with self.subTest(r["type"]):
+                self.assertEqual(self.action(r)[0][:2], ("READ MORE", NOBEL_2000["url"]))
+
+
 class RolesAndQrTests(unittest.TestCase):
     def test_lead_is_intrinsic_not_lifted(self):
         ds = dataset(pub("major", 24, significance=5, recognition="anchor"),
@@ -838,7 +944,10 @@ class IssueTests(unittest.TestCase):
                    copy={"digest": WORDS_50, "expanded": "The fuller story.", "allowSecondPage": False})
         s = select_issue(dataset(pooh), WEEK)
         web = build_web(s, build_issue(s, NOW))
-        self.assertEqual(web["entries"][0]["links"], [])
+        # The withheld copy is not offered; the action falls to the record's
+        # institutional source (Record.context_link), never to the free text.
+        self.assertEqual([(l["label"], l["url"]) for l in web["entries"][0]["links"]],
+                         [("READ MORE", "https://library.test/s")])
         self.assertTrue(web["entries"][0]["freeReadingWithheld"])
         self.assertNotIn("READ ONLINE", render_web(web))
 

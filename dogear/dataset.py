@@ -143,6 +143,33 @@ _OPTIONAL_MATERIAL = ("locality", "personId", "workId")
 _DAYS_IN_MONTH = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)  # Feb 29 allowed
 
 
+# Record.context_link: a secondary source becomes READ MORE only on these hosts (kept
+# short and explicit; add one only when a concrete record needs it). Sources on
+# NEVER_CONTEXT_HOSTS are never derived: encyclopedic references stay supporting
+# sources, and full text is offered only through a written, rights-checked link.
+CONTEXT_AUTHORITIES = frozenset({"britannica.com"})
+NEVER_CONTEXT_HOSTS = frozenset({
+    "wikipedia.org", "wikidata.org", "wikisource.org", "gutenberg.org", "archive.org",
+    "standardebooks.org", "hathitrust.org", "openlibrary.org", "darwin-online.org.uk"})
+_PROVIDER_NAMES = {"nobelprize.org": "NobelPrize.org", "britannica.com": "Britannica"}
+
+
+def _host(url: str) -> str:
+    host = (urlsplit(url).hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def _host_in(url: str, hosts) -> bool:
+    """The URL's host is one of ``hosts`` or a subdomain of one."""
+    host = _host(url)
+    return any(host == h or host.endswith("." + h) for h in hosts)
+
+
+def _provider_name(url: str) -> str:
+    host = _host(url)
+    return next((name for h, name in _PROVIDER_NAMES.items() if host == h or host.endswith("." + h)), host)
+
+
 class DatasetError(Exception):
     """The dataset failed structural validation. ``problems`` lists every issue."""
 
@@ -264,6 +291,30 @@ class Record:
             return min(access, key=lambda l: l.access_tier)  # min() keeps the first of equals
         context = [l for l in self.links if l.type in ("read-more", "source")]
         return context[0] if context else None
+
+    @property
+    def context_link(self) -> Optional[Link]:
+        """The web edition's action when the record has no written link, derived from
+        its approved sources (so it needs no new approval): the first institutional
+        source, else the first secondary source on CONTEXT_AUTHORITIES, as READ MORE;
+        else the first primary source, as VIEW SOURCE; else none. Wikipedia and
+        Wikidata stay supporting sources, and a full-text host is never derived: free
+        reading is READ ONLINE only through a written, rights-checked link. Web only;
+        never an access link, so it never reaches the device or its QR budget."""
+        if self.link is not None:
+            return None
+        usable = [s for s in self.sources if not _host_in(s.url, NEVER_CONTEXT_HOSTS)]
+        for kind, link_type, hosts in (("institutional", "read-more", None),
+                                       ("secondary", "read-more", CONTEXT_AUTHORITIES),
+                                       ("primary", "source", None)):
+            for s in usable:
+                if s.kind == kind and (hosts is None or _host_in(s.url, hosts)):
+                    provider = _provider_name(s.url)
+                    title = s.title
+                    if title.lower().startswith(provider.lower() + ": "):  # "Britannica: Italo Calvino"
+                        title = title[len(provider) + 2:]
+                    return Link(type=link_type, url=s.url, title=title, provider=provider)
+        return None
 
     @property
     def free_reading_withheld(self) -> bool:
