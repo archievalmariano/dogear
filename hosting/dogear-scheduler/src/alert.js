@@ -1,8 +1,9 @@
 // Public-safe alerts (PLAN §3): a fixed sentence per code, the week, the watched
 // target and links built here from numeric run ids. Nothing GitHub returns as text
 // (titles, commit messages, branch names, log lines) is ever put in an alert.
-
-export const SENDER = "dogear-watchdog@archievalmariano.com";
+// Delivered as one issue per finding in the private dogear-alerts repository, assigned
+// to the owner (notify.js; DOGEAR-WATCHDOG-ALERTS-PLAN rev 2).
+import { DeliveryError, createAlertIssue } from "./notify.js";
 
 export const MESSAGES = Object.freeze({
   STAGE_RUN_MISSING: "No scheduled Friday stage run started. If you already re-staged manually, ignore this.",
@@ -24,6 +25,7 @@ export const MESSAGES = Object.freeze({
   INACTIVITY_SOON: "The repository has had no commit on main for over 50 days; GitHub will disable the schedules at 60.",
   WATCHDOG_CANNOT_READ: "The watchdog could not read GitHub or a run's result, so it cannot confirm this check.",
   WATCHDOG_ERROR: "The watchdog failed while running this check.",
+  WATCHDOG_TEST: "One-time test of the DOGEAR watchdog alert channel. Confirm it arrived, then close this issue.",
 });
 
 export function buildAlert({ check, target, owner, repo }, { code, week, runIds }) {
@@ -35,7 +37,14 @@ export function buildAlert({ check, target, owner, repo }, { code, week, runIds 
   return { subject: `DOGEAR watchdog: ${code} ${week}`, text: lines.join("\n") + "\n" };
 }
 
-export async function sendAlert(env, alert) {
-  if (!env.ALERT_EMAIL || !env.ALERT_TO) throw new Error("dogear-scheduler: ALERT_EMAIL binding or ALERT_TO missing");
-  await env.ALERT_EMAIL.send({ to: env.ALERT_TO, from: SENDER, subject: alert.subject, text: alert.text });
+// Delivered only if the issue was created AND the owner is still assigned: GitHub drops
+// an assignee it cannot assign without an error, and the assignment is what makes the
+// alert a participating (pushed) notification. A dropped assignee is a delivery failure.
+export async function sendAlert(env, alert, options) {
+  const issue = await createAlertIssue(env, alert, options);
+  if (!issue.assigneeRetained) {
+    console.log(JSON.stringify({ level: "error", msg: "ASSIGNEE_DROPPED", issue: issue.number }));
+    throw new DeliveryError("ASSIGNEE_DROPPED", `issue ${issue.number}: the assignee was not retained`);
+  }
+  return issue;
 }

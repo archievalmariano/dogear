@@ -7,7 +7,9 @@ import worker, { CHECKS, DECLARED_CRONS, runCheck } from "../src/index.js";
 import { friday, monday, daily } from "../src/checks.js";
 import { CannotRead, MAX_JSON_BYTES, allowedPath, createClient, parseResult, runState, runTarget } from "../src/github.js";
 import { HOSTS, readServed } from "../src/served.js";
-import { MESSAGES, SENDER, buildAlert } from "../src/alert.js";
+import { MESSAGES, buildAlert, sendAlert } from "../src/alert.js";
+import { ALERT_ASSIGNEE, DeliveryError, appJwt, createAlertIssue } from "../src/notify.js";
+import { main as alertTestMain } from "../../../tools/watchdog_alert_test.mjs";
 import { currentMonday, fridayStart, mondayRollover, nextMonday, dayStart } from "../src/time.js";
 
 const jsonc = (path) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8").replace(/^\s*\/\/.*$/gm, ""));
@@ -60,9 +62,12 @@ test("wrangler: crons equal the checks; inert, staging defaults; no secret or re
   assert.equal(config.vars.WATCH_TARGET, "staging");
   assert.equal(config.vars.GITHUB_REPO, "dogear");
   const text = JSON.stringify(config);
-  for (const key of ["GITHUB_TOKEN", "GITHUB_READ_TOKEN", "ALERT_TO", "token", "secret"]) assert.ok(!text.includes(key), key);
-  assert.deepEqual(config.send_email, [{ name: "ALERT_EMAIL", allowed_sender_addresses: [SENDER] }]);
-  assert.equal((text.match(/@/g) || []).length, 1, "the sender is the only address");
+  for (const key of ["GITHUB_TOKEN", "GITHUB_READ_TOKEN", "ALERT_TO", "ALERT_APP", "PRIVATE", "token", "secret"]) {
+    assert.ok(!text.includes(key), key);
+  }
+  assert.equal(config.send_email, undefined, "no email binding: alerts are GitHub issues");
+  assert.equal(config.vars.ALERT_REPO, "dogear-alerts");
+  assert.equal((text.match(/@/g) || []).length, 0, "no address in the config");
 });
 
 // ---- never mutates -------------------------------------------------------------------------
@@ -71,14 +76,30 @@ const SRC = new URL("../src/", import.meta.url);
 const FORBIDDEN = /\b(POST|PUT|PATCH|DELETE)\b|method\s*:|dispatches|\/rerun|\/cancel|\/approve|pending_deployments/;
 const scan = (text) => FORBIDDEN.test(text);
 
-test("source: no request method, no mutating endpoint anywhere in src/", () => {
-  for (const name of readdirSync(SRC)) {
+test("source: no request method, no mutating endpoint anywhere in the detection code", () => {
+  const files = readdirSync(SRC);
+  assert.ok(files.includes("notify.js"));
+  for (const name of files.filter((f) => f !== "notify.js")) {
     assert.equal(scan(readFileSync(new URL(name, SRC), "utf8")), false, name);
   }
   // The scan itself catches a mutation (it is what fails if one is added).
   const github = readFileSync(new URL("github.js", SRC), "utf8");
   assert.equal(scan(github.replace('redirect: "manual"', 'method: "PO" + "ST", redirect: "manual"')), true);
   assert.equal(scan(github + "\n// actions/workflows/x/dispatches\n"), true);
+});
+
+test("notify.js, the only non-GET module, reaches exactly two endpoints and nothing of dogear", () => {
+  const notify = readFileSync(new URL("notify.js", SRC), "utf8");
+  const urls = [...notify.matchAll(/`\$\{API\}([^`]*)`/g)].map((m) => m[1]);
+  assert.deepEqual(urls, ["/app/installations/${installation}/access_tokens", "/repos/${ALERT_OWNER}/${ALERT_REPO}/issues"]);
+  assert.ok(notify.includes('const API = "https://api.github.com";'));
+  assert.ok(notify.includes('export const ALERT_OWNER = "archievalmariano";'));
+  assert.ok(notify.includes('export const ALERT_REPO = "dogear-alerts";'));
+  assert.equal((notify.match(/method: "POST"/g) || []).length, 1, "one POST site, used for the two endpoints");
+  for (const bad of ["PUT", "PATCH", "DELETE", "dispatches", "/actions/", "contents", "GITHUB_READ_TOKEN"]) {
+    assert.ok(!notify.includes(bad), bad);
+  }
+  assert.ok(!/repos\/archievalmariano\/dogear[^-]/.test(notify), "never the dogear repository");
 });
 
 test("the client reaches only the five allowlisted path shapes", () => {
@@ -101,8 +122,45 @@ test("the client reaches only the five allowlisted path shapes", () => {
 const SENTINELS = ["SENTINEL-TITLE-1f2e", "SENTINEL-COMMIT-9a8b", "SENTINEL-BRANCH-77c1", "SENTINEL-STEP-4d4d",
   "SENTINEL-LOG-5e5e"];
 
+// The alert App: a key pair generated here, and a fake of its two endpoints.
+const KEYS = await crypto.subtle.generateKey({ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048,
+  publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["sign", "verify"]);
+const PEM = "-----BEGIN PRIVATE KEY-----\n" + Buffer.from(await crypto.subtle.exportKey("pkcs8", KEYS.privateKey))
+  .toString("base64").match(/.{1,64}/g).join("\n") + "\n-----END PRIVATE KEY-----\n";
+const APP_ENV = { ALERT_APP_ID: "123456", ALERT_APP_INSTALLATION_ID: "987654", ALERT_APP_PRIVATE_KEY: PEM,
+  ALERT_REPO: "dogear-alerts" };
+const INSTALL_TOKEN = "INSTALL-TOKEN-SECRET-5a5a";
+const EXCHANGE_URL = "https://api.github.com/app/installations/987654/access_tokens";
+const ISSUES_URL = "https://api.github.com/repos/archievalmariano/dogear-alerts/issues";
+
+// Handles the alert App's two endpoints; anything else goes to `next`. Records the issues created.
+function alertSink(next, { exchangeStatus = 201, issueStatus = 201, drop = () => false, otherLogin = null } = {}) {
+  const issues = [];
+  const json = (body, status) => new Response(JSON.stringify(body), { status });
+  const fetchImpl = async (url, init = {}) => {
+    if (String(url) === EXCHANGE_URL && init.method === "POST") return json({ token: INSTALL_TOKEN, expires_at: "x" }, exchangeStatus);
+    if (String(url) === ISSUES_URL && init.method === "POST") {
+      const body = JSON.parse(init.body);
+      const number = issues.length + 1;
+      issues.push({ ...body, number });
+      const assignees = drop(number) ? (otherLogin ? [{ login: otherLogin }] : []) : body.assignees.map((login) => ({ login }));
+      return json({ number, title: body.title, assignees, html_url: `https://github.com/x/${number}` }, issueStatus);
+    }
+    return next(url, init);
+  };
+  return { fetchImpl, issues };
+}
+
+// An ad-hoc world (a single fetch function) with the alert App in front of it.
+function adhoc(next, alerts) {
+  const requests = [];
+  const sink = alertSink(async (url, init) => next(url, init), alerts);
+  return { fetchImpl: async (url, init = {}) => { requests.push({ url: String(url), init }); return sink.fetchImpl(url, init); },
+    requests, issues: sink.issues };
+}
+
 function fakeWorld({ stageRuns = [], promoteRuns = [], jobsById = {}, logs = {}, workflows = {}, lastCommit,
-  manifest, issueBytes, status = {}, host = "production" } = {}) {
+  manifest, issueBytes, status = {}, host = "production", alerts = {} } = {}) {
   const requests = [];
   const respond = (body, code = 200, headers = {}) => new Response(typeof body === "string" ? body : JSON.stringify(body),
     { status: code, headers });
@@ -145,7 +203,12 @@ function fakeWorld({ stageRuns = [], promoteRuns = [], jobsById = {}, logs = {},
     }
     return respond("", 404);
   };
-  return { fetchImpl, requests };
+  const sink = alertSink(fetchImpl, alerts);
+  const recorded = async (url, init = {}) => {
+    if (String(url) === EXCHANGE_URL || String(url) === ISSUES_URL) requests.push({ url: String(url), init });
+    return sink.fetchImpl(url, init);
+  };
+  return { fetchImpl: recorded, requests, issues: sink.issues };
 }
 
 function servedIssue(week, body = `{"issue":"${week}"}`) {
@@ -165,10 +228,9 @@ const logFor = (status, target = "production", op = "stage-next") => [
 ].join("\n");
 
 async function invoke(cron, scheduledTime, world, envExtra = {}) {
-  const sent = [], logged = [];
+  const logged = [];
   const env = { GITHUB_OWNER: "archievalmariano", GITHUB_REPO: "dogear", WATCH_TARGET: "production",
-    WATCH_ENABLED: "true", GITHUB_READ_TOKEN: "TOKEN-SECRET-0000", ALERT_TO: "owner@example.org",
-    ALERT_EMAIL: { send: async (m) => { sent.push(m); } }, ...envExtra };
+    WATCH_ENABLED: "true", GITHUB_READ_TOKEN: "TOKEN-SECRET-0000", ...APP_ENV, ...envExtra };
   const realFetch = globalThis.fetch, realLog = console.log;
   globalThis.fetch = world.fetchImpl;
   console.log = (line) => logged.push(String(line));
@@ -181,6 +243,7 @@ async function invoke(cron, scheduledTime, world, envExtra = {}) {
     globalThis.fetch = realFetch;
     console.log = realLog;
   }
+  const sent = (world.issues || []).map((i) => ({ subject: i.title, text: i.body, assignees: i.assignees }));
   return { sent, logged, error, codes: sent.map((m) => m.subject.split(" ")[2]).sort() };
 }
 
@@ -197,7 +260,7 @@ function fridayWorld({ conclusion = "success", status = "completed", attempt = 1
 
 // ---- every check is GET-only, and the token stays home --------------------------------------
 
-test("every check path makes only GET requests, and the token never leaves api.github.com", async () => {
+test("detection makes only GET requests; delivery only two POSTs; each credential reaches only its endpoint", async () => {
   const issue = servedIssue("2026-10-19");
   const pr = run({ created: "2026-10-18T23:07:00Z" });
   const worlds = [
@@ -210,12 +273,26 @@ test("every check path makes only GET requests, and the token never leaves api.g
     await invoke(cron, when, world);
     assert.ok(world.requests.length > 0, cron);
     for (const { url, init } of world.requests) {
-      assert.equal(init.method, undefined, `${cron} ${url}`); // fetch's default: GET
-      assert.equal(init.body, undefined);
       assert.ok(!url.includes("TOKEN-SECRET"), url);
       const auth = init.headers && init.headers.Authorization;
-      if (new URL(url).host === "api.github.com") assert.equal(auth, "Bearer TOKEN-SECRET-0000");
-      else assert.equal(auth, undefined, `no token to ${url}`);
+      if (url === EXCHANGE_URL) { // the App JWT, and only here
+        assert.equal(init.method, "POST");
+        assert.match(auth, /^Bearer [\w-]+\.[\w-]+\.[\w-]+$/);
+        assert.ok(!auth.includes("TOKEN-SECRET") && !auth.includes(INSTALL_TOKEN));
+        continue;
+      }
+      if (url === ISSUES_URL) { // the installation token, and only here
+        assert.equal(init.method, "POST");
+        assert.equal(auth, `Bearer ${INSTALL_TOKEN}`);
+        continue;
+      }
+      assert.equal(init.method, undefined, `${cron} ${url}`); // detection: fetch's default, GET
+      assert.equal(init.body, undefined);
+      if (url.startsWith("https://api.github.com/repos/archievalmariano/dogear/")) {
+        assert.equal(auth, "Bearer TOKEN-SECRET-0000");
+      } else {
+        assert.equal(auth, undefined, `no credential to ${url}`);
+      }
       assert.equal(scan(url), false, url);
     }
   }
@@ -585,21 +662,29 @@ test("fail loud: unreadable GitHub, a missing token, an error, an alert that can
     const world = fakeWorld({ status: { "actions/workflows/dogear-stage.yml/runs": code } });
     assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, world)).codes, ["WATCHDOG_CANNOT_READ"], String(code));
   }
-  const malformed = { fetchImpl: async () => new Response("not json", { status: 200 }), requests: [] };
+  const malformed = adhoc(async () => new Response("not json", { status: 200 }));
   assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, malformed)).codes, ["WATCHDOG_CANNOT_READ"]);
-  const timeout = { fetchImpl: async () => { throw Object.assign(new Error("t"), { name: "AbortError" }); }, requests: [] };
+  const timeout = adhoc(async () => { throw Object.assign(new Error("t"), { name: "AbortError" }); });
   assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, timeout)).codes, ["WATCHDOG_CANNOT_READ"]);
   assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld(), { GITHUB_READ_TOKEN: "" })).codes,
     ["WATCHDOG_CANNOT_READ"]);
-  const broken = { fetchImpl: async () => new Response(JSON.stringify({ workflow_runs: [{ id: 1, created_at: null }] })) };
-  broken.requests = [];
-  const crashed = await invoke("0 5 * * *", TUE_DAILY, { fetchImpl: async (u) => (String(u).includes("/jobs")
-    ? new Response(JSON.stringify({ jobs: [null] })) : broken.fetchImpl(u)), requests: [] });
+  const crashed = await invoke("0 5 * * *", TUE_DAILY, adhoc(async (u) => (String(u).includes("/jobs")
+    ? new Response(JSON.stringify({ jobs: [null] }))
+    : new Response(JSON.stringify({ workflow_runs: [{ id: 1, created_at: null }] })))));
   assert.deepEqual(crashed.codes, ["WATCHDOG_ERROR"]);
   assert.ok(crashed.error, "the invocation fails after alerting");
-  const unsent = await invoke("0 12 * * 5", FRI_FINAL, fakeWorld(), { ALERT_EMAIL: { send: async () => { throw new Error("E_X"); } } });
-  assert.ok(unsent.error);
-  assert.ok(unsent.logged.some((l) => l.includes("alert not sent")));
+  for (const alerts of [{ issueStatus: 403 }, { issueStatus: 422 }, { exchangeStatus: 401 }]) {
+    const unsent = await invoke("0 12 * * 5", FRI_FINAL, fakeWorld({ alerts }));
+    assert.ok(unsent.error, JSON.stringify(alerts));
+    assert.ok(unsent.logged.some((l) => l.includes("alert not sent") && l.includes("STAGE_RUN_MISSING")));
+    assert.ok(unsent.logged.some((l) => l.includes("check done")), "detection is still logged");
+  }
+  // Missing App secrets: nothing is sent, the error is logged, the invocation fails.
+  const noApp = fakeWorld();
+  const out = await invoke("0 12 * * 5", FRI_FINAL, noApp, { ALERT_APP_PRIVATE_KEY: "" });
+  assert.ok(out.error);
+  assert.equal(noApp.requests.filter((r) => r.url === EXCHANGE_URL || r.url === ISSUES_URL).length, 0);
+  assert.ok(out.logged.some((l) => l.includes("alert not sent")));
 });
 
 test("alerts and logs are public-safe: fixed templates, no planted text from GitHub or the logs", async () => {
@@ -610,10 +695,11 @@ test("alerts and logs are public-safe: fixed templates, no planted text from Git
     const out = await invoke(cron, when, world);
     assert.ok(out.sent.length > 0, cron);
     const everything = JSON.stringify(out.sent) + out.logged.join("\n");
-    for (const s of [...SENTINELS, "TOKEN-SECRET"]) assert.ok(!everything.includes(s), `${cron}: ${s}`);
+    for (const s of [...SENTINELS, "TOKEN-SECRET", INSTALL_TOKEN, "PRIVATE KEY"]) {
+      assert.ok(!everything.includes(s), `${cron}: ${s}`);
+    }
     for (const m of out.sent) {
-      assert.equal(m.from, SENDER);
-      assert.equal(m.to, "owner@example.org");
+      assert.deepEqual(m.assignees, ["archievalmariano"]);
       assert.match(m.subject, /^DOGEAR watchdog: [A-Z_]+ \d{4}-\d{2}-\d{2}$/);
       for (const line of m.text.split("\n").filter(Boolean)) {
         assert.ok(/^(Check|Target|Week|Code): [a-z0-9_ -]+$/i.test(line) || Object.values(MESSAGES).includes(line)
@@ -622,6 +708,128 @@ test("alerts and logs are public-safe: fixed templates, no planted text from Git
     }
   }
   assert.throws(() => buildAlert({ check: "x", target: "staging", owner: "o", repo: "r" }, { code: "NOPE", week: "w", runIds: [] }));
+});
+
+// ---- alert delivery: the GitHub App issue path (DOGEAR-WATCHDOG-ALERTS-PLAN rev 2) ------------
+
+const ALERT = buildAlert({ check: "daily", target: "production", owner: "archievalmariano", repo: "dogear" },
+  { code: "SCHEDULE_DROPPED", week: "2026-10-19", runIds: [] });
+const fromB64url = (part) => Buffer.from(part.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+
+test("the App JWT: RS256, iss = the App ID, iat 60 s back, exp 9 min ahead, and it verifies", async () => {
+  const now = Date.parse("2026-10-20T05:00:00Z");
+  const jwt = await appJwt("123456", PEM, now);
+  const [h, p, sig] = jwt.split(".");
+  assert.deepEqual(JSON.parse(fromB64url(h)), { alg: "RS256", typ: "JWT" });
+  assert.deepEqual(JSON.parse(fromB64url(p)), { iat: now / 1000 - 60, exp: now / 1000 + 540, iss: 123456 });
+  const ok = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", KEYS.publicKey, fromB64url(sig), new TextEncoder().encode(`${h}.${p}`));
+  assert.equal(ok, true);
+  await assert.rejects(appJwt("123456", PEM.replace(/PRIVATE KEY/g, "RSA PRIVATE KEY"), now),
+    (e) => e instanceof DeliveryError && /PKCS#8/.test(e.message));
+  await assert.rejects(appJwt("abc", PEM, now), DeliveryError);
+  await assert.rejects(appJwt("1", "not a key", now), DeliveryError);
+});
+
+test("delivery: the token is scoped to dogear-alerts issues; the issue is assigned to the owner", async () => {
+  const calls = [];
+  const sink = alertSink(async () => new Response("", { status: 404 }));
+  const fetchImpl = async (url, init) => { calls.push({ url: String(url), init }); return sink.fetchImpl(url, init); };
+  const issue = await sendAlert(APP_ENV, ALERT, { fetchImpl, nowMs: Date.now() });
+  assert.deepEqual(calls.map((c) => [c.url, c.init.method]), [[EXCHANGE_URL, "POST"], [ISSUES_URL, "POST"]]);
+  assert.deepEqual(JSON.parse(calls[0].init.body), { repositories: ["dogear-alerts"], permissions: { issues: "write" } });
+  assert.deepEqual(JSON.parse(calls[1].init.body),
+    { title: ALERT.subject, body: ALERT.text, assignees: [ALERT_ASSIGNEE] });
+  assert.equal(ALERT_ASSIGNEE, "archievalmariano");
+  assert.equal(calls[1].init.headers.Authorization, `Bearer ${INSTALL_TOKEN}`);
+  assert.deepEqual(issue, { number: 1, url: "https://github.com/archievalmariano/dogear-alerts/issues/1",
+    assigneeRetained: true });
+});
+
+test("delivery: a dropped or substituted assignee is ASSIGNEE_DROPPED, logged with the issue number only", async () => {
+  for (const otherLogin of [null, "someone-else"]) {
+    const sink = alertSink(async () => new Response("", { status: 404 }), { drop: () => true, otherLogin });
+    const logged = [];
+    const realLog = console.log;
+    console.log = (line) => logged.push(String(line));
+    try {
+      await assert.rejects(sendAlert(APP_ENV, ALERT, { fetchImpl: sink.fetchImpl }),
+        (e) => e instanceof DeliveryError && e.code === "ASSIGNEE_DROPPED");
+    } finally {
+      console.log = realLog;
+    }
+    assert.deepEqual(logged.map((l) => JSON.parse(l)), [{ level: "error", msg: "ASSIGNEE_DROPPED", issue: 1 }]);
+    assert.equal(sink.issues.length, 1, "the issue exists, but it is not counted as delivered");
+  }
+});
+
+test("delivery: a dropped assignee on one finding still delivers the others, then fails the invocation", async () => {
+  // Daily with no run today and an old main: SCHEDULE_DROPPED and INACTIVITY_SOON, two findings.
+  const world = fakeWorld({ promoteRuns: [], lastCommit: "2026-08-01T00:00:00Z", alerts: { drop: (n) => n === 1 } });
+  const out = await invoke("0 5 * * *", TUE_DAILY, world);
+  assert.equal(world.issues.length, 2, "both findings were sent");
+  assert.deepEqual(world.issues.map((i) => i.assignees), [["archievalmariano"], ["archievalmariano"]]);
+  assert.ok(out.error, "the invocation fails");
+  const drops = out.logged.filter((l) => l.includes("ASSIGNEE_DROPPED")).map((l) => JSON.parse(l));
+  assert.deepEqual(drops, [{ level: "error", msg: "ASSIGNEE_DROPPED", issue: 1 }]);
+  assert.equal(out.logged.filter((l) => l.includes("alert not sent")).length, 1, "only the first is undelivered");
+});
+
+test("delivery: a refused or malformed creation is a delivery failure", async () => {
+  const sinks = [alertSink(null, { issueStatus: 200 }), alertSink(null, { issueStatus: 422 }),
+    alertSink(null, { exchangeStatus: 200 })];
+  for (const sink of sinks) await assert.rejects(sendAlert(APP_ENV, ALERT, { fetchImpl: sink.fetchImpl }), DeliveryError);
+  const notJson = async (url) => (String(url) === EXCHANGE_URL
+    ? new Response(JSON.stringify({ token: INSTALL_TOKEN }), { status: 201 }) : new Response("<html>", { status: 201 }));
+  await assert.rejects(sendAlert(APP_ENV, ALERT, { fetchImpl: notJson }), (e) => e.code === "ISSUE_REFUSED");
+  for (const env of [{ ...APP_ENV, ALERT_REPO: "dogear" }, { ...APP_ENV, ALERT_APP_INSTALLATION_ID: "1/../2" },
+    { ...APP_ENV, ALERT_APP_ID: "" }]) {
+    let called = false;
+    await assert.rejects(sendAlert(env, ALERT, { fetchImpl: async () => { called = true; } }), (e) => e.code === "CONFIG");
+    assert.equal(called, false, "nothing is sent with a bad configuration");
+  }
+});
+
+test("delivery: a stalled token or issue response fails within the deadline", { timeout: 5000 }, async () => {
+  for (const which of [EXCHANGE_URL, ISSUES_URL]) {
+    const fetchImpl = async (url) => (String(url) === which ? stalled("{").response()
+      : new Response(JSON.stringify({ token: INSTALL_TOKEN }), { status: 201 }));
+    const { error, elapsed } = await within(50, createAlertIssue(APP_ENV, ALERT, { fetchImpl, timeoutMs: 50 }));
+    assert.ok(error instanceof CannotRead, `${which}: ${error}`);
+    assert.ok(elapsed < 2000);
+  }
+});
+
+test("the one-time alert test tool: one assigned issue through notify.js, and only the URL and verdict printed", async () => {
+  const run = async (env, alerts) => {
+    const sink = alertSink(async (url) => { throw new Error(`unexpected ${url}`); }, alerts);
+    const calls = [], printed = [];
+    const code = await alertTestMain({ env, fetchImpl: async (u, i) => { calls.push(String(u)); return sink.fetchImpl(u, i); },
+      now: new Date("2026-10-20T05:00:00Z"), print: (l) => printed.push(l) });
+    return { code, printed, calls, issues: sink.issues };
+  };
+  const ok = await run(APP_ENV);
+  assert.equal(ok.code, 0);
+  assert.deepEqual(ok.printed, ["issue: https://github.com/archievalmariano/dogear-alerts/issues/1", "assignee retained: yes"]);
+  assert.deepEqual(ok.calls, [EXCHANGE_URL, ISSUES_URL]); // nothing of dogear is read
+  assert.equal(ok.issues.length, 1);
+  assert.equal(ok.issues[0].title, "DOGEAR watchdog: WATCHDOG_TEST 2026-10-20");
+  assert.deepEqual(ok.issues[0].assignees, ["archievalmariano"]);
+  assert.ok(ok.issues[0].body.includes(MESSAGES.WATCHDOG_TEST));
+  const dropped = await run(APP_ENV, { drop: () => true });
+  assert.equal(dropped.code, 1);
+  assert.deepEqual(dropped.printed, ["issue: https://github.com/archievalmariano/dogear-alerts/issues/1", "assignee retained: no"]);
+  const refused = await run(APP_ENV, { issueStatus: 403 });
+  assert.equal(refused.code, 1);
+  assert.deepEqual(refused.printed, ["not created: ISSUE_REFUSED"]);
+  for (const name of ["ALERT_APP_ID", "ALERT_APP_INSTALLATION_ID", "ALERT_APP_PRIVATE_KEY"]) {
+    const missing = await run({ ...APP_ENV, [name]: "" });
+    assert.equal(missing.code, 2, name);
+    assert.deepEqual(missing.calls, [], `${name}: nothing sent`);
+  }
+  for (const out of [ok, dropped, refused]) {
+    const text = out.printed.join("\n");
+    for (const secret of ["PRIVATE KEY", INSTALL_TOKEN, "eyJ", "123456", "987654"]) assert.ok(!text.includes(secret), secret);
+  }
 });
 
 test("the HTTP entry point only reports liveness", async () => {

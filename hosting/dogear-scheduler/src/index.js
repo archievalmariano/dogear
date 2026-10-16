@@ -1,8 +1,9 @@
 // dogear-scheduler: DOGEAR's read-only watchdog (review-by-exception plan §6;
 // DOGEAR-WATCHDOG-PLAN). It never starts, stages, promotes, publishes, holds or
 // resumes anything: it reads GitHub (GET only, read-only token) and the public
-// host, decides (checks.js) and emails an alert. NOT DEPLOYED; inert until
-// WATCH_ENABLED is "true".
+// host, decides (checks.js) and alerts by opening an issue in the private
+// dogear-alerts repository, assigned to the owner (notify.js, its own App
+// credential). NOT DEPLOYED; inert until WATCH_ENABLED is "true".
 import { CannotRead, createClient } from "./github.js";
 import { readServed } from "./served.js";
 import { daily, friday, monday } from "./checks.js";

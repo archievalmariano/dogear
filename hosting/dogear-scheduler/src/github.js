@@ -13,8 +13,9 @@ export const MAX_LOG_BYTES = 8 * 1024 * 1024;
 // One fetch, its whole body included, under one deadline. The deadline runs until the
 // last byte is read (not only until the headers arrive), and a body over `maxBytes`
 // is refused. Throws CannotRead on a timeout, a stalled or oversized body, or any
-// transport error; otherwise { status, location, bytes }.
-export async function fetchBounded(fetchImpl, url, headers, maxBytes, timeoutMs) {
+// transport error; otherwise { status, location, bytes }. `init` carries extra request
+// options; only notify.js (the alert delivery) passes any, and detection never does.
+export async function fetchBounded(fetchImpl, url, headers, maxBytes, timeoutMs, init = {}) {
   const controller = new AbortController();
   let timer;
   const deadline = new Promise((_, reject) => {
@@ -25,7 +26,7 @@ export async function fetchBounded(fetchImpl, url, headers, maxBytes, timeoutMs)
   });
   let reader = null;
   const work = (async () => {
-    const res = await fetchImpl(url, { headers, redirect: "manual", signal: controller.signal });
+    const res = await fetchImpl(url, { ...init, headers, redirect: "manual", signal: controller.signal });
     const chunks = [];
     let size = 0;
     if (res.body) {

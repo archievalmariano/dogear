@@ -323,7 +323,7 @@ CLEAR, 15 October 2026). **Not enabled by this code:** the owner creates the
 - **Not dependable until** the watch-only `dogear-scheduler` watchdog (§4c) is
   deployed, its token checked, and each alert path seen once in the staging rehearsal.
 
-### 4c. The watchdog (`hosting/dogear-scheduler`; DOGEAR-WATCHDOG-PLAN rev 4, Codex CLEAR)
+### 4c. The watchdog (`hosting/dogear-scheduler`; DOGEAR-WATCHDOG-PLAN rev 4 and DOGEAR-WATCHDOG-ALERTS-PLAN rev 2, Codex CLEAR)
 
 A Cloudflare Worker with Cron Triggers. **Read-only:** GitHub `GET` only, to five
 allowlisted endpoints, with a fine-grained token (Actions, Contents, Metadata: **read**;
@@ -353,14 +353,36 @@ no request method (tested). **Inert** until `WATCH_ENABLED` is `"true"` (a revie
   (`WORKFLOW_DISABLED`); `main`'s last commit is under 50 days old (`INACTIVITY_SOON`).
 - **Its own failures:** `WATCHDOG_CANNOT_READ` (GitHub unreadable, rate-limited, a result
   line missing), `WATCHDOG_ERROR` (then the invocation fails).
-- **Alerts:** one email per finding through the `send_email` binding, from
-  `dogear-watchdog@archievalmariano.com` to the secret `ALERT_TO`: the check, target,
-  week, code, a fixed sentence and run links built from numeric ids. Never run titles,
-  commit messages, branch names or log text.
-- **Owner steps (later, each approved):** onboard the domain to Email Sending and verify
-  the recipient; create the token and run `tools/watchdog_token_check.sh` (status codes
-  only; all must match); `wrangler secret put ALERT_TO` and `GITHUB_READ_TOKEN`; deploy
-  from an empty directory; a PR enabling it on staging for the rehearsal.
+- **Alerts:** one **issue per finding** in the private repository
+  `archievalmariano/dogear-alerts`, opened by a GitHub App and **assigned to
+  `archievalmariano`**, so GitHub delivers it as a participating notification (email and
+  GitHub Mobile push, per the owner's settings). The text is the check, target, week,
+  code, a fixed sentence and run links built from numeric ids; never run titles, commit
+  messages, branch names or log text. The App is installed only on `dogear-alerts`,
+  with Issues read/write; it has no access to `dogear`. `src/notify.js` is the only code
+  that sends anything but a GET: the App JWT goes only to the token exchange, the
+  installation token (scoped to `dogear-alerts`, `issues: write`) only to issue creation.
+  An issue whose assignee GitHub did not keep is a delivery failure (`ASSIGNEE_DROPPED`).
+- **What it cannot do:** delivery by email or push is **unverified** until the
+  one-time test below passes. A **GitHub-wide outage** can stop the alert about it
+  (`WATCHDOG_CANNOT_READ`) from being delivered: it is logged in Cloudflare and the
+  invocation fails, but nobody is notified. GitHub's status page covers that case.
+- **Owner steps (later, each approved):**
+  1. create the private, empty `dogear-alerts`, the App (Issues read/write, webhook off,
+     this account only; key converted once with `openssl pkcs8 -topk8 -nocrypt`), and
+     install it on `dogear-alerts` only;
+  2. set notifications for the intended channels (participating email; GitHub Mobile
+     push for assignments; `dogear-alerts` watched);
+  3. create the read token and run `tools/watchdog_token_check.sh` (status codes only;
+     all must match);
+  4. run `node tools/watchdog_alert_test.mjs` once (it prints only the issue URL and
+     `assignee retained: yes/no`). It passes only with `yes` **and** the owner
+     confirming the test issue arrived on each intended channel; then close it;
+  5. `wrangler secret put` `GITHUB_READ_TOKEN`, `ALERT_APP_ID`,
+     `ALERT_APP_INSTALLATION_ID` and `ALERT_APP_PRIVATE_KEY`; deploy from an empty
+     directory, still inert;
+  6. a PR enabling it on staging for the rehearsal. Its first deployed alert confirms
+     the Cloudflare side end to end.
 
 ---
 
