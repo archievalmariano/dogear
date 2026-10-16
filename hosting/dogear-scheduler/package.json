@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Cron Triggers that dispatch DOGEAR's stage and promote workflows. Not deployed.",
+  "description": "DOGEAR's read-only watchdog: Cron Triggers that check, and alert on, the weekly publication. Never dispatches. Not deployed.",
   "scripts": { "test": "node --test test/*.test.js" },
   "devDependencies": { "wrangler": "4.138.0" }
 }
