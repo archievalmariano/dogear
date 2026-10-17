@@ -747,6 +747,243 @@ class CtaTests(unittest.TestCase):
         self.assertEqual(cta["edition"], "the 1900 text")
 
 
+NOBEL_2000 = {"title": "Nobel Prize in Literature 2000: Gao Xingjian",
+              "url": "https://www.nobelprize.org/prizes/literature/2000/summary/", "kind": "institutional"}
+BRITANNICA = {"title": "Britannica: Italo Calvino", "url": "https://www.britannica.com/biography/Italo-Calvino",
+              "kind": "secondary"}
+WIKIPEDIA = {"title": "Wikipedia: X", "url": "https://en.wikipedia.org/wiki/X", "kind": "reference"}
+WIKIDATA = {"title": "Wikidata Q1", "url": "https://www.wikidata.org/wiki/Q1", "kind": "reference"}
+BLOG = {"title": "Interesting Literature", "url": "https://interestingliterature.com/x", "kind": "secondary"}
+LAWPHIL = {"title": "Republic Act No. 10556 (Lawphil)", "url": "https://lawphil.net/ra10556.html", "kind": "primary"}
+GUTENBERG = {"title": "Project Gutenberg #9", "url": "https://www.gutenberg.org/ebooks/9", "kind": "institutional"}
+
+
+class ContextLinkTests(unittest.TestCase):
+    """With no written link, the web edition's action is derived from the record's
+    approved sources (Record.context_link): consistent across records and event
+    types, web only, and never a free-reading link."""
+
+    def web(self, *records):
+        s = select_issue(dataset(*records), WEEK)
+        return s, build_issue(s, NOW), build_web(s, build_issue(s, NOW))
+
+    def action(self, r):
+        links = self.web(r)[2]["entries"][0]["links"]
+        return [(l["label"], l["url"], l["title"], l["note"]) for l in links]
+
+    def nobel(self, rid, **kw):
+        return rec(rid, 11, 24, type="literary-event", label="NOBEL PRIZE", **kw)
+
+    def test_nobel_without_a_written_link_reads_more_like_one_with(self):
+        gao = self.action(self.nobel("gao", sources=[NOBEL_2000, WIKIPEDIA]))
+        self.assertEqual(gao, [("READ MORE", NOBEL_2000["url"], NOBEL_2000["title"], "NobelPrize.org")])
+        written = {"type": "read-more", "url": NOBEL_2000["url"], "title": "The Nobel Prize in Literature 2000",
+                   "provider": "NobelPrize.org"}
+        soyinka = self.action(self.nobel("soyinka", sources=[NOBEL_2000, WIKIPEDIA], link=written))
+        self.assertEqual([(a[0], a[1], a[3]) for a in soyinka], [(a[0], a[1], a[3]) for a in gao])
+
+    def test_an_authority_biography_reads_more_there(self):
+        self.assertEqual(self.action(rec("calvino", 11, 25, sources=[BRITANNICA, WIKIPEDIA])),
+                         [("READ MORE", BRITANNICA["url"], "Italo Calvino", "Britannica")])
+
+    def test_wikipedia_and_wikidata_are_never_the_action(self):
+        self.assertEqual(self.action(rec("w", 11, 25, sources=[WIKIDATA, WIKIPEDIA])), [])
+        mislabeled = {**WIKIPEDIA, "kind": "institutional"}  # the host decides, not only the kind
+        self.assertEqual(self.action(rec("m", 11, 25, sources=[mislabeled])), [])
+        encyclopedia = {"title": "New World Encyclopedia", "url": "https://www.newworldencyclopedia.org/entry/X",
+                        "kind": "reference"}  # and any reference source stays supporting
+        self.assertEqual(self.action(rec("e", 11, 25, sources=[encyclopedia, WIKIPEDIA])), [])
+
+    def test_a_secondary_source_off_the_authority_list_is_not_elevated(self):
+        self.assertEqual(self.action(rec("lewis", 11, 25, sources=[BLOG, WIKIPEDIA])), [])
+
+    def test_a_primary_source_alone_is_view_source(self):
+        obs = rec("pagbasa", 11, 27, type="observance", person=None, year=2013, sources=[LAWPHIL])
+        self.assertEqual(self.action(obs), [("VIEW SOURCE", LAWPHIL["url"], LAWPHIL["title"], "lawphil.net")])
+
+    def test_institutional_before_authority_before_primary(self):
+        r = rec("o", 11, 25, sources=[LAWPHIL, BRITANNICA, WIKIPEDIA, NOBEL_2000])
+        self.assertEqual(self.action(r)[0][1], NOBEL_2000["url"])
+        self.assertEqual(self.action(rec("p", 11, 25, sources=[LAWPHIL, BRITANNICA]))[0][1], BRITANNICA["url"])
+
+    def test_a_full_text_host_is_never_derived(self):
+        self.assertEqual(self.action(rec("g", 11, 25, sources=[GUTENBERG, WIKIPEDIA])), [])
+        pooh = pub("pooh", 24, link=book("pooh", "A. A. Milne", rights="public-domain-us"),
+                   sources=[GUTENBERG, NOBEL_2000])
+        self.assertEqual([(a[0], a[1]) for a in self.action(pooh)], [("READ MORE", NOBEL_2000["url"])])
+
+    def test_a_written_link_wins(self):
+        wilde = rec("wilde", 11, 25, person="Oscar Wilde",
+                    link=book("Dorian Gray", "Oscar Wilde", "representative_work", url=GUTENBERG["url"]),
+                    sources=[NOBEL_2000, GUTENBERG])
+        self.assertEqual([(a[0], a[1]) for a in self.action(wilde)], [("READ ONLINE", GUTENBERG["url"])])
+        self.assertIsNone(dataset(wilde).records[0].context_link)
+        other = {"type": "read-more", "url": "https://poets.org/x", "title": "X", "provider": "Poets.org"}
+        self.assertEqual(self.action(self.nobel("n", sources=[NOBEL_2000], link=other))[0][1], "https://poets.org/x")
+        self.assertIsNone(dataset(self.nobel("n", sources=[NOBEL_2000], link=other)).records[0].context_link)
+
+    def test_the_derived_page_is_not_listed_again_as_a_source(self):
+        sources = self.web(self.nobel("gao", sources=[NOBEL_2000, WIKIPEDIA]))[2]["entries"][0]["sources"]
+        self.assertEqual([s["url"] for s in sources], [WIKIPEDIA["url"]])
+
+    def test_a_derived_action_never_reaches_the_device(self):
+        s, issue, _ = self.web(self.nobel("gao", sources=[NOBEL_2000]))
+        self.assertIsNone(issue["entries"][0]["cta"])
+        self.assertFalse(s.picked[0].qr)
+        # The QR budget still goes to reading links only.
+        ds = [pub(f"b{i}", 23 + i, link=book(f"b{i}", "Author")) for i in range(2)] + \
+             [self.nobel(f"n{i}", sources=[NOBEL_2000]) for i in range(2)]
+        s = select_issue(dataset(*ds), WEEK)
+        self.assertEqual(sorted(c.record.id for c in s.picked if c.qr), ["b0", "b1"])
+
+    def test_a_derived_action_is_link_checked_like_a_written_one(self):
+        from dogear.publish.staging import external_links
+        s = select_issue(dataset(self.nobel("gao", sources=[NOBEL_2000, WIKIPEDIA]),
+                                 rec("w", 11, 25, sources=[WIKIDATA, WIKIPEDIA])), WEEK)
+        self.assertEqual(external_links(s), [NOBEL_2000["url"]])
+
+    def test_the_rule_is_the_same_for_every_event_type(self):
+        records = [rec("born", 11, 24, sources=[NOBEL_2000]),
+                   rec("died", 11, 25, type="death", sources=[NOBEL_2000]),
+                   pub("book", 26, sources=[NOBEL_2000]),
+                   self.nobel("prize", sources=[NOBEL_2000]),
+                   rec("day", 11, 28, type="observance", person=None, year=2013, sources=[NOBEL_2000])]
+        for r in records:
+            with self.subTest(r["type"]):
+                self.assertEqual(self.action(r)[0][:2], ("READ MORE", NOBEL_2000["url"]))
+
+
+class WithheldCopyTests(unittest.TestCase):
+    """A free copy withheld by the territory rule (not public domain everywhere): on that
+    record the web edition links nothing on the copy's host, as the action, as a source
+    or in Also this week (Record.withholds). The note stays; the dataset keeps every
+    source; records without a withheld copy are untouched."""
+
+    POOH = "https://www.gutenberg.org/ebooks/67098"
+    COPY = "https://digital.library.example/milne/pooh"
+    LIBRARY = {"title": "Library: Winnie-the-Pooh", "url": "https://library.test/pooh", "kind": "institutional"}
+    # The spellings earlier revisions chased one by one: all on the copy's host.
+    SAME_HOST = (
+        "https://digital.library.example/milne/pooh#chapter-1",
+        "https://DIGITAL.Library.Example:443/milne/x/../pooh",
+        "https://www.digital.library.example/milne/x/%2E./pooh/",
+        "https://digital.library.example/milne\\x\\..\\pooh",
+        "https://digital.library.example/milne/caf%c3%a9",
+        "https://digital.library.example:8443/catalogue/milne",  # another page there, conservatively
+    )
+
+    def html(self, *records):
+        s = select_issue(dataset(*records), WEEK)
+        issue = build_issue(s, NOW)
+        web = build_web(s, issue)
+        return s, issue, web, render_web(web)
+
+    def pooh(self, url=None, sources=None, links=()):
+        return pub("pooh", 24, significance=5,
+                   links=[book("pooh", "A. A. Milne", rights="public-domain-us", url=url or self.POOH), *links],
+                   sources=sources if sources is not None else [
+                       {"title": "Project Gutenberg #67098", "url": self.POOH, "kind": "institutional"},
+                       self.LIBRARY, WIKIPEDIA])
+
+    def runner_up(self, copy, sources):
+        born = rec("born", 11, 24, person="Mara Ilagan", personId="dogear:mara-ilagan",
+                   link=book("The Salt Orchard", "Mara Ilagan", "representative_work", rights="public-domain-us", url=copy),
+                   sources=sources)
+        book_ = rec("book", 11, 26, type="publication", person="Mara Ilagan", personId="dogear:mara-ilagan",
+                    work="The Salt Orchard", significance=5)
+        s, _, web, html = self.html(born, book_)
+        self.assertEqual([c.record.id for c in s.runners_up], ["born"])
+        return web, html
+
+    def assertHostAbsent(self, html, host):
+        self.assertNotIn(host, html.lower())
+
+    def test_the_production_pooh_record_stays_valid_and_unlinked(self):
+        # The shape of pub-winnie-the-pooh: a US-only Gutenberg copy, cited as a source too.
+        r = self.pooh(sources=[self.LIBRARY, WIKIPEDIA,
+                               {"title": "Project Gutenberg #67098", "url": self.POOH, "kind": "institutional"}])
+        record = dataset(r).records[0]
+        self.assertEqual(record.approval_state, "approved")  # fingerprint unchanged by the rule
+        self.assertEqual(len(record.sources), 3)  # provenance kept
+        s, issue, web, html = self.html(r)
+        self.assertHostAbsent(html, "gutenberg.org")
+        self.assertIn("A free copy exists online", html)  # the explanation stays
+        self.assertEqual([(l["label"], l["url"]) for l in web["entries"][0]["links"]],
+                         [("READ MORE", self.LIBRARY["url"])])
+        self.assertEqual([s["url"] for s in web["entries"][0]["sources"]], [WIKIPEDIA["url"]])
+        self.assertIsNone(issue["entries"][0]["cta"])  # the device is unchanged
+        self.assertFalse(s.picked[0].qr)
+
+    def test_nothing_on_the_withheld_host_becomes_the_derived_action(self):
+        for spelled in self.SAME_HOST:
+            with self.subTest(spelled):
+                r = self.pooh(url=self.COPY, sources=[{"title": "Copy", "url": spelled, "kind": "institutional"},
+                                                      WIKIPEDIA])
+                _, _, web, html = self.html(r)
+                self.assertEqual(web["entries"][0]["links"], [])
+                self.assertHostAbsent(html, "digital.library.example")
+
+    def test_nothing_on_the_withheld_host_becomes_a_visible_source(self):
+        for spelled in self.SAME_HOST:
+            with self.subTest(spelled):
+                r = self.pooh(url=self.COPY, sources=[self.LIBRARY, {"title": "Copy", "url": spelled, "kind": "secondary"},
+                                                      WIKIPEDIA])
+                _, _, web, html = self.html(r)
+                self.assertEqual([s["url"] for s in web["entries"][0]["sources"]], [WIKIPEDIA["url"]])
+                self.assertHostAbsent(html, "digital.library.example")
+
+    def test_nothing_on_the_withheld_host_reaches_also_this_week(self):
+        for spelled in self.SAME_HOST:
+            with self.subTest(spelled):
+                web, html = self.runner_up(self.COPY, [{"title": "Copy", "url": spelled, "kind": "institutional"},
+                                                       WIKIPEDIA])
+                self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
+                self.assertHostAbsent(html, "digital.library.example")
+
+    def test_any_other_written_link_on_the_withheld_host_is_rejected(self):
+        def links_on(host):
+            return {
+                "read-more": {"type": "read-more", "url": f"https://{host}/about", "title": "About", "provider": "P"},
+                "source": {"type": "source", "url": f"https://{host}/record", "title": "Record", "provider": "P"},
+                "borrow": book("pooh", "A. A. Milne", type="borrow", market="intl", rights="in-copyright",
+                               url=f"https://{host}/borrow/pooh", provider="P"),
+                "find-book": book("pooh", "A. A. Milne", type="find-book", market="intl", rights="in-copyright",
+                                  url=f"https://{host}/find/pooh", provider="P"),
+                "read-online (rights-cleared)": book("pooh", "A. A. Milne", url=f"https://{host}/ebooks/2"),
+            }
+        for kind, link in links_on("WWW.Gutenberg.org").items():  # the withheld copy's host, spelled otherwise
+            with self.subTest(kind):
+                with self.assertRaises(DatasetError) as err:
+                    dataset(self.pooh(links=[link]))
+                self.assertIn("host of a withheld free copy", str(err.exception))
+        for kind, link in links_on("library.test").items():  # another host: valid, and it wins as before
+            with self.subTest(f"{kind}, another host"):
+                record = dataset(self.pooh(links=[link])).records[0]
+                self.assertEqual(record.link.url, link["url"])
+                self.assertEqual(len(record.links), 2)  # the withheld copy stays in the record
+
+    def test_a_context_source_on_another_host_stays(self):
+        r = self.pooh(url=self.COPY, sources=[{"title": "Copy", "url": self.COPY, "kind": "institutional"},
+                                              NOBEL_2000, BRITANNICA, WIKIPEDIA])
+        web = self.html(r)[2]["entries"][0]
+        self.assertEqual([(l["label"], l["url"]) for l in web["links"]], [("READ MORE", NOBEL_2000["url"])])
+        self.assertEqual([s["url"] for s in web["sources"]], [BRITANNICA["url"], WIKIPEDIA["url"]])
+
+    def test_records_without_a_withheld_copy_are_untouched(self):
+        # Wilde: a worldwide-public-domain copy on Gutenberg, another Gutenberg page cited as a source.
+        page = {"title": "Project Gutenberg: Oscar Wilde", "url": "https://www.gutenberg.org/ebooks/author/111",
+                "kind": "institutional"}
+        wilde = rec("wilde", 11, 25, person="Oscar Wilde",
+                    link=book("Dorian Gray", "Oscar Wilde", "representative_work", url="https://www.gutenberg.org/ebooks/174"),
+                    sources=[page, WIKIPEDIA])
+        self.assertEqual(dataset(wilde).records[0].withheld_hosts, frozenset())
+        s, issue, web, html = self.html(wilde)
+        self.assertEqual(web["entries"][0]["links"][0]["label"], "READ ONLINE")
+        self.assertEqual([x["url"] for x in web["entries"][0]["sources"]], [page["url"], WIKIPEDIA["url"]])
+        self.assertTrue(s.picked[0].qr)
+        self.assertEqual(issue["entries"][0]["cta"]["url"], "https://www.gutenberg.org/ebooks/174")
+
+
 class RolesAndQrTests(unittest.TestCase):
     def test_lead_is_intrinsic_not_lifted(self):
         ds = dataset(pub("major", 24, significance=5, recognition="anchor"),
@@ -838,7 +1075,10 @@ class IssueTests(unittest.TestCase):
                    copy={"digest": WORDS_50, "expanded": "The fuller story.", "allowSecondPage": False})
         s = select_issue(dataset(pooh), WEEK)
         web = build_web(s, build_issue(s, NOW))
-        self.assertEqual(web["entries"][0]["links"], [])
+        # The withheld copy is not offered; the action falls to the record's
+        # institutional source (Record.context_link), never to the free text.
+        self.assertEqual([(l["label"], l["url"]) for l in web["entries"][0]["links"]],
+                         [("READ MORE", "https://library.test/s")])
         self.assertTrue(web["entries"][0]["freeReadingWithheld"])
         self.assertNotIn("READ ONLINE", render_web(web))
 

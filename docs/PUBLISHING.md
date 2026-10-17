@@ -180,7 +180,7 @@ current-week exceptions):
    | Content binding | Regenerating from the frozen inputs gives byte-identical files. That ties the rendered text to exactly the approved record versions in provenance. |
    | Not a proof | `preview` is false; the web page has no proof banner. Proof output goes to a separate directory that the production uploader cannot read. The uploader takes only files listed in a production artifact set that passed these checks. |
    | Source integrity | The dataset validates; every rendered item has visible sources under the source rules (de-duplicated, Wikidata hidden when a better source exists). |
-   | External links | Each rendered item's CTA URL is fetched. **404, 410, DNS failure or a TLS error block the run**; a timeout or 5xx is a warning, re-checked at promotion. The check never changes selection. |
+   | External links | Each rendered item's CTA URL, written or derived from its sources (ARCHITECTURE.md, "One rule for the web action"), is fetched. **404, 410, DNS failure or a TLS error block the run**; a timeout or 5xx is a warning, re-checked at promotion. The check never changes selection. |
    | DOGEAR's own URL | The final QR target is **not** fetched, because next week's page doesn't exist publicly yet. Locally: the URL must equal `<base>/<monday>/` and the matching web artifact must be in the staged set. The public URL is checked after promotion (§6, step 8). |
    | Access hierarchy | CTA labels come only from READ ONLINE / BORROW / FIND THE BOOK / READ MORE / VIEW SOURCE; never READ FREE. |
    | Fit | `--fitcheck` passes on the rendered items (needs Pillow and the device's Noto TTFs vendored; §15). |

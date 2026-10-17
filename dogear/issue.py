@@ -73,9 +73,9 @@ def edition_url(selection: Selection, base_url: str) -> str:
     return f"{base_url.rstrip('/')}/{selection.week.start.isoformat()}/"
 
 
-def _cta(rec: Record) -> dict:
+def _cta(rec: Record, link=None) -> dict:
     """What a reading screen needs to say exactly what the reader is opening."""
-    link = rec.link
+    link = link or rec.link
     note = {"read-online": f"Free on {link.provider}", "borrow": f"Borrow via {link.provider}",
             "find-book": f"Find it via {link.provider}"}.get(link.type, link.provider)
     return {
@@ -138,9 +138,11 @@ def build_issue(selection: Selection, generated_at: dt.datetime, base_url: str =
 
 def _reading_links(rec: Record) -> list[dict]:
     """Links the web edition may show. Same territory rule as the device QR:
-    a US-only public-domain copy is not offered as free reading."""
+    a US-only public-domain copy is not offered as free reading. With no written
+    link, the action derived from the record's sources (Record.context_link)."""
     if rec.link is None:
-        return []
+        derived = rec.context_link
+        return [_cta(rec, derived)] if derived else []
     if rec.link.type in ("source", "read-more"):
         return [_cta(rec)]
     if qr_eligible(rec):
@@ -162,12 +164,15 @@ def visible_sources(rec: Record, links: list[dict]) -> list[dict]:
 
     * A source that is the page the entry's reading action already opens is
       not listed again.
+    * Nothing on the host of a withheld free copy (not public domain
+      everywhere) is listed (Record.withholds); the dataset keeps it as provenance.
     * Wikidata is not listed when any other source remains: it backs the
       record, but a human-readable page serves a reader better.
     * Primary and institutional sources come first, then secondary, then
       reference.
     """
-    shown = [s for s in rec.sources if not any(_same_url(s.url, l["url"]) for l in links)]
+    shown = [s for s in rec.sources
+             if not rec.withholds(s.url) and not any(_same_url(s.url, l["url"]) for l in links)]
     readable = [s for s in shown if "wikidata.org" not in s.url]
     shown = sorted(readable or shown, key=lambda s: -SOURCE_RANK[s.kind])  # strongest first; stable
     return [{"title": s.title, "url": s.url} for s in shown]
@@ -197,7 +202,8 @@ def build_web(selection: Selection, issue: dict) -> dict:
             "kicker": kicker(c),
             "contentsLabel": event_label(c.record),
             "headline": typeset(c.record.headline),
-            "sources": [{"title": s.title, "url": s.url} for s in c.record.sources],
+            "sources": [{"title": s.title, "url": s.url} for s in c.record.sources
+                        if not c.record.withholds(s.url)],
         }
         for c in sorted(selection.runners_up, key=lambda c: (c.date, c.record.id))
     ]

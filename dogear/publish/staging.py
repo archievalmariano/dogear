@@ -226,8 +226,10 @@ def quiet_occurrence(c) -> dict:
 
 
 def external_links(selection) -> list:
-    """Every outside reading link an edition shows (DOGEAR's own edition URL is not one)."""
-    return sorted({c.record.link.url for c in selection.rendered if c.record.link is not None})
+    """Every outside reading link an edition shows (DOGEAR's own edition URL is not one),
+    a link derived from the record's sources (Record.context_link) included."""
+    shown = (c.record.link or c.record.context_link for c in selection.rendered)
+    return sorted({link.url for link in shown if link is not None})
 
 
 def run_checks(frozen: Frozen, selection, checks: Checks) -> tuple:
