@@ -940,16 +940,27 @@ class WithheldCopyTests(unittest.TestCase):
                 self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
                 self.assertHostAbsent(html, "digital.library.example")
 
-    def test_a_written_context_link_on_the_withheld_host_is_rejected(self):
-        for link_type in ("read-more", "source"):
-            with self.subTest(link_type):
-                same = {"type": link_type, "url": "https://WWW.Gutenberg.org/about", "title": "About", "provider": "PG"}
+    def test_any_other_written_link_on_the_withheld_host_is_rejected(self):
+        def links_on(host):
+            return {
+                "read-more": {"type": "read-more", "url": f"https://{host}/about", "title": "About", "provider": "P"},
+                "source": {"type": "source", "url": f"https://{host}/record", "title": "Record", "provider": "P"},
+                "borrow": book("pooh", "A. A. Milne", type="borrow", market="intl", rights="in-copyright",
+                               url=f"https://{host}/borrow/pooh", provider="P"),
+                "find-book": book("pooh", "A. A. Milne", type="find-book", market="intl", rights="in-copyright",
+                                  url=f"https://{host}/find/pooh", provider="P"),
+                "read-online (rights-cleared)": book("pooh", "A. A. Milne", url=f"https://{host}/ebooks/2"),
+            }
+        for kind, link in links_on("WWW.Gutenberg.org").items():  # the withheld copy's host, spelled otherwise
+            with self.subTest(kind):
                 with self.assertRaises(DatasetError) as err:
-                    dataset(self.pooh(links=[same]))
+                    dataset(self.pooh(links=[link]))
                 self.assertIn("host of a withheld free copy", str(err.exception))
-                other = {**same, "url": "https://poets.org/milne"}  # another host is fine, and wins
-                r = self.pooh(links=[other])
-                self.assertEqual(self.html(r)[2]["entries"][0]["links"][0]["url"], "https://poets.org/milne")
+        for kind, link in links_on("library.test").items():  # another host: valid, and it wins as before
+            with self.subTest(f"{kind}, another host"):
+                record = dataset(self.pooh(links=[link])).records[0]
+                self.assertEqual(record.link.url, link["url"])
+                self.assertEqual(len(record.links), 2)  # the withheld copy stays in the record
 
     def test_a_context_source_on_another_host_stays(self):
         r = self.pooh(url=self.COPY, sources=[{"title": "Copy", "url": self.COPY, "kind": "institutional"},

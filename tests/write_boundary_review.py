@@ -308,7 +308,7 @@ PROTECTED = {
     ('dogear/publish/registry.py', ''): 'b78c343f27443d4f57ec45dd25d4613f7307d679d6a81ea91272c484584bf9b2',
     ('dogear/publish/eligibility.py', ''): '0975d75936707113959f78362a6fc4820f2856baeedad8287a7f6871c01d31f5',
     ('dogear/week.py', ''): '4087294013e6a65914a3387e8607b2efa5331f1ddfd0926b6f538b720eecc9b9',
-    ('dogear/dataset.py', ''): 'b14b40fbc8582ebb74d97cc011285d0d9bb5ac4167d56ef8a5b5bc36b1f6767f',
+    ('dogear/dataset.py', ''): 'cefed2cff624963c45d876a166ef6e7f346f7dc6107bd39bfe90a719d6035b48',
     ('dogear/affinity.py', ''): 'f12f6045be75567e9492b6bdd1551e019326ddf894a49eefec0bc1ffddbb4688',
     ('dogear/publish/edition.py', ''): '06c4032e3c90292c94b7a176725df4089dd718707a8c9623ae2f0daafee9dfe3',
     ('dogear/synthetic.py', ''): '9298499ee140b9ba1e456a910dd3b265bd88165489ff3fa9dc29c896be944fe3',

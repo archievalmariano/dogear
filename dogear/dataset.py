@@ -647,8 +647,8 @@ def _check_record(raw: dict, problems: list[str], warnings: list[str],
     if len({l.url for l in links}) != len(links):
         bad("links repeat a URL")
     withheld = {_host(l.url) for l in links if l.type == "read-online" and l.access_tier is None}
-    if any(l.type in ("read-more", "source") and _host(l.url) in withheld for l in links):
-        bad("a read-more or source link may not be on the host of a withheld free copy")
+    if any(_host(l.url) in withheld and (l.type != "read-online" or l.access_tier is not None) for l in links):
+        bad("no other link may be on the host of a withheld free copy")  # only the withheld copy itself
 
     area, language, women = raw.get("area"), raw.get("language"), raw.get("womenWriter")
     if area is not None and area not in AREAS:

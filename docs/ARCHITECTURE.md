@@ -55,8 +55,9 @@ edition**.
   in the QR budget. It is link-checked like a written link. On a record with a
   free copy withheld by the territory rule, the web edition links nothing on
   that copy's host (case and a leading www. aside), as the action, as a source
-  or in Also this week, and a written READ MORE or VIEW SOURCE link on that
-  host is rejected; the note stays, and the dataset keeps every source.
+  or in Also this week, and any other written link on that host (READ MORE,
+  VIEW SOURCE, BORROW, FIND THE BOOK, another READ ONLINE) is rejected; the
+  note stays, and the dataset keeps every source.
 * **Contents say what happened, in words** (first hardware pass): cover rows
   read `24 NOV · PUBLISHED` / `BORN` / `DIED` / `NOBEL PRIZE` over the title,
   never single letters, icons or a dagger. A national observance shows its
