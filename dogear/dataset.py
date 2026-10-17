@@ -169,6 +169,25 @@ _DEFAULT_PORTS = {"http": 80, "https": 443}
 _DOT, _DOT_DOT = {".", "%2e"}, {"..", ".%2e", "%2e.", "%2e%2e"}
 
 
+_ESCAPE_RE = re.compile(r"%[0-9a-fA-F]{2}")
+
+
+def _browser_encoded(text: str) -> str:
+    """A path or query as a browser sends it: each character above U+007E as its
+    UTF-8 percent-escapes ("café" is "caf%C3%A9"), and every escape with uppercase
+    hex, which RFC 3986 section 6.2.2.1 makes the same resource ("%c3%a9" is "%C3%A9").
+    No escape is decoded, so "%2F" stays distinct from "/"."""
+    def char(c: str) -> str:
+        if ord(c) <= 0x7E:
+            return c
+        try:
+            data = c.encode("utf-8")
+        except UnicodeEncodeError:  # a lone surrogate: a browser sends U+FFFD
+            data = "\ufffd".encode("utf-8")
+        return "".join(f"%{byte:02X}" for byte in data)
+    return _ESCAPE_RE.sub(lambda m: m.group(0).upper(), "".join(char(c) for c in text))
+
+
 def _resolve_dot_segments(path: str) -> str:
     """An http(s) path as a browser resolves it (RFC 3986 section 5.2.4, WHATWG URL):
     "." and ".." segments, also spelled with %2e, and a backslash separates
@@ -192,8 +211,10 @@ def same_url(a: str, b: str) -> bool:
     http and https alike; the host without case or a leading www.; a default port
     (80 for http, 443 for https) the same as none, any other port significant; the
     path's "." and ".." segments resolved as a browser does, and its trailing slash
-    ignored; the #fragment ignored. The path and query keep their case, and the
-    query is compared exactly as written."""
+    ignored; the #fragment ignored; non-ASCII characters in the path and query
+    compared as the UTF-8 percent-escapes a browser sends, and escapes without hex
+    case. The path and query otherwise keep their case, no escape is decoded, and
+    the query is otherwise compared exactly as written."""
     def key(u: str) -> tuple:
         u = u.strip()
         parts = urlsplit(u)
@@ -205,8 +226,9 @@ def same_url(a: str, b: str) -> bool:
             port = parts.netloc  # unparseable: compare it as written
         if web and port == _DEFAULT_PORTS[scheme]:
             port = None
-        path = _resolve_dot_segments(parts.path) if web else parts.path
-        return ("http" if web else scheme, _host(u), port, path.rstrip("/"), parts.query)
+        path = _resolve_dot_segments(_browser_encoded(parts.path)) if web else parts.path
+        query = _browser_encoded(parts.query) if web else parts.query
+        return ("http" if web else scheme, _host(u), port, path.rstrip("/"), query)
     return key(a) == key(b)
 
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import itertools
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -1004,6 +1005,43 @@ class WithheldCopyTests(unittest.TestCase):
                 self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
                 self.assertHostAbsent(html)
 
+    # (withheld copy as written, a browser-equivalent spelling): either side may be the one encoded.
+    UNICODE_SAME = (
+        ("https://digital.library.example/milne/café", "https://digital.library.example/milne/caf%C3%A9"),
+        ("https://digital.library.example/milne/café", "https://digital.library.example/milne/caf%c3%a9#chapter-1"),
+        ("https://digital.library.example/milne/caf%C3%A9", "https://digital.library.example:443/milne/x/../café/"),
+        ("https://digital.library.example/milne/pooh?title=café", "https://digital.library.example/milne/pooh?title=caf%C3%A9"),
+    )
+
+    def test_unicode_and_percent_encoded_spellings_never_become_clickable(self):
+        for copy, spelled in self.UNICODE_SAME:
+            with self.subTest(copy=copy, spelled=spelled):
+                # A derived READ MORE.
+                _, _, web, html = self.html(self.pooh(url=copy, sources=[
+                    {"title": "Digital library", "url": spelled, "kind": "institutional"}, WIKIPEDIA]))
+                self.assertEqual(web["entries"][0]["links"], [])
+                self.assertHostAbsent(html)
+                # A visible source.
+                _, _, web, html = self.html(self.pooh(url=copy, sources=[
+                    self.LIBRARY, {"title": "Copy", "url": spelled, "kind": "secondary"}, WIKIPEDIA]))
+                self.assertEqual([s["url"] for s in web["entries"][0]["sources"]], [WIKIPEDIA["url"]])
+                self.assertHostAbsent(html)
+                # Also this week.
+                web, html = self.runner_up(copy, [{"title": "Copy", "url": spelled, "kind": "institutional"}, WIKIPEDIA])
+                self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
+                self.assertHostAbsent(html)
+
+    def test_encoding_is_compared_but_never_decoded(self):
+        base = "https://example.org/milne/café"
+        self.assertTrue(same_url("https://example.org/milne/caf%C3%A9", base))
+        self.assertTrue(same_url("https://example.org/milne/caf%c3%a9", base))  # escapes without hex case
+        self.assertFalse(same_url("https://example.org/milne/Caf%C3%A9", base))  # the path keeps its case
+        self.assertFalse(same_url("https://example.org/milne/cafe\u0301", base))  # decomposed é: other bytes
+        self.assertFalse(same_url("https://example.org/milne/a%2Fb", "https://example.org/milne/a/b"))  # %2F stays
+        self.assertFalse(same_url("https://example.org/milne/%41", "https://example.org/milne/A"))  # never decoded
+        self.assertTrue(same_url("https://example.org/p?q=café", "https://example.org/p?q=caf%c3%a9"))
+        self.assertFalse(same_url("https://example.org/p?q=Café", "https://example.org/p?q=café"))
+
     def test_default_ports_match_and_other_ports_do_not(self):
         base = "https://example.org/pooh"
         self.assertTrue(same_url("https://example.org:443/pooh", base))
@@ -1022,7 +1060,7 @@ class SameUrlAgainstTheBrowserTests(unittest.TestCase):
     """same_url against the URL parser browsers use (WHATWG URL, through node): for
     every pair of generated spellings, same_url agrees with the browser's resolved
     URL under the contract (http and https alike, no leading www., no trailing
-    slash, no fragment)."""
+    slash, no fragment, escapes without hex case)."""
 
     def test_same_url_agrees_with_the_browser(self):
         hosts = ("digital.library.example", "WWW.Digital.Library.Example")
@@ -1032,15 +1070,25 @@ class SameUrlAgainstTheBrowserTests(unittest.TestCase):
         suffixes = ("", "#chapter-1", "?id=A", "?id=a", "?id=A#top")
         urls = [f"{scheme}://{host}{port}{path}{suffix}" for scheme, host, port, path, suffix
                 in itertools.product(("http", "https"), hosts, ports, paths, suffixes)]
+        # Unicode and percent-encoded spellings, mixed with the structural ones above.
+        encoded = ("/milne/café", "/milne/caf%C3%A9", "/milne/caf%c3%a9", "/milne/Caf%C3%A9", "/milne/x/../café/",
+                   "/milne/a%2Fb", "/milne/a/b", "/milne/%41", "/milne/A", "/milne/pooh")
+        urls += [f"{scheme}://{host}{port}{path}{suffix}" for scheme, host, port, path, suffix
+                 in itertools.product(("http", "https"), hosts, ("", ":443"), encoded,
+                                      ("", "#chapter-1", "?q=café", "?q=caf%c3%a9", "?q=Caf%C3%A9"))]
         script = ("const urls = JSON.parse(require('fs').readFileSync(0, 'utf8'));"
                   "process.stdout.write(JSON.stringify(urls.map((u) => { const x = new URL(u);"
                   " return [x.hostname, x.port, x.pathname, x.search]; })));")
         resolved = json.loads(subprocess.run(["node", "-e", script], input=json.dumps(urls), capture_output=True,
                                              text=True, check=True).stdout)
 
+        def hex_upper(text):  # RFC 3986 section 6.2.2.1: escapes are the same whatever their hex case
+            return re.sub(r"%[0-9a-fA-F]{2}", lambda m: m.group(0).upper(), text)
+
         def browser_key(r):
             host, port, path, search = r
-            return (host[4:] if host.startswith("www.") else host, port, path.rstrip("/"), search.lstrip("?"))
+            return (host[4:] if host.startswith("www.") else host, port, hex_upper(path).rstrip("/"),
+                    hex_upper(search).lstrip("?"))
 
         keys = [browser_key(r) for r in resolved]
         disagree = [(a, b) for (a, ka), (b, kb) in itertools.combinations(zip(urls, keys), 2)
