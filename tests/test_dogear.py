@@ -6,11 +6,7 @@
 from __future__ import annotations
 
 import datetime as dt
-import itertools
 import json
-import re
-import shutil
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,7 +15,7 @@ from dogear import select as sel
 from dogear.affinity import parse_affinity
 from dogear.balance import balance, render_balance
 from dogear.cli import load_issues, stage
-from dogear.dataset import DatasetError, approve, fingerprint, load_dataset, parse_dataset, same_url
+from dogear.dataset import DatasetError, approve, fingerprint, load_dataset, parse_dataset
 from dogear.issue import build_issue, build_web, kicker, typeset
 from dogear.select import History, select_issue
 from dogear.web import render_web
@@ -858,12 +854,23 @@ class ContextLinkTests(unittest.TestCase):
 
 
 class WithheldCopyTests(unittest.TestCase):
-    """A free copy withheld by the territory rule (not public domain everywhere) is
-    never actionable in the rendered web edition: not as the action, not as a source,
-    not in Also this week. The explanatory note stays; the dataset keeps the source."""
+    """A free copy withheld by the territory rule (not public domain everywhere): on that
+    record the web edition links nothing on the copy's host, as the action, as a source
+    or in Also this week (Record.withholds). The note stays; the dataset keeps every
+    source; records without a withheld copy are untouched."""
 
     POOH = "https://www.gutenberg.org/ebooks/67098"
+    COPY = "https://digital.library.example/milne/pooh"
     LIBRARY = {"title": "Library: Winnie-the-Pooh", "url": "https://library.test/pooh", "kind": "institutional"}
+    # The spellings earlier revisions chased one by one: all on the copy's host.
+    SAME_HOST = (
+        "https://digital.library.example/milne/pooh#chapter-1",
+        "https://DIGITAL.Library.Example:443/milne/x/../pooh",
+        "https://www.digital.library.example/milne/x/%2E./pooh/",
+        "https://digital.library.example/milne\\x\\..\\pooh",
+        "https://digital.library.example/milne/caf%c3%a9",
+        "https://digital.library.example:8443/catalogue/milne",  # another page there, conservatively
+    )
 
     def html(self, *records):
         s = select_issue(dataset(*records), WEEK)
@@ -871,50 +878,12 @@ class WithheldCopyTests(unittest.TestCase):
         web = build_web(s, issue)
         return s, issue, web, render_web(web)
 
-    def pooh(self, url=None, sources=None):
-        return pub("pooh", 24, significance=5, link=book("pooh", "A. A. Milne", rights="public-domain-us", url=url or self.POOH),
+    def pooh(self, url=None, sources=None, links=()):
+        return pub("pooh", 24, significance=5,
+                   links=[book("pooh", "A. A. Milne", rights="public-domain-us", url=url or self.POOH), *links],
                    sources=sources if sources is not None else [
                        {"title": "Project Gutenberg #67098", "url": self.POOH, "kind": "institutional"},
                        self.LIBRARY, WIKIPEDIA])
-
-    def assertNotLinked(self, html, url):
-        bare = url.split("://", 1)[1].removeprefix("www.").rstrip("/")
-        self.assertNotIn(bare, html.lower())
-
-    def test_a_withheld_copy_listed_as_a_source_is_not_linked(self):
-        _, issue, web, html = self.html(self.pooh())
-        self.assertNotLinked(html, self.POOH)
-        self.assertIn("A free copy exists online", html)  # the explanation stays
-        self.assertIn('href="https://library.test/pooh"', html)  # the action: its institutional page
-        self.assertNotIn("READ ONLINE", html)
-        self.assertIsNone(issue["entries"][0]["cta"])  # the device is unchanged
-        self.assertEqual(len(dataset(self.pooh()).records[0].sources), 3)  # provenance kept
-
-    def test_however_the_source_spells_the_url(self):
-        for spelled in ("https://gutenberg.org/ebooks/67098/", "https://WWW.Gutenberg.org/ebooks/67098"):
-            with self.subTest(spelled):
-                r = self.pooh(sources=[{"title": "PG", "url": spelled, "kind": "institutional"}, WIKIPEDIA])
-                self.assertNotLinked(self.html(r)[3], self.POOH)
-
-    def test_a_withheld_copy_off_the_full_text_hosts_is_not_derived_either(self):
-        copy = "https://digital.library.example/milne/pooh"
-        r = self.pooh(url=copy, sources=[{"title": "Digital library", "url": copy, "kind": "institutional"}, WIKIPEDIA])
-        _, _, web, html = self.html(r)
-        self.assertEqual(web["entries"][0]["links"], [])
-        self.assertNotLinked(html, copy)
-
-    def test_also_this_week_never_carries_a_withheld_copy(self):
-        copy = "https://digital.library.example/salt-orchard"
-        born = rec("born", 11, 24, person="Mara Ilagan", personId="dogear:mara-ilagan",
-                   link=book("The Salt Orchard", "Mara Ilagan", "representative_work", rights="public-domain-us", url=copy),
-                   sources=[{"title": "Copy", "url": copy, "kind": "institutional"}, WIKIPEDIA])
-        book_ = rec("book", 11, 26, type="publication", person="Mara Ilagan", personId="dogear:mara-ilagan",
-                    work="The Salt Orchard", significance=5)
-        s, _, web, html = self.html(born, book_)
-        self.assertEqual([c.record.id for c in s.runners_up], ["born"])
-        self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
-        self.assertNotLinked(html, copy)
-
 
     def runner_up(self, copy, sources):
         born = rec("born", 11, 24, person="Mara Ilagan", personId="dogear:mara-ilagan",
@@ -926,174 +895,82 @@ class WithheldCopyTests(unittest.TestCase):
         self.assertEqual([c.record.id for c in s.runners_up], ["born"])
         return web, html
 
-    def test_a_fragment_does_not_unlock_a_withheld_copy(self):
-        # Visible sources: the copy cited with a #fragment.
-        r = self.pooh(sources=[{"title": "PG", "url": self.POOH + "#introduction", "kind": "institutional"},
-                               self.LIBRARY, WIKIPEDIA])
-        self.assertNotLinked(self.html(r)[3], self.POOH)
-        # The written link carries the fragment, the source does not.
-        r = self.pooh(url=self.POOH + "#chapter-1", sources=[
-            {"title": "PG", "url": self.POOH, "kind": "institutional"}, self.LIBRARY])
-        self.assertNotLinked(self.html(r)[3], self.POOH)
-        # A derived READ MORE: the copy off the full-text hosts, cited with a fragment.
-        copy = "https://digital.library.example/milne/pooh"
-        r = self.pooh(url=copy, sources=[{"title": "Digital library", "url": copy + "#chapter-1",
-                                          "kind": "institutional"}, WIKIPEDIA])
-        _, _, web, html = self.html(r)
-        self.assertEqual(web["entries"][0]["links"], [])
-        self.assertNotLinked(html, copy)
-        # Also this week.
-        copy = "https://digital.library.example/salt-orchard"
-        web, html = self.runner_up(copy, [{"title": "Copy", "url": copy + "#x", "kind": "institutional"}, WIKIPEDIA])
-        self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
-        self.assertNotLinked(html, copy)
+    def assertHostAbsent(self, html, host):
+        self.assertNotIn(host, html.lower())
 
-    def test_a_different_path_case_is_a_different_document(self):
-        self.assertFalse(same_url("https://example.org/Pooh", "https://example.org/pooh"))
-        self.assertFalse(same_url("https://example.org/x?id=A", "https://example.org/x?id=a"))
-        self.assertTrue(same_url("https://WWW.Example.org/Pooh/", "http://example.org/Pooh#top"))
-        # So a distinct page that differs from the withheld copy only in path case stays usable.
-        withheld, other = "https://digital.library.example/Pooh", "https://digital.library.example/pooh"
-        r = self.pooh(url=withheld, sources=[{"title": "Library page", "url": other, "kind": "institutional"},
-                                             WIKIPEDIA])
-        _, _, web, html = self.html(r)
-        self.assertEqual([(l["label"], l["url"]) for l in web["entries"][0]["links"]], [("READ MORE", other)])
-        self.assertNotIn(f'href="{withheld}"', html)
+    def test_the_production_pooh_record_stays_valid_and_unlinked(self):
+        # The shape of pub-winnie-the-pooh: a US-only Gutenberg copy, cited as a source too.
+        r = self.pooh(sources=[self.LIBRARY, WIKIPEDIA,
+                               {"title": "Project Gutenberg #67098", "url": self.POOH, "kind": "institutional"}])
+        record = dataset(r).records[0]
+        self.assertEqual(record.approval_state, "approved")  # fingerprint unchanged by the rule
+        self.assertEqual(len(record.sources), 3)  # provenance kept
+        s, issue, web, html = self.html(r)
+        self.assertHostAbsent(html, "gutenberg.org")
+        self.assertIn("A free copy exists online", html)  # the explanation stays
+        self.assertEqual([(l["label"], l["url"]) for l in web["entries"][0]["links"]],
+                         [("READ MORE", self.LIBRARY["url"])])
+        self.assertEqual([s["url"] for s in web["entries"][0]["sources"]], [WIKIPEDIA["url"]])
+        self.assertIsNone(issue["entries"][0]["cta"])  # the device is unchanged
+        self.assertFalse(s.picked[0].qr)
 
-
-    # A browser opens each of these as the withheld copy https://digital.library.example/milne/pooh.
-    BROWSER_SAME = (
-        "https://digital.library.example:443/milne/pooh",
-        "https://digital.library.example/milne/x/../pooh",
-        "https://Digital.Library.Example/milne/./pooh/#chapter-1",  # records take https only; http:80 is below
-        "https://www.digital.library.example:443/a/b/../../milne/x/%2E./pooh/",
-        "https://digital.library.example/milne\\x\\..\\pooh",
-        "https://digital.library.example/../milne/pooh",
-    )
-
-    def assertHostAbsent(self, html):
-        self.assertNotIn("digital.library.example", html.lower())
-
-    def test_browser_equivalent_spellings_never_become_a_derived_action(self):
-        copy = "https://digital.library.example/milne/pooh"
-        for spelled in self.BROWSER_SAME:
+    def test_nothing_on_the_withheld_host_becomes_the_derived_action(self):
+        for spelled in self.SAME_HOST:
             with self.subTest(spelled):
-                r = self.pooh(url=copy, sources=[{"title": "Digital library", "url": spelled, "kind": "institutional"},
-                                                 WIKIPEDIA])
+                r = self.pooh(url=self.COPY, sources=[{"title": "Copy", "url": spelled, "kind": "institutional"},
+                                                      WIKIPEDIA])
                 _, _, web, html = self.html(r)
                 self.assertEqual(web["entries"][0]["links"], [])
-                self.assertHostAbsent(html)
+                self.assertHostAbsent(html, "digital.library.example")
 
-    def test_browser_equivalent_spellings_never_become_a_visible_source(self):
-        copy = "https://digital.library.example/milne/pooh"
-        for spelled in self.BROWSER_SAME:
+    def test_nothing_on_the_withheld_host_becomes_a_visible_source(self):
+        for spelled in self.SAME_HOST:
             with self.subTest(spelled):
-                r = self.pooh(url=copy, sources=[self.LIBRARY, {"title": "Copy", "url": spelled, "kind": "secondary"},
-                                                 WIKIPEDIA])
+                r = self.pooh(url=self.COPY, sources=[self.LIBRARY, {"title": "Copy", "url": spelled, "kind": "secondary"},
+                                                      WIKIPEDIA])
                 _, _, web, html = self.html(r)
                 self.assertEqual([s["url"] for s in web["entries"][0]["sources"]], [WIKIPEDIA["url"]])
-                self.assertHostAbsent(html)
-        # And the other way round: the written link spelled oddly, the source plainly.
-        r = self.pooh(url=self.BROWSER_SAME[3], sources=[self.LIBRARY, {"title": "Copy", "url": copy, "kind": "secondary"}])
-        self.assertHostAbsent(self.html(r)[3])
+                self.assertHostAbsent(html, "digital.library.example")
 
-    def test_browser_equivalent_spellings_never_reach_also_this_week(self):
-        copy = "https://digital.library.example/milne/pooh"
-        for spelled in self.BROWSER_SAME:
+    def test_nothing_on_the_withheld_host_reaches_also_this_week(self):
+        for spelled in self.SAME_HOST:
             with self.subTest(spelled):
-                web, html = self.runner_up(copy, [{"title": "Copy", "url": spelled, "kind": "institutional"}, WIKIPEDIA])
+                web, html = self.runner_up(self.COPY, [{"title": "Copy", "url": spelled, "kind": "institutional"},
+                                                       WIKIPEDIA])
                 self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
-                self.assertHostAbsent(html)
+                self.assertHostAbsent(html, "digital.library.example")
 
-    # (withheld copy as written, a browser-equivalent spelling): either side may be the one encoded.
-    UNICODE_SAME = (
-        ("https://digital.library.example/milne/café", "https://digital.library.example/milne/caf%C3%A9"),
-        ("https://digital.library.example/milne/café", "https://digital.library.example/milne/caf%c3%a9#chapter-1"),
-        ("https://digital.library.example/milne/caf%C3%A9", "https://digital.library.example:443/milne/x/../café/"),
-        ("https://digital.library.example/milne/pooh?title=café", "https://digital.library.example/milne/pooh?title=caf%C3%A9"),
-    )
+    def test_a_written_context_link_on_the_withheld_host_is_rejected(self):
+        for link_type in ("read-more", "source"):
+            with self.subTest(link_type):
+                same = {"type": link_type, "url": "https://WWW.Gutenberg.org/about", "title": "About", "provider": "PG"}
+                with self.assertRaises(DatasetError) as err:
+                    dataset(self.pooh(links=[same]))
+                self.assertIn("host of a withheld free copy", str(err.exception))
+                other = {**same, "url": "https://poets.org/milne"}  # another host is fine, and wins
+                r = self.pooh(links=[other])
+                self.assertEqual(self.html(r)[2]["entries"][0]["links"][0]["url"], "https://poets.org/milne")
 
-    def test_unicode_and_percent_encoded_spellings_never_become_clickable(self):
-        for copy, spelled in self.UNICODE_SAME:
-            with self.subTest(copy=copy, spelled=spelled):
-                # A derived READ MORE.
-                _, _, web, html = self.html(self.pooh(url=copy, sources=[
-                    {"title": "Digital library", "url": spelled, "kind": "institutional"}, WIKIPEDIA]))
-                self.assertEqual(web["entries"][0]["links"], [])
-                self.assertHostAbsent(html)
-                # A visible source.
-                _, _, web, html = self.html(self.pooh(url=copy, sources=[
-                    self.LIBRARY, {"title": "Copy", "url": spelled, "kind": "secondary"}, WIKIPEDIA]))
-                self.assertEqual([s["url"] for s in web["entries"][0]["sources"]], [WIKIPEDIA["url"]])
-                self.assertHostAbsent(html)
-                # Also this week.
-                web, html = self.runner_up(copy, [{"title": "Copy", "url": spelled, "kind": "institutional"}, WIKIPEDIA])
-                self.assertEqual([x["url"] for x in web["alsoThisWeek"][0]["sources"]], [WIKIPEDIA["url"]])
-                self.assertHostAbsent(html)
+    def test_a_context_source_on_another_host_stays(self):
+        r = self.pooh(url=self.COPY, sources=[{"title": "Copy", "url": self.COPY, "kind": "institutional"},
+                                              NOBEL_2000, BRITANNICA, WIKIPEDIA])
+        web = self.html(r)[2]["entries"][0]
+        self.assertEqual([(l["label"], l["url"]) for l in web["links"]], [("READ MORE", NOBEL_2000["url"])])
+        self.assertEqual([s["url"] for s in web["sources"]], [BRITANNICA["url"], WIKIPEDIA["url"]])
 
-    def test_encoding_is_compared_but_never_decoded(self):
-        base = "https://example.org/milne/café"
-        self.assertTrue(same_url("https://example.org/milne/caf%C3%A9", base))
-        self.assertTrue(same_url("https://example.org/milne/caf%c3%a9", base))  # escapes without hex case
-        self.assertFalse(same_url("https://example.org/milne/Caf%C3%A9", base))  # the path keeps its case
-        self.assertFalse(same_url("https://example.org/milne/cafe\u0301", base))  # decomposed é: other bytes
-        self.assertFalse(same_url("https://example.org/milne/a%2Fb", "https://example.org/milne/a/b"))  # %2F stays
-        self.assertFalse(same_url("https://example.org/milne/%41", "https://example.org/milne/A"))  # never decoded
-        self.assertTrue(same_url("https://example.org/p?q=café", "https://example.org/p?q=caf%c3%a9"))
-        self.assertFalse(same_url("https://example.org/p?q=Café", "https://example.org/p?q=café"))
-
-    def test_default_ports_match_and_other_ports_do_not(self):
-        base = "https://example.org/pooh"
-        self.assertTrue(same_url("https://example.org:443/pooh", base))
-        self.assertTrue(same_url("http://example.org:80/pooh", base))
-        self.assertTrue(same_url("https://example.org:/pooh", base))  # an empty port is the default
-        self.assertFalse(same_url("https://example.org:8443/pooh", base))
-        self.assertFalse(same_url("http://example.org:443/pooh", base))  # 443 is not http's default
-        self.assertFalse(same_url("https://example.org:80/pooh", base))
-        self.assertFalse(same_url("https://example.org/x/../Pooh", base))  # resolved, the case still counts
-        self.assertFalse(same_url("https://example.org/pooh?q=A", "https://example.org/pooh?q=a"))
-        self.assertFalse(same_url("https://example.org/pooh?q=a&r=b", "https://example.org/pooh?r=b&q=a"))
-
-
-@unittest.skipUnless(shutil.which("node"), "needs node for the WHATWG URL parser")
-class SameUrlAgainstTheBrowserTests(unittest.TestCase):
-    """same_url against the URL parser browsers use (WHATWG URL, through node): for
-    every pair of generated spellings, same_url agrees with the browser's resolved
-    URL under the contract (http and https alike, no leading www., no trailing
-    slash, no fragment, escapes without hex case)."""
-
-    def test_same_url_agrees_with_the_browser(self):
-        hosts = ("digital.library.example", "WWW.Digital.Library.Example")
-        ports = ("", ":", ":80", ":443", ":8443")
-        paths = ("/milne/pooh", "/milne/Pooh", "/milne/pooh/", "/milne/x/../pooh", "/milne/./pooh",
-                 "/a/../milne/%2e%2e/milne/pooh", "/milne/x/%2E./pooh", "/milne\\x\\..\\pooh", "/x/..", "/../milne/pooh")
-        suffixes = ("", "#chapter-1", "?id=A", "?id=a", "?id=A#top")
-        urls = [f"{scheme}://{host}{port}{path}{suffix}" for scheme, host, port, path, suffix
-                in itertools.product(("http", "https"), hosts, ports, paths, suffixes)]
-        # Unicode and percent-encoded spellings, mixed with the structural ones above.
-        encoded = ("/milne/café", "/milne/caf%C3%A9", "/milne/caf%c3%a9", "/milne/Caf%C3%A9", "/milne/x/../café/",
-                   "/milne/a%2Fb", "/milne/a/b", "/milne/%41", "/milne/A", "/milne/pooh")
-        urls += [f"{scheme}://{host}{port}{path}{suffix}" for scheme, host, port, path, suffix
-                 in itertools.product(("http", "https"), hosts, ("", ":443"), encoded,
-                                      ("", "#chapter-1", "?q=café", "?q=caf%c3%a9", "?q=Caf%C3%A9"))]
-        script = ("const urls = JSON.parse(require('fs').readFileSync(0, 'utf8'));"
-                  "process.stdout.write(JSON.stringify(urls.map((u) => { const x = new URL(u);"
-                  " return [x.hostname, x.port, x.pathname, x.search]; })));")
-        resolved = json.loads(subprocess.run(["node", "-e", script], input=json.dumps(urls), capture_output=True,
-                                             text=True, check=True).stdout)
-
-        def hex_upper(text):  # RFC 3986 section 6.2.2.1: escapes are the same whatever their hex case
-            return re.sub(r"%[0-9a-fA-F]{2}", lambda m: m.group(0).upper(), text)
-
-        def browser_key(r):
-            host, port, path, search = r
-            return (host[4:] if host.startswith("www.") else host, port, hex_upper(path).rstrip("/"),
-                    hex_upper(search).lstrip("?"))
-
-        keys = [browser_key(r) for r in resolved]
-        disagree = [(a, b) for (a, ka), (b, kb) in itertools.combinations(zip(urls, keys), 2)
-                    if same_url(a, b) != (ka == kb)]
-        self.assertEqual(disagree[:5], [], f"{len(disagree)} disagreements of {len(urls) * (len(urls) - 1) // 2}")
+    def test_records_without_a_withheld_copy_are_untouched(self):
+        # Wilde: a worldwide-public-domain copy on Gutenberg, another Gutenberg page cited as a source.
+        page = {"title": "Project Gutenberg: Oscar Wilde", "url": "https://www.gutenberg.org/ebooks/author/111",
+                "kind": "institutional"}
+        wilde = rec("wilde", 11, 25, person="Oscar Wilde",
+                    link=book("Dorian Gray", "Oscar Wilde", "representative_work", url="https://www.gutenberg.org/ebooks/174"),
+                    sources=[page, WIKIPEDIA])
+        self.assertEqual(dataset(wilde).records[0].withheld_hosts, frozenset())
+        s, issue, web, html = self.html(wilde)
+        self.assertEqual(web["entries"][0]["links"][0]["label"], "READ ONLINE")
+        self.assertEqual([x["url"] for x in web["entries"][0]["sources"]], [page["url"], WIKIPEDIA["url"]])
+        self.assertTrue(s.picked[0].qr)
+        self.assertEqual(issue["entries"][0]["cta"]["url"], "https://www.gutenberg.org/ebooks/174")
 
 
 class RolesAndQrTests(unittest.TestCase):

@@ -165,73 +165,6 @@ def _host_in(url: str, hosts) -> bool:
     return any(host == h or host.endswith("." + h) for h in hosts)
 
 
-_DEFAULT_PORTS = {"http": 80, "https": 443}
-_DOT, _DOT_DOT = {".", "%2e"}, {"..", ".%2e", "%2e.", "%2e%2e"}
-
-
-_ESCAPE_RE = re.compile(r"%[0-9a-fA-F]{2}")
-
-
-def _browser_encoded(text: str) -> str:
-    """A path or query as a browser sends it: each character above U+007E as its
-    UTF-8 percent-escapes ("café" is "caf%C3%A9"), and every escape with uppercase
-    hex, which RFC 3986 section 6.2.2.1 makes the same resource ("%c3%a9" is "%C3%A9").
-    No escape is decoded, so "%2F" stays distinct from "/"."""
-    def char(c: str) -> str:
-        if ord(c) <= 0x7E:
-            return c
-        try:
-            data = c.encode("utf-8")
-        except UnicodeEncodeError:  # a lone surrogate: a browser sends U+FFFD
-            data = "\ufffd".encode("utf-8")
-        return "".join(f"%{byte:02X}" for byte in data)
-    return _ESCAPE_RE.sub(lambda m: m.group(0).upper(), "".join(char(c) for c in text))
-
-
-def _resolve_dot_segments(path: str) -> str:
-    """An http(s) path as a browser resolves it (RFC 3986 section 5.2.4, WHATWG URL):
-    "." and ".." segments, also spelled with %2e, and a backslash separates
-    segments like a slash. Nothing else in the path changes."""
-    segments = path.replace("\\", "/").split("/")
-    out = []
-    for i, segment in enumerate(segments):
-        lowered = segment.lower()
-        if lowered in _DOT or lowered in _DOT_DOT:
-            if lowered in _DOT_DOT and len(out) > 1:
-                out.pop()
-            if i == len(segments) - 1:
-                out.append("")  # "/a/.." is "/", a directory
-            continue
-        out.append(segment)
-    return "/".join(out)
-
-
-def same_url(a: str, b: str) -> bool:
-    """The same document, for keeping a withheld copy unlinked. The contract:
-    http and https alike; the host without case or a leading www.; a default port
-    (80 for http, 443 for https) the same as none, any other port significant; the
-    path's "." and ".." segments resolved as a browser does, and its trailing slash
-    ignored; the #fragment ignored; non-ASCII characters in the path and query
-    compared as the UTF-8 percent-escapes a browser sends, and escapes without hex
-    case. The path and query otherwise keep their case, no escape is decoded, and
-    the query is otherwise compared exactly as written."""
-    def key(u: str) -> tuple:
-        u = u.strip()
-        parts = urlsplit(u)
-        scheme = parts.scheme.lower()
-        web = scheme in _DEFAULT_PORTS
-        try:
-            port = parts.port
-        except ValueError:
-            port = parts.netloc  # unparseable: compare it as written
-        if web and port == _DEFAULT_PORTS[scheme]:
-            port = None
-        path = _resolve_dot_segments(_browser_encoded(parts.path)) if web else parts.path
-        query = _browser_encoded(parts.query) if web else parts.query
-        return ("http" if web else scheme, _host(u), port, path.rstrip("/"), query)
-    return key(a) == key(b)
-
-
 def _provider_name(url: str) -> str:
     host = _host(url)
     return next((name for h, name in _PROVIDER_NAMES.items() if host == h or host.endswith("." + h)), host)
@@ -370,8 +303,7 @@ class Record:
         never an access link, so it never reaches the device or its QR budget."""
         if self.link is not None:
             return None
-        usable = [s for s in self.sources if not _host_in(s.url, NEVER_CONTEXT_HOSTS)
-                  and not any(same_url(s.url, u) for u in self.withheld_reading_urls)]
+        usable = [s for s in self.sources if not _host_in(s.url, NEVER_CONTEXT_HOSTS) and not self.withholds(s.url)]
         for kind, link_type, hosts in (("institutional", "read-more", None),
                                        ("secondary", "read-more", CONTEXT_AUTHORITIES),
                                        ("primary", "source", None)):
@@ -385,10 +317,15 @@ class Record:
         return None
 
     @property
-    def withheld_reading_urls(self) -> tuple[str, ...]:
-        """Free copies listed but not offered (not public domain everywhere): the web
-        edition never links them, as an action or as a source."""
-        return tuple(l.url for l in self.links if l.type == "read-online" and l.access_tier is None)
+    def withheld_hosts(self) -> frozenset:
+        """The hosts of free copies listed but not offered (not public domain everywhere)."""
+        return frozenset(_host(l.url) for l in self.links if l.type == "read-online" and l.access_tier is None)
+
+    def withholds(self, url: str) -> bool:
+        """The web edition links nothing on the host of a withheld free copy, as the
+        action or as a source: any page there may be the copy under another URL. Only
+        records with a withheld copy are affected; the dataset keeps every source."""
+        return _host(url) in self.withheld_hosts
 
     @property
     def free_reading_withheld(self) -> bool:
@@ -709,6 +646,9 @@ def _check_record(raw: dict, problems: list[str], warnings: list[str],
             links.append(link)
     if len({l.url for l in links}) != len(links):
         bad("links repeat a URL")
+    withheld = {_host(l.url) for l in links if l.type == "read-online" and l.access_tier is None}
+    if any(l.type in ("read-more", "source") and _host(l.url) in withheld for l in links):
+        bad("a read-more or source link may not be on the host of a withheld free copy")
 
     area, language, women = raw.get("area"), raw.get("language"), raw.get("womenWriter")
     if area is not None and area not in AREAS:
