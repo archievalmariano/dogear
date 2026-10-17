@@ -5,9 +5,12 @@ against the real staging bucket in S2."""
 
 from __future__ import annotations
 
+import faulthandler
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -28,10 +31,16 @@ except ImportError:
     from test_r2 import KEY_ID, SECRET, FakeR2
 
 ROOT = Path(__file__).resolve().parents[1]
+# A drill takes seconds. One that stalls (a wait with no bound, in the test or its
+# cleanups) ends the whole run with every thread's stack, instead of hanging until
+# the job's limit with nothing in the log (run 39015183716).
+HANG_LIMIT = 120
 
 
 class DrillTests(unittest.TestCase):
     def setUp(self):
+        faulthandler.dump_traceback_later(HANG_LIMIT, exit=True, file=sys.__stderr__)
+        self.addCleanup(faulthandler.cancel_dump_traceback_later)  # first in, last out: covers the other cleanups
         self.fake = FakeR2("dogear-issues-staging")
         self.addCleanup(self.fake.close)
         store = self.fake.store()
@@ -149,6 +158,43 @@ class DrillTests(unittest.TestCase):
     def test_drills_are_refused_in_production(self):
         self.assertEqual(main(["publish", "--store", "r2:dogear-issues-staging", "--pubdata", str(self.pubdata),
                                "--drill", "conflict", "status"]), 4)
+
+
+class DrillWatchdogTests(unittest.TestCase):
+    """A stalled drill, in its body or in a cleanup, ends the run within the limit
+    and names where it stalled."""
+
+    STALLS = {  # what blocks forever -> the frame the stack dump must name
+        "test_drills.main = forever": "in test_drills_are_refused_in_production",
+        "test_drills.FakeR2.close = forever": "in doCleanups",
+    }
+
+    def test_a_stall_ends_the_run_with_every_threads_stack(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        procs = {}
+        for stall in self.STALLS:
+            child = "\n".join([
+                "import sys, threading, unittest",
+                f"sys.path.insert(0, {str(ROOT / 'tests')!r})",
+                "import test_drills",
+                "test_drills.HANG_LIMIT = 3",
+                "forever = lambda *a, **k: threading.Event().wait()",
+                stall,
+                "unittest.main(module=test_drills, argv=['drill', 'DrillTests.test_drills_are_refused_in_production'])"])
+            procs[stall] = subprocess.Popen([sys.executable, "-c", child], cwd=ROOT, env=dict(os.environ, TMPDIR=str(tmp)),
+                                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        for stall, frame in self.STALLS.items():
+            with self.subTest(stall):
+                try:
+                    _out, err = procs[stall].communicate(timeout=60)
+                except subprocess.TimeoutExpired:
+                    procs[stall].kill()
+                    procs[stall].communicate()
+                    self.fail("the stalled drill was not ended")
+                self.assertEqual(procs[stall].returncode, 1, err)
+                self.assertIn("Timeout (0:00:03)!", err)
+                self.assertIn(frame, err)
 
 
 if __name__ == "__main__":
