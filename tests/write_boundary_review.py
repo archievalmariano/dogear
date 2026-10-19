@@ -318,7 +318,7 @@ PROTECTED = {
     ('dogear/web.py', ''): 'f9ff5edbc695f3d7c2cc147811cfd94233f1e895084c9acc4ca49a0cbd99b1f0',
     ('dogear/publish/checks.py', ''): '5b6f5ff4a9125ead387bbcc9d6921501de650408b3fff4c50272c39e79e748df',
     ('dogear/publish/routes.py', ''): 'a25019c047bd898289762d45dfd6782fb803894894697125f1809c2f95a5c15d',
-    ('mock/render_dogear.py', ''): '0fa736f6645b2b19b9356e21a06195dc0dac0c708f088216cd27d92eb50389a7',
+    ('mock/render_dogear.py', ''): '5763eaffee3691e999a26db8c39baf23b32b18481e5563283f0bd088e49a4355',
     ('dogear/publish/publisher.py', 'Publisher._quiet_source'): 'dd0bbf2bea4fb7c527adfc28f3c4d6f1ff4b1c8f59ccab5a9a0af53be0e37ed5',
     ('dogear/publish/quiet_history.py', ''): 'cb19b7a56af8ad4398a104be5559393bc2937b41f1ef7905768573ffbd4a50c5',
     ('dogear/publish/pubdata.py', ''): 'c6a9a50656bfb257bd792992d212efc92efcf841804014d8eb3404a0fa640409',
