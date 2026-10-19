@@ -55,11 +55,11 @@ test("Manila calendar: the Sunday-UTC Monday, the windows", () => {
 
 // ---- configuration ----------------------------------------------------------------------
 
-test("wrangler: crons equal the checks; inert, staging defaults; no secret or recipient in config", () => {
+test("wrangler: crons equal the checks; enabled on production; no secret or recipient in config", () => {
   assert.deepEqual([...config.triggers.crons].sort(), [...DECLARED_CRONS].sort());
   assert.deepEqual(Object.keys(CHECKS).sort(), [...DECLARED_CRONS].sort());
-  assert.equal(config.vars.WATCH_ENABLED, "false");
-  assert.equal(config.vars.WATCH_TARGET, "staging");
+  assert.equal(config.vars.WATCH_ENABLED, "true");
+  assert.equal(config.vars.WATCH_TARGET, "production");
   assert.equal(config.vars.GITHUB_REPO, "dogear");
   const text = JSON.stringify(config);
   for (const key of ["GITHUB_TOKEN", "GITHUB_READ_TOKEN", "ALERT_TO", "ALERT_APP", "PRIVATE", "token", "secret"]) {
