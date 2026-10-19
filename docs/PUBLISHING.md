@@ -321,7 +321,11 @@ CLEAR, 15 October 2026). **Not enabled by this code:** the owner creates the
 - **Emergency stop** (only): `PUBLICATION_ENABLED` not `true`, or disable
   `dogear-promote.yml`. Normal holds use `operate hold`.
 - **Not dependable until** the watch-only `dogear-scheduler` watchdog (§4c) is
-  deployed, its token checked, and each alert path seen once in the staging rehearsal.
+  deployed on the production target, its token checked, its production alert
+  validation (§4c step 7) passed, and the first complete unattended production cycle
+  observed (§4c step 8). This replaces the staging rehearsal of each alert path, which
+  is deferred; until it runs, the Friday and Monday alert paths are covered by the
+  scheduler's tests only.
 
 ### 4c. The watchdog (`hosting/dogear-scheduler`; DOGEAR-WATCHDOG-PLAN rev 4 and DOGEAR-WATCHDOG-ALERTS-PLAN rev 2, Codex CLEAR)
 
@@ -367,6 +371,9 @@ no request method (tested). **Inert** until `WATCH_ENABLED` is `"true"` (a revie
   one-time test below passes. A **GitHub-wide outage** can stop the alert about it
   (`WATCHDOG_CANNOT_READ`) from being delivered: it is logged in Cloudflare and the
   invocation fails, but nobody is notified. GitHub's status page covers that case.
+- **No deduplication:** every check that finds something opens a new issue, even when
+  an identical one is still open (for example a `WORKFLOW_DISABLED` issue at each daily
+  check while a workflow stays disabled). The owner closes resolved issues by hand.
 - **Owner steps (later, each approved):**
   1. create the private, empty `dogear-alerts`, the App (Issues read/write, webhook off,
      this account only; key converted once with `openssl pkcs8 -topk8 -nocrypt`), and
@@ -381,8 +388,19 @@ no request method (tested). **Inert** until `WATCH_ENABLED` is `"true"` (a revie
   5. `wrangler secret put` `GITHUB_READ_TOKEN`, `ALERT_APP_ID`,
      `ALERT_APP_INSTALLATION_ID` and `ALERT_APP_PRIVATE_KEY`; deploy from an empty
      directory, still inert;
-  6. a PR enabling it on staging for the rehearsal. Its first deployed alert confirms
-     the Cloudflare side end to end.
+  6. a PR enabling it on the production target (`WATCH_TARGET="production"`; it
+     replaced the staging-rehearsal PR); redeploy while `dogear-promote.yml` is still
+     disabled;
+  7. **production alert validation:** the next 13:00 daily check opens exactly one
+     `WORKFLOW_DISABLED` issue, assigned to the owner, and the owner confirms it arrived
+     in GitHub, by email and by GitHub Mobile push. This proves the deployed notification
+     chain (cron, GitHub reads with the deployed token, App token, issue, delivery) only;
+     it is **not** evidence that the Friday and Monday checks monitor publication. Once
+     promote is enabled and its first scheduled run is a clean `noop`, that day's 13:00
+     check must raise nothing;
+  8. the owner observes the **first complete unattended production cycle**: the Friday
+     14:00 and 20:00 checks, the Monday 09:00, 12:00 and 13:00 checks, and the runs they
+     cover. Until then unattended production is not relied on (§4b).
 
 ---
 
