@@ -12,14 +12,16 @@
 //   ALERT_APP_INSTALLATION_ID  its installation on dogear-alerts (the only one)
 //   ALERT_APP_PRIVATE_KEY      its private key, PKCS#8 PEM; test the channel once with
 //                              tools/watchdog_alert_test.mjs before enabling
-// The crons MUST equal DECLARED_CRONS in src/index.js (a test enforces it).
+// The crons MUST equal DECLARED_CRONS in src/index.js (a test enforces it). Weekdays are
+// NAMED: Cloudflare numbers them 1 = Sunday to 7 = Saturday, so the Unix/GitHub "5" is
+// Thursday here (the cause of the 22 Oct 2026 Thursday-night STAGE_RUN_MISSING).
 {
   "name": "dogear-scheduler",
   "main": "src/index.js",
   "compatibility_date": "2026-10-16",
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "triggers": {
-    "crons": ["0 6 * * 5", "0 12 * * 5", "0 1 * * 1", "0 4 * * 1", "0 5 * * *"]
+    "crons": ["0 6 * * FRI", "0 12 * * FRI", "0 1 * * MON", "0 4 * * MON", "0 5 * * *"]
   },
   "vars": {
     "GITHUB_OWNER": "archievalmariano",

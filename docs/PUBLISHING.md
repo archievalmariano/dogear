@@ -221,11 +221,14 @@ workflows, and the watchdog's checks (§4c), which only read and alert.
 | Fri 11:07 | `7 3 * * 5` | `dogear-stage.yml`: stage W+1 |
 | Mon 07:07 | `7 23 * * 0` | `dogear-promote.yml`: promote |
 | Daily 08:07 | `7 0 * * *` | `dogear-promote.yml`: catch-up (the current week only) |
-| Fri 14:00 / 20:00 | `0 6 * * 5` / `0 12 * * 5` | watchdog: Friday, first look / final |
-| Mon 09:00 / 12:00 | `0 1 * * 1` / `0 4 * * 1` | watchdog: Monday, first look / final |
+| Fri 14:00 / 20:00 | `0 6 * * FRI` / `0 12 * * FRI` | watchdog: Friday, first look / final |
+| Mon 09:00 / 12:00 | `0 1 * * MON` / `0 4 * * MON` | watchdog: Monday, first look / final |
 | Daily 13:00 | `0 5 * * *` | watchdog: today's run (the deadline) |
 
 The UTC day-of-week matters: Monday 07:07 PHT is **Sunday** 23:07 UTC.
+The two schedulers also number weekdays differently: GitHub Actions uses 0 = Sunday,
+Cloudflare Cron Triggers 1 = Sunday to 7 = Saturday. The watchdog's weekdays are therefore
+named (`FRI`, `MON`); with numbers, its `5` and `1` fired on Thursday and Sunday.
 
 **Transitions.** The CLI holds all window and state rules; the crons only
 start runs.
