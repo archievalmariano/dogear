@@ -518,7 +518,7 @@ def draw_final(c: Canvas, issue: dict) -> None:
     y += 12
     y += c.paste_qr(issue["editionUrl"], y, FINAL_QR_MAX) + 10
     y = centered_fit(c, y, "SCAN FOR THIS WEEK\u2019S FULL EDITION", [sans(12, True)])
-    y = centered_fit(c, y + 2, "Stories, sources and reading links online.", [serif(12, italic=True)])
+    y = centered_fit(c, y + 2, "Stories, sources, and reading links online.", [serif(12, italic=True)])
     y += 22
     c.rule(y, x0=W // 2 - 40, x1=W // 2 + 40)
     y += 20
