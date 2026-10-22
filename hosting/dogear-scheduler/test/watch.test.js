@@ -70,6 +70,75 @@ test("wrangler: crons equal the checks; enabled on production; no secret or reci
   assert.equal((text.match(/@/g) || []).length, 0, "no address in the config");
 });
 
+// ---- the schedule as Cloudflare actually fires it ---------------------------------------
+// Cloudflare's documented cron convention, implemented here on its own (nothing imported
+// from the code under test): minute hour day-of-month month day-of-week, in UTC; weekdays
+// 1 = Sunday to 7 = Saturday, or SUN-SAT
+// (https://developers.cloudflare.com/workers/configuration/cron-triggers/).
+const CF_DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+function cloudflareFires(cron, from, days = 7) {
+  const [minute, hour, dom, month, dow] = cron.trim().split(/\s+/);
+  assert.equal(`${dom} ${month}`, "* *", cron);
+  const onDay = (utcDay) => dow === "*" || dow.split(",").some((v) => {
+    const n = CF_DAYS.includes(v.toUpperCase()) ? CF_DAYS.indexOf(v.toUpperCase()) : Number(v) - 1; // 1 = Sunday
+    assert.ok(n >= 0 && n <= 6, cron);
+    return n === utcDay;
+  });
+  const fires = [];
+  for (let t = from.getTime(); t < from.getTime() + days * 86400000; t += 60000) {
+    const d = new Date(t);
+    if (d.getUTCMinutes() === Number(minute) && d.getUTCHours() === Number(hour) && onDay(d.getUTCDay())) fires.push(d);
+  }
+  return fires;
+}
+const pht = (d) => new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Manila", weekday: "short", hour: "2-digit",
+  minute: "2-digit", hourCycle: "h23" }).format(d);
+const WEEK_PHT = at("2026-10-18T16:00:00Z"); // Mon 19 Oct 2026, 00:00 in Manila
+
+test("cron: each deployed schedule fires when its check is meant to run (Manila), under Cloudflare's convention", () => {
+  // PUBLISHING.md §4 and DOGEAR-WATCHDOG-PLAN, written out here rather than read from the code.
+  const intended = {
+    "friday first": ["Fri 14:00"],
+    "friday final": ["Fri 20:00"],
+    "monday first": ["Mon 09:00"],
+    "monday final": ["Mon 12:00"],
+    "daily final": ["Mon 13:00", "Tue 13:00", "Wed 13:00", "Thu 13:00", "Fri 13:00", "Sat 13:00", "Sun 13:00"],
+  };
+  const seen = [];
+  for (const cron of config.triggers.crons) {
+    const plan = CHECKS[cron];
+    assert.ok(plan, `${cron} has no check`);
+    const key = `${plan.check} ${plan.final ? "final" : "first"}`;
+    seen.push(key);
+    assert.deepEqual(cloudflareFires(cron, WEEK_PHT).map(pht), intended[key], `${cron} (${key})`);
+  }
+  assert.deepEqual(seen.sort(), Object.keys(intended).sort());
+});
+
+test("cron: weekdays are named, never numbered (Cloudflare 1 = Sunday; Unix and GitHub 0 = Sunday)", () => {
+  for (const cron of config.triggers.crons) {
+    const dow = cron.trim().split(/\s+/)[4];
+    assert.ok(dow === "*" || /^[A-Z]{3}(,[A-Z]{3})*$/.test(dow), `${cron}: weekday must be * or named`);
+  }
+  // The 22 Oct 2026 defect, reproduced: the numbered crons fired a day early. Production logged
+  // "0 12 * * 5" at 2026-10-22T12:00Z, a Thursday, and opened a false STAGE_RUN_MISSING.
+  assert.deepEqual(cloudflareFires("0 12 * * 5", WEEK_PHT).map((d) => d.toISOString()), ["2026-10-22T12:00:00.000Z"]);
+  assert.deepEqual(cloudflareFires("0 6 * * 5", WEEK_PHT).map(pht), ["Thu 14:00"]);
+  assert.deepEqual(cloudflareFires("0 1 * * 1", WEEK_PHT).map(pht), ["Sun 09:00"]);
+  assert.deepEqual(cloudflareFires("0 4 * * 1", WEEK_PHT).map(pht), ["Sun 12:00"]);
+});
+
+test("cron: the checks' own calendar agrees with when they fire", () => {
+  for (const cron of config.triggers.crons) {
+    const { check } = CHECKS[cron];
+    for (const fire of cloudflareFires(cron, WEEK_PHT)) {
+      const manilaDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(fire); // YYYY-MM-DD
+      if (check === "friday") assert.equal(fridayStart(fire).getTime(), Date.parse(`${manilaDay}T00:00:00+08:00`), cron);
+      if (check === "monday") assert.equal(currentMonday(fire), manilaDay, cron); // after the 06:00 rollover
+    }
+  }
+});
+
 // ---- never mutates -------------------------------------------------------------------------
 
 const SRC = new URL("../src/", import.meta.url);
@@ -264,8 +333,8 @@ test("detection makes only GET requests; delivery only two POSTs; each credentia
   const issue = servedIssue("2026-10-19");
   const pr = run({ created: "2026-10-18T23:07:00Z" });
   const worlds = [
-    ["0 12 * * 5", FRI_FINAL, fridayWorld()],
-    ["0 4 * * 1", MON_FINAL, fakeWorld({ promoteRuns: [pr], jobsById: { [pr.id]: jobs("promote") }, manifest: issue.manifest,
+    ["0 12 * * FRI", FRI_FINAL, fridayWorld()],
+    ["0 4 * * MON", MON_FINAL, fakeWorld({ promoteRuns: [pr], jobsById: { [pr.id]: jobs("promote") }, manifest: issue.manifest,
       issueBytes: issue.bytes })],
     ["0 5 * * *", TUE_DAILY, fakeWorld({ promoteRuns: [run({ created: "2026-10-20T00:07:00Z" })], lastCommit: "2026-10-15T00:00:00Z" })],
   ];
@@ -448,34 +517,34 @@ test("the result line is anchored on the wrapper line, past the test suite's loo
 // ---- Friday (§2.1) ----------------------------------------------------------------------------
 
 test("Friday: a proof staged unattended is OK; noop, pending, missing, failed and wrong shapes alert", async () => {
-  assert.deepEqual((await invoke("0 6 * * 5", FRI_FIRST, fridayWorld())).codes, []);
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld())).codes, []);
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld({ result: "noop" }))).codes, ["STAGE_NOOP"]);
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld({ result: "held" }))).codes, ["WATCHDOG_CANNOT_READ"]);
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld({ logTarget: "staging" }))).codes,
+  assert.deepEqual((await invoke("0 6 * * FRI", FRI_FIRST, fridayWorld())).codes, []);
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld())).codes, []);
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld({ result: "noop" }))).codes, ["STAGE_NOOP"]);
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld({ result: "held" }))).codes, ["WATCHDOG_CANNOT_READ"]);
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld({ logTarget: "staging" }))).codes,
     ["WATCHDOG_CANNOT_READ"]);
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld({ attempt: 2 }))).codes, ["STAGE_NOT_UNATTENDED"]);
-  assert.deepEqual((await invoke("0 6 * * 5", FRI_FIRST, fridayWorld({ status: "in_progress", conclusion: null }))).codes, []);
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld({ status: "queued", conclusion: null }))).codes,
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld({ attempt: 2 }))).codes, ["STAGE_NOT_UNATTENDED"]);
+  assert.deepEqual((await invoke("0 6 * * FRI", FRI_FIRST, fridayWorld({ status: "in_progress", conclusion: null }))).codes, []);
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld({ status: "queued", conclusion: null }))).codes,
     ["STAGE_RUN_PENDING"]);
-  assert.deepEqual((await invoke("0 6 * * 5", FRI_FIRST, fakeWorld())).codes, []);
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fakeWorld())).codes, ["STAGE_RUN_MISSING"]);
+  assert.deepEqual((await invoke("0 6 * * FRI", FRI_FIRST, fakeWorld())).codes, []);
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fakeWorld())).codes, ["STAGE_RUN_MISSING"]);
   for (const c of ["failure", "cancelled", "timed_out", "action_required"]) {
-    assert.deepEqual((await invoke("0 6 * * 5", FRI_FIRST, fridayWorld({ conclusion: c }))).codes, ["STAGE_RUN_FAILED"], c);
+    assert.deepEqual((await invoke("0 6 * * FRI", FRI_FIRST, fridayWorld({ conclusion: c }))).codes, ["STAGE_RUN_FAILED"], c);
   }
-  assert.deepEqual((await invoke("0 6 * * 5", FRI_FIRST, fridayWorld({ target: "none" }))).codes, ["EMERGENCY_STOP"]);
+  assert.deepEqual((await invoke("0 6 * * FRI", FRI_FIRST, fridayWorld({ target: "none" }))).codes, ["EMERGENCY_STOP"]);
   // An in-progress run with no jobs yet is pending for the watched target.
-  assert.deepEqual((await invoke("0 6 * * 5", FRI_FIRST, fridayWorld({ target: "pending", status: "queued",
+  assert.deepEqual((await invoke("0 6 * * FRI", FRI_FIRST, fridayWorld({ target: "pending", status: "queued",
     conclusion: null }))).codes, []);
 });
 
 test("Friday: a staging stage run while watching production is WRONG_TARGET, never a proof", async () => {
-  assert.deepEqual((await invoke("0 6 * * 5", FRI_FIRST, fridayWorld({ target: "staging", logTarget: "staging" }))).codes,
+  assert.deepEqual((await invoke("0 6 * * FRI", FRI_FIRST, fridayWorld({ target: "staging", logTarget: "staging" }))).codes,
     ["WRONG_TARGET"]);
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld({ target: "staging", logTarget: "staging" }))).codes,
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld({ target: "staging", logTarget: "staging" }))).codes,
     ["STAGE_RUN_MISSING", "WRONG_TARGET"]);
   // Watching staging, the same run is the proof.
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld({ target: "staging", logTarget: "staging" }),
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld({ target: "staging", logTarget: "staging" }),
     { WATCH_TARGET: "staging" })).codes, []);
 });
 
@@ -495,53 +564,53 @@ function mondayCase({ runs: list, target = "production", manifestWeek = "2026-10
 }
 
 test("Monday: current week, issue served with its hash and a successful run is the only OK", async () => {
-  assert.deepEqual((await invoke("0 1 * * 1", MON_FIRST, mondayCase({ runs: [{}] }))).codes, []);
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ runs: [{}], issue404: true }))).codes, ["ISSUE_UNSERVED"]);
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ runs: [{}], alterIssue: true }))).codes, ["ISSUE_UNSERVED"]);
+  assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, mondayCase({ runs: [{}] }))).codes, []);
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: [{}], issue404: true }))).codes, ["ISSUE_UNSERVED"]);
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: [{}], alterIssue: true }))).codes, ["ISSUE_UNSERVED"]);
   for (const c of ["failure", "cancelled", "timed_out", "action_required"]) {
-    assert.deepEqual((await invoke("0 1 * * 1", MON_FIRST, mondayCase({ runs: [{ conclusion: c }] }))).codes,
+    assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, mondayCase({ runs: [{ conclusion: c }] }))).codes,
       ["MONDAY_UNVERIFIED"], c); // Codex: a cancelled run after the switch is not OK
   }
-  assert.deepEqual((await invoke("0 1 * * 1", MON_FIRST, mondayCase({ runs: [] }))).codes, []);
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ runs: [] }))).codes, ["MONDAY_UNVERIFIED"]);
-  assert.deepEqual((await invoke("0 1 * * 1", MON_FIRST, mondayCase({ runs: [{ status: "queued", conclusion: null }] }))).codes, []);
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ runs: [{ status: "queued", conclusion: null }] }))).codes,
+  assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, mondayCase({ runs: [] }))).codes, []);
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: [] }))).codes, ["MONDAY_UNVERIFIED"]);
+  assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, mondayCase({ runs: [{ status: "queued", conclusion: null }] }))).codes, []);
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: [{ status: "queued", conclusion: null }] }))).codes,
     ["MONDAY_NOT_PUBLISHED"]);
   // A failure resolved by a later successful (here: manual recovery) production run.
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ runs: [{ conclusion: "failure" },
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: [{ conclusion: "failure" },
     { event: "workflow_dispatch", created: "2026-10-19T01:30:00Z" }] }))).codes, []);
 });
 
 test("Monday: the previous week still current", async () => {
   const stale = { manifestWeek: "2026-10-12" };
-  assert.deepEqual((await invoke("0 1 * * 1", MON_FIRST, mondayCase({ ...stale, runs: [{ conclusion: "failure" }] }))).codes,
+  assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, mondayCase({ ...stale, runs: [{ conclusion: "failure" }] }))).codes,
     ["MONDAY_HELD"]);
-  assert.deepEqual((await invoke("0 1 * * 1", MON_FIRST, mondayCase({ ...stale, runs: [] }))).codes, []);
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ ...stale, runs: [] }))).codes, ["MONDAY_NOT_PUBLISHED"]);
-  assert.deepEqual((await invoke("0 1 * * 1", MON_FIRST, mondayCase({ ...stale, runs: [{}] }))).codes, ["MONDAY_NOT_PUBLISHED"]);
+  assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, mondayCase({ ...stale, runs: [] }))).codes, []);
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ ...stale, runs: [] }))).codes, ["MONDAY_NOT_PUBLISHED"]);
+  assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, mondayCase({ ...stale, runs: [{}] }))).codes, ["MONDAY_NOT_PUBLISHED"]);
   const r = run({ created: "2026-10-18T23:07:00Z" });
   const world = fakeWorld({ promoteRuns: [r], jobsById: { [r.id]: jobs("promote", { target: "none" }) },
     manifest: servedIssue("2026-10-12").manifest, issueBytes: servedIssue("2026-10-12").bytes });
-  assert.deepEqual((await invoke("0 1 * * 1", MON_FIRST, world)).codes, ["EMERGENCY_STOP"]);
-  assert.deepEqual((await invoke("0 1 * * 1", MON_FIRST, fakeWorld({ promoteRuns: [] }))).codes, ["HOST_UNREADABLE"]);
+  assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, world)).codes, ["EMERGENCY_STOP"]);
+  assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, fakeWorld({ promoteRuns: [] }))).codes, ["HOST_UNREADABLE"]);
 });
 
 test("Monday target binding, both directions (Codex rev 4)", async () => {
   // A current, hash-valid production issue with a production success, then a staging success.
   const after = { target: "staging", created: "2026-10-19T00:07:00Z" };
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ runs: [{}, after] }))).codes, ["WRONG_TARGET"]);
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: [{}, after] }))).codes, ["WRONG_TARGET"]);
   // A production failure after the switch, then a staging success: not cleared.
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ runs: [{ conclusion: "failure" }, after] }))).codes,
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: [{ conclusion: "failure" }, after] }))).codes,
     ["MONDAY_UNVERIFIED", "WRONG_TARGET"]);
   // A manual staging run does not clear a production failure either.
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ runs: [{ conclusion: "failure" },
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: [{ conclusion: "failure" },
     { ...after, event: "workflow_dispatch" }] }))).codes, ["MONDAY_UNVERIFIED", "WRONG_TARGET"]);
   // The mirror, watching staging: production runs are the wrong target.
   const prodAfter = { target: "production", created: "2026-10-19T00:07:00Z" };
   const env = { WATCH_TARGET: "staging" };
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ target: "staging",
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ target: "staging",
     runs: [{ target: "staging" }, prodAfter] }), env)).codes, ["WRONG_TARGET"]);
-  assert.deepEqual((await invoke("0 4 * * 1", MON_FINAL, mondayCase({ target: "staging",
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ target: "staging",
     runs: [{ target: "staging", conclusion: "failure" }, prodAfter] }), env)).codes, ["MONDAY_UNVERIFIED", "WRONG_TARGET"]);
 });
 
@@ -645,14 +714,14 @@ test("daily: emergency stop, disabled workflows, wrong target, inactivity", asyn
 test("inert unless enabled; unmapped crons and a bad target do nothing", async () => {
   for (const extra of [{ WATCH_ENABLED: "false" }, { WATCH_ENABLED: "" }, { WATCH_ENABLED: undefined }]) {
     const world = fridayWorld();
-    const out = await invoke("0 12 * * 5", FRI_FINAL, world, extra);
+    const out = await invoke("0 12 * * FRI", FRI_FINAL, world, extra);
     assert.equal(world.requests.length, 0);
     assert.equal(out.sent.length, 0);
   }
   const world = fridayWorld();
   assert.equal((await invoke("9 9 * * *", FRI_FINAL, world)).sent.length, 0);
   assert.equal(world.requests.length, 0);
-  const bad = await invoke("0 12 * * 5", FRI_FINAL, world, { WATCH_TARGET: "prod" });
+  const bad = await invoke("0 12 * * FRI", FRI_FINAL, world, { WATCH_TARGET: "prod" });
   assert.ok(bad.error);
   assert.equal(world.requests.length, 0);
 });
@@ -660,13 +729,13 @@ test("inert unless enabled; unmapped crons and a bad target do nothing", async (
 test("fail loud: unreadable GitHub, a missing token, an error, an alert that cannot be sent", async () => {
   for (const code of [403, 429, 500]) {
     const world = fakeWorld({ status: { "actions/workflows/dogear-stage.yml/runs": code } });
-    assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, world)).codes, ["WATCHDOG_CANNOT_READ"], String(code));
+    assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, world)).codes, ["WATCHDOG_CANNOT_READ"], String(code));
   }
   const malformed = adhoc(async () => new Response("not json", { status: 200 }));
   assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, malformed)).codes, ["WATCHDOG_CANNOT_READ"]);
   const timeout = adhoc(async () => { throw Object.assign(new Error("t"), { name: "AbortError" }); });
   assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, timeout)).codes, ["WATCHDOG_CANNOT_READ"]);
-  assert.deepEqual((await invoke("0 12 * * 5", FRI_FINAL, fridayWorld(), { GITHUB_READ_TOKEN: "" })).codes,
+  assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld(), { GITHUB_READ_TOKEN: "" })).codes,
     ["WATCHDOG_CANNOT_READ"]);
   const crashed = await invoke("0 5 * * *", TUE_DAILY, adhoc(async (u) => (String(u).includes("/jobs")
     ? new Response(JSON.stringify({ jobs: [null] }))
@@ -674,23 +743,23 @@ test("fail loud: unreadable GitHub, a missing token, an error, an alert that can
   assert.deepEqual(crashed.codes, ["WATCHDOG_ERROR"]);
   assert.ok(crashed.error, "the invocation fails after alerting");
   for (const alerts of [{ issueStatus: 403 }, { issueStatus: 422 }, { exchangeStatus: 401 }]) {
-    const unsent = await invoke("0 12 * * 5", FRI_FINAL, fakeWorld({ alerts }));
+    const unsent = await invoke("0 12 * * FRI", FRI_FINAL, fakeWorld({ alerts }));
     assert.ok(unsent.error, JSON.stringify(alerts));
     assert.ok(unsent.logged.some((l) => l.includes("alert not sent") && l.includes("STAGE_RUN_MISSING")));
     assert.ok(unsent.logged.some((l) => l.includes("check done")), "detection is still logged");
   }
   // Missing App secrets: nothing is sent, the error is logged, the invocation fails.
   const noApp = fakeWorld();
-  const out = await invoke("0 12 * * 5", FRI_FINAL, noApp, { ALERT_APP_PRIVATE_KEY: "" });
+  const out = await invoke("0 12 * * FRI", FRI_FINAL, noApp, { ALERT_APP_PRIVATE_KEY: "" });
   assert.ok(out.error);
   assert.equal(noApp.requests.filter((r) => r.url === EXCHANGE_URL || r.url === ISSUES_URL).length, 0);
   assert.ok(out.logged.some((l) => l.includes("alert not sent")));
 });
 
 test("alerts and logs are public-safe: fixed templates, no planted text from GitHub or the logs", async () => {
-  const cases = [["0 12 * * 5", FRI_FINAL, fridayWorld({ result: "noop" })], ["0 12 * * 5", FRI_FINAL, fakeWorld()],
+  const cases = [["0 12 * * FRI", FRI_FINAL, fridayWorld({ result: "noop" })], ["0 12 * * FRI", FRI_FINAL, fakeWorld()],
     ["0 5 * * *", TUE_DAILY, dailyCase({ runs: [{ ...TUE_RUN, conclusion: "failure" }] })],
-    ["0 4 * * 1", MON_FINAL, mondayCase({ runs: [{ conclusion: "cancelled" }] })]];
+    ["0 4 * * MON", MON_FINAL, mondayCase({ runs: [{ conclusion: "cancelled" }] })]];
   for (const [cron, when, world] of cases) {
     const out = await invoke(cron, when, world);
     assert.ok(out.sent.length > 0, cron);

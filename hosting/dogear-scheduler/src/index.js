@@ -10,12 +10,13 @@ import { daily, friday, monday } from "./checks.js";
 import { buildAlert, sendAlert } from "./alert.js";
 import { currentMonday, dayStart, fridayStart, mondayRollover } from "./time.js";
 
-// Cron (UTC) -> check. Manila = UTC+8.
+// Cron (UTC) -> check. Manila = UTC+8. Weekdays are named: Cloudflare numbers them
+// 1 = Sunday to 7 = Saturday, unlike Unix and GitHub Actions (0 = Sunday).
 export const CHECKS = Object.freeze({
-  "0 6 * * 5": { check: "friday", final: false }, // Fri 14:00 Manila: first look
-  "0 12 * * 5": { check: "friday", final: true }, // Fri 20:00 Manila: final
-  "0 1 * * 1": { check: "monday", final: false }, // Mon 09:00 Manila: first look
-  "0 4 * * 1": { check: "monday", final: true }, // Mon 12:00 Manila: final
+  "0 6 * * FRI": { check: "friday", final: false }, // Fri 14:00 Manila: first look
+  "0 12 * * FRI": { check: "friday", final: true }, // Fri 20:00 Manila: final
+  "0 1 * * MON": { check: "monday", final: false }, // Mon 09:00 Manila: first look
+  "0 4 * * MON": { check: "monday", final: true }, // Mon 12:00 Manila: final
   "0 5 * * *": { check: "daily", final: true }, // daily 13:00 Manila: today's run, deadline
 });
 export const DECLARED_CRONS = Object.freeze(Object.keys(CHECKS));
