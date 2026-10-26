@@ -10,7 +10,14 @@ name: DOGEAR promote
 on:
   # INTENTIONALLY DISABLED until deployment approval (G10): this workflow is disabled in
   # the repository's Actions settings, so neither the schedule nor a manual run can start it.
+  # GitHub starts scheduled runs late (4-5 h on 22-26 Oct 2026; PUBLISHING §4), so Monday
+  # has three chances plus the catch-up. A run before Mon 06:00 Manila is a green no-op
+  # (the publisher's rollover guard reads the clock when the run executes); the first one
+  # after it publishes the saved Friday proof; any later one is a no-op. At least 90 min
+  # apart, never on the hour.
   schedule:
+    - cron: "37 19 * * 0" # Sun 19:37 UTC = Mon 03:37 PHT
+    - cron: "7 21 * * 0"  # Sun 21:07 UTC = Mon 05:07 PHT
     - cron: "7 23 * * 0"  # Sun 23:07 UTC = Mon 07:07 PHT
     - cron: "7 0 * * *"   # 00:07 UTC = 08:07 PHT daily catch-up
   workflow_dispatch:

@@ -644,6 +644,25 @@ function dailyCase({ runs: list = [], workflows = {}, lastCommit = "2026-10-15T0
   return fakeWorld({ promoteRuns: runs, jobsById, workflows, lastCommit });
 }
 const MON_RUN = { created: "2026-10-19T00:07:00Z" }, TUE_RUN = { created: "2026-10-20T00:07:00Z" };
+
+test("Monday promote slots: pre-rollover no-ops and an older cancelled run are harmless; the newest decides", async () => {
+  // dogear-promote.yml: slots at Mon 03:37, 05:07 and 07:07 PHT plus the 08:07 catch-up. GitHub may cancel
+  // a pending publish job when another queues, in an order it doesn't guarantee.
+  const early = [{ created: "2026-10-18T19:37:00Z" }, { created: "2026-10-18T21:07:00Z" }]; // before 06:00 Manila
+  const cancelled = { created: "2026-10-18T22:40:00Z", conclusion: "cancelled" }; // replaced while pending
+  const ladder = [...early, cancelled, { created: "2026-10-18T23:07:00Z" }];
+  assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, mondayCase({ runs: ladder }))).codes, []);
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: ladder }))).codes, []);
+  const monDaily = at("2026-10-19T05:00:00Z");
+  assert.deepEqual((await invoke("0 5 * * *", monDaily, dailyCase({ runs: [...early, cancelled, MON_RUN] }))).codes, []);
+  // Pre-rollover no-ops are outside the Monday window: with nothing after them, Monday is still unverified.
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: early, manifestWeek: "2026-10-12" }))).codes,
+    ["MONDAY_NOT_PUBLISHED"]);
+  // Only the newest run counts, so a cancelled NEWEST run is still flagged: an accepted false alert
+  // (PUBLISHING §4, "Accepted watchdog limitations"), not a publication fault.
+  const newestCancelled = [{ created: "2026-10-18T23:07:00Z" }, { created: "2026-10-18T23:30:00Z", conclusion: "cancelled" }];
+  assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: newestCancelled }))).codes, ["MONDAY_UNVERIFIED"]);
+});
 const WED_RUN = { created: "2026-10-21T00:07:00Z" };
 
 test("daily: Codex's Tuesday — Monday's run present, Tuesday's never starts", async () => {
