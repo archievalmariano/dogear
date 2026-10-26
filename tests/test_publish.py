@@ -2056,6 +2056,78 @@ class UnattendedPromoteTests(unittest.TestCase):
         self.assertIsNone(f.registry()["hold"])
 
 
+class PromoteSlotTests(unittest.TestCase):
+    """The Monday promote slots (dogear-promote.yml: 03:37, 05:07 and 07:07 PHT, plus the
+    08:07 catch-up) under GitHub's late, early-slot, duplicated and out-of-order starts.
+    The rollover guard reads the clock when the run executes: nothing before Monday 06:00
+    Manila publishes; the first run after it publishes exactly the saved Friday proof; every
+    later run is a no-op that writes nothing."""
+
+    def setUp(self):
+        self.f = prod_launched(self)  # W1 (2026-11-09) is current
+        self.f.clock.t = at(W2 - FRIDAY, 11, 7)
+        self.assertEqual(self.f.run().stage_next(unattended=True).status, "staged")
+        self.staged = saved(self.f, "staged/2026-11-16/issue.json")
+
+    def promote_at(self, t: dt.datetime):
+        self.f.clock.t = t
+        return self.f.run().promote(unattended=True)
+
+    def snapshot(self):
+        return ({k: o.data for k, o in self.f.store.objects.items()}, list(self.f.remote.saves),
+                self.f.served_manifest())
+
+    def test_the_pre_rollover_slots_are_no_ops_that_write_nothing(self):
+        before = self.snapshot()
+        for t in (at(W2, 3, 37), at(W2, 5, 7), dt.datetime(2026, 11, 16, 5, 59, 59, tzinfo=MANILA)):
+            with self.subTest(t.isoformat()):
+                out = self.promote_at(t)
+                self.assertEqual((out.status, out.message), ("noop", "before the Monday 06:00 rollover"))
+                self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.f.served_manifest()["issueId"], "dogear-2026-11-09")
+
+    def test_the_first_run_after_the_rollover_publishes_the_proof_and_every_later_run_is_a_no_op(self):
+        out = self.promote_at(dt.datetime(2026, 11, 16, 6, 0, 0, tzinfo=MANILA))
+        self.assertEqual(out.status, "published", out)
+        rev = regmod.active_revision(self.f.registry(), "2026-11-16")
+        self.assertEqual(self.f.store.objects[rev["issueKey"]].data, self.staged)  # exactly the saved proof
+        self.assertEqual(self.f.served_manifest()["issueId"], "dogear-2026-11-16")
+        after = self.snapshot()
+        # The 07:07 slot, the catch-up, a duplicate of it, a late start, Tuesday's catch-up.
+        for t in (at(W2, 7, 7), at(W2, 8, 7), at(W2, 8, 7), at(W2, 12, 36), at(W2 + dt.timedelta(days=1), 8, 7)):
+            with self.subTest(t.isoformat()):
+                out = self.promote_at(t)
+                self.assertEqual(out.status, "noop", out)
+                self.assertIn("2026-11-16 is already published (revision 0)", out.message)
+                self.assertEqual(self.snapshot(), after)
+
+    def test_an_early_slot_started_late_publishes_on_its_execution_time(self):
+        # The 03:37 slot, started by GitHub at 08:24 (as the 22-26 Oct delays would): it publishes.
+        out = self.promote_at(at(W2, 8, 24))
+        self.assertEqual(out.status, "published", out)
+        rev = regmod.active_revision(self.f.registry(), "2026-11-16")
+        self.assertEqual(self.f.store.objects[rev["issueKey"]].data, self.staged)
+
+    def test_sunday_night_runs_touch_only_the_already_published_week(self):
+        before = self.snapshot()
+        out = self.promote_at(at(W2 - dt.timedelta(days=1), 23, 59))  # Sun 15 Nov, 23:59 Manila
+        self.assertEqual(out.status, "noop", out)
+        self.assertIn("2026-11-09 is already published", out.message)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(saved(self.f, "staged/2026-11-16/issue.json"), self.staged)  # the proof untouched
+
+    def test_a_hold_is_quiet_before_the_rollover_and_holds_after_it(self):
+        self.f.clock.t = at(W2 - dt.timedelta(days=1), 20, 0)
+        self.assertEqual(self.f.run().hold("owner review").status, "held")
+        held = self.snapshot()
+        out = self.promote_at(at(W2, 3, 37))
+        self.assertEqual((out.status, out.message), ("noop", "before the Monday 06:00 rollover"))
+        self.assertEqual(self.snapshot(), held)
+        out = self.promote_at(at(W2, 7, 7))
+        self.assertEqual((out.status, out.code), ("held", "HELD"), out)
+        self.assertEqual(self.f.served_manifest()["issueId"], "dogear-2026-11-09")  # nothing published
+
+
 class UnattendedStageTests(unittest.TestCase):
     """The Friday run succeeds only with an actionable proof (correction 2)."""
 

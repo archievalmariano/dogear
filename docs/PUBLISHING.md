@@ -219,13 +219,34 @@ workflows, and the watchdog's checks (§4c), which only read and alert.
 | When (PHT) | Cron (UTC) | What |
 |---|---|---|
 | Fri 11:07 | `7 3 * * 5` | `dogear-stage.yml`: stage W+1 |
-| Mon 07:07 | `7 23 * * 0` | `dogear-promote.yml`: promote |
+| Mon 03:37 / 05:07 / 07:07 | `37 19 * * 0` / `7 21 * * 0` / `7 23 * * 0` | `dogear-promote.yml`: promote (a run before Mon 06:00 is a no-op; the first after it publishes) |
 | Daily 08:07 | `7 0 * * *` | `dogear-promote.yml`: catch-up (the current week only) |
 | Fri 14:00 / 20:00 | `0 6 * * FRI` / `0 12 * * FRI` | watchdog: Friday, first look / final |
 | Mon 09:00 / 12:00 | `0 1 * * MON` / `0 4 * * MON` | watchdog: Monday, first look / final |
 | Daily 13:00 | `0 5 * * *` | watchdog: today's run (the deadline) |
 
 The UTC day-of-week matters: Monday 07:07 PHT is **Sunday** 23:07 UTC.
+GitHub starts scheduled runs late (4h21m to 5h17m for 6 of 7 runs, 22–26 Oct 2026), so
+Monday has three promote slots and the catch-up. The rollover guard reads the clock when a
+run executes, so an early slot started before 06:00 is a green no-op and one started after
+publishes the saved proof; once published, every later run is a no-op. Publication itself
+stays serialised by the publish job's group (`dogear-publication-<target>`,
+`cancel-in-progress: false`): a running publish is never cancelled, and GitHub may cancel a
+*pending* one when another queues, in an order it doesn't guarantee. Whichever run publishes,
+it publishes the same saved proof once.
+
+**Accepted watchdog limitations (operational, not publication integrity).** The watchdog
+judges the newest promote run, so two harmless situations can raise an alert while the
+correct issue is already served:
+1. A redundant run that GitHub cancelled while it was pending is the newest run: Monday
+   `MONDAY_UNVERIFIED`, or the daily `PROMOTE_RUN_FAILED`.
+2. A redundant run is still queued or running at the check: Monday 12:00
+   `MONDAY_NOT_PUBLISHED`, or the daily 13:00 `PROMOTE_RUN_PENDING`.
+
+On either, check `/current.json` against the saved proof before acting. A served,
+byte-identical issue means no action. The new slots make the first more likely (more runs);
+the second needs delays beyond about 7 hours for them.
+
 The two schedulers also number weekdays differently: GitHub Actions uses 0 = Sunday,
 Cloudflare Cron Triggers 1 = Sunday to 7 = Saturday. The watchdog's weekdays are therefore
 named (`FRI`, `MON`); with numbers, its `5` and `1` fired on Thursday and Sunday.

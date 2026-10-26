@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import re
 import subprocess
@@ -254,6 +255,62 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(ROOT.resolve().is_relative_to(Path(top).resolve()) if hasattr(Path, "is_relative_to")
                         else str(ROOT.resolve()).startswith(str(Path(top).resolve())))
         self.assertFalse((Path(top) / ".github" / "workflows" / "dogear-promote.yml").exists())
+
+class PublicationScheduleTests(unittest.TestCase):
+    """When GitHub would start the stage and promote runs, evaluated independently: GitHub
+    Actions cron is UTC with weekdays 0 = Sunday ... 6 = Saturday (POSIX), unlike Cloudflare."""
+
+    WORKFLOWS = ROOT / ".github" / "workflows"
+    MANILA = dt.timezone(dt.timedelta(hours=8))
+
+    def crons(self, name: str) -> list:
+        text = (self.WORKFLOWS / name).read_text(encoding="utf-8")
+        return re.findall(r'^\s*- cron: "([^"]+)"', text, re.M)
+
+    def fires(self, cron: str) -> list:
+        """Manila 'Day HH:MM' for each start in the week of Mon 2 Nov 2026 (GitHub's rules)."""
+        minute, hour, dom, month, dow = cron.split()
+        self.assertEqual((dom, month), ("*", "*"), cron)
+        start = dt.datetime(2026, 11, 1, 16, 0, tzinfo=dt.timezone.utc)  # Mon 2 Nov, 00:00 Manila
+        out = []
+        for m in range(7 * 24 * 60):
+            t = start + dt.timedelta(minutes=m)
+            weekday = (t.weekday() + 1) % 7  # Python Monday = 0; POSIX Sunday = 0
+            if t.minute == int(minute) and t.hour == int(hour) and (dow == "*" or int(dow) == weekday):
+                out.append(t.astimezone(self.MANILA).strftime("%a %H:%M"))
+        return out
+
+    def test_promote_has_three_monday_slots_and_the_daily_catch_up(self):
+        got = sorted(f for c in self.crons("dogear-promote.yml") for f in self.fires(c))
+        daily = [f"{d} 08:07" for d in ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")]
+        self.assertEqual(got, sorted(["Mon 03:37", "Mon 05:07", "Mon 07:07"] + daily))
+
+    def test_the_monday_slots_bracket_the_rollover_and_are_spaced(self):
+        monday = sorted(f for c in self.crons("dogear-promote.yml") for f in self.fires(c) if f.startswith("Mon"))
+        self.assertEqual(monday, ["Mon 03:37", "Mon 05:07", "Mon 07:07", "Mon 08:07"])
+        minutes = [int(f[4:6]) * 60 + int(f[7:9]) for f in monday]
+        self.assertTrue(all(b - a >= 60 for a, b in zip(minutes, minutes[1:])), monday)
+        self.assertGreaterEqual(minutes[1] - minutes[0], 90)
+        self.assertGreaterEqual(minutes[2] - minutes[1], 90)
+        before = [f for f in monday if dt.time(int(f[4:6]), int(f[7:9])) < dt.time(6, 0)]
+        self.assertEqual(before, ["Mon 03:37", "Mon 05:07"])  # no-ops unless GitHub starts them after 06:00
+        for cron in self.crons("dogear-promote.yml") + self.crons("dogear-stage.yml"):
+            self.assertNotEqual(cron.split()[0], "0", f"{cron}: never on the hour (GitHub's high-load time)")
+
+    def test_friday_staging_is_unchanged(self):
+        self.assertEqual(self.crons("dogear-stage.yml"), ["7 3 * * 5"])
+        self.assertEqual(self.fires("7 3 * * 5"), ["Fri 11:07"])
+
+    def test_only_the_publish_job_serialises_publication(self):
+        # No run-level group on the callers: a manual run waiting for the production
+        # reviewer must never hold scheduled publication behind it (Codex, promote slots).
+        for name in ("dogear-promote.yml", "dogear-stage.yml"):
+            self.assertNotIn("\nconcurrency:", (self.WORKFLOWS / name).read_text(encoding="utf-8"), name)
+        reusable = (self.WORKFLOWS / "_dogear-publish.yml").read_text(encoding="utf-8")
+        publish = reusable.split("\n  publish:\n", 1)[1]
+        self.assertIn("    concurrency:\n      group: dogear-publication-${{ inputs.target }}\n"
+                      "      cancel-in-progress: false\n", publish)
+
 
 class RoutingBoundaryTests(unittest.TestCase):
     """The credential trust boundary (PUBLISHING §4b). GitHub restricts the
