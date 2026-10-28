@@ -86,7 +86,7 @@ export function monday({ runs, jobsById, served, now, final, target }) {
   return later("MONDAY_NOT_PUBLISHED");
 }
 
-// PLAN §2.3, at 13:00 Manila: the deadline for today's run.
+// PLAN §2.3, at 16:00 Manila: the deadline for today's run.
 export function daily({ workflows, runs, jobsById, lastCommitDate, now, target }) {
   const week = currentMonday(now);
   const out = [];
