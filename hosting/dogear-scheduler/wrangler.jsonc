@@ -21,7 +21,7 @@
   "compatibility_date": "2026-10-16",
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "triggers": {
-    "crons": ["0 6 * * FRI", "0 12 * * FRI", "0 1 * * MON", "0 4 * * MON", "0 5 * * *"]
+    "crons": ["0 6 * * FRI", "0 12 * * FRI", "0 1 * * MON", "0 4 * * MON", "0 8 * * *"]
   },
   "vars": {
     "GITHUB_OWNER": "archievalmariano",

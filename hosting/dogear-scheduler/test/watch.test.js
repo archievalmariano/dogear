@@ -40,7 +40,7 @@ const publishId = (js, caller) => js.find((j) => j.name === `${caller} / publish
 // Week of Monday 2026-10-19 (Manila). Friday stage 2026-10-23 11:07 Manila = 03:07Z.
 const FRI_FIRST = at("2026-10-23T06:00:00Z"), FRI_FINAL = at("2026-10-23T12:00:00Z");
 const MON_FIRST = at("2026-10-19T01:00:00Z"), MON_FINAL = at("2026-10-19T04:00:00Z");
-const TUE_DAILY = at("2026-10-20T05:00:00Z"), WED_DAILY = at("2026-10-21T05:00:00Z");
+const TUE_DAILY = at("2026-10-20T08:00:00Z"), WED_DAILY = at("2026-10-21T08:00:00Z");
 
 // ---- time -----------------------------------------------------------------------------
 
@@ -102,7 +102,7 @@ test("cron: each deployed schedule fires when its check is meant to run (Manila)
     "friday final": ["Fri 20:00"],
     "monday first": ["Mon 09:00"],
     "monday final": ["Mon 12:00"],
-    "daily final": ["Mon 13:00", "Tue 13:00", "Wed 13:00", "Thu 13:00", "Fri 13:00", "Sat 13:00", "Sun 13:00"],
+    "daily final": ["Mon 16:00", "Tue 16:00", "Wed 16:00", "Thu 16:00", "Fri 16:00", "Sat 16:00", "Sun 16:00"],
   };
   const seen = [];
   for (const cron of config.triggers.crons) {
@@ -336,7 +336,7 @@ test("detection makes only GET requests; delivery only two POSTs; each credentia
     ["0 12 * * FRI", FRI_FINAL, fridayWorld()],
     ["0 4 * * MON", MON_FINAL, fakeWorld({ promoteRuns: [pr], jobsById: { [pr.id]: jobs("promote") }, manifest: issue.manifest,
       issueBytes: issue.bytes })],
-    ["0 5 * * *", TUE_DAILY, fakeWorld({ promoteRuns: [run({ created: "2026-10-20T00:07:00Z" })], lastCommit: "2026-10-15T00:00:00Z" })],
+    ["0 8 * * *", TUE_DAILY, fakeWorld({ promoteRuns: [run({ created: "2026-10-20T00:07:00Z" })], lastCommit: "2026-10-15T00:00:00Z" })],
   ];
   for (const [cron, when, world] of worlds) {
     await invoke(cron, when, world);
@@ -653,8 +653,8 @@ test("Monday promote slots: pre-rollover no-ops and an older cancelled run are h
   const ladder = [...early, cancelled, { created: "2026-10-18T23:07:00Z" }];
   assert.deepEqual((await invoke("0 1 * * MON", MON_FIRST, mondayCase({ runs: ladder }))).codes, []);
   assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: ladder }))).codes, []);
-  const monDaily = at("2026-10-19T05:00:00Z");
-  assert.deepEqual((await invoke("0 5 * * *", monDaily, dailyCase({ runs: [...early, cancelled, MON_RUN] }))).codes, []);
+  const monDaily = at("2026-10-19T08:00:00Z");
+  assert.deepEqual((await invoke("0 8 * * *", monDaily, dailyCase({ runs: [...early, cancelled, MON_RUN] }))).codes, []);
   // Pre-rollover no-ops are outside the Monday window: with nothing after them, Monday is still unverified.
   assert.deepEqual((await invoke("0 4 * * MON", MON_FINAL, mondayCase({ runs: early, manifestWeek: "2026-10-12" }))).codes,
     ["MONDAY_NOT_PUBLISHED"]);
@@ -666,24 +666,29 @@ test("Monday promote slots: pre-rollover no-ops and an older cancelled run are h
 const WED_RUN = { created: "2026-10-21T00:07:00Z" };
 
 test("daily: Codex's Tuesday — Monday's run present, Tuesday's never starts", async () => {
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [MON_RUN] }))).codes, ["SCHEDULE_DROPPED"]);
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [MON_RUN] }))).codes, ["SCHEDULE_DROPPED"]);
   // Wednesday's run does not change Tuesday's result, and Wednesday judges Wednesday alone.
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [MON_RUN, WED_RUN] }))).codes, ["SCHEDULE_DROPPED"]);
-  assert.deepEqual((await invoke("0 5 * * *", WED_DAILY, dailyCase({ runs: [MON_RUN, WED_RUN] }))).codes, []);
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [MON_RUN, WED_RUN] }))).codes, ["SCHEDULE_DROPPED"]);
+  assert.deepEqual((await invoke("0 8 * * *", WED_DAILY, dailyCase({ runs: [MON_RUN, WED_RUN] }))).codes, []);
   // Yesterday's run, however late, never counts for today: Monday's run delayed to 12:30 Manila is
-  // under 26 hours old at Tuesday 13:00, and Tuesday still has no run.
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [{ created: "2026-10-19T04:30:00Z" }] }))).codes,
+  // under 28 hours old at Tuesday 16:00, and Tuesday still has no run.
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [{ created: "2026-10-19T04:30:00Z" }] }))).codes,
     ["SCHEDULE_DROPPED"]);
-  // Grace: a run created late but before 13:00 counts; one created after the check time does not.
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [{ created: "2026-10-20T04:59:00Z" }] }))).codes, []);
+  // Grace: a run created late but before 16:00 counts; one created after the check time does not.
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [{ created: "2026-10-20T07:59:00Z" }] }))).codes, []);
+  // The delays GitHub actually showed for the 08:07 catch-up (22–28 Oct 2026) all count, including
+  // 5h23m on 28 Oct, which the old 13:00 deadline reported as SCHEDULE_DROPPED (alert #5).
+  for (const created of ["2026-10-20T04:28:03Z", "2026-10-20T04:55:04Z", "2026-10-20T05:29:44Z"]) {
+    assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [{ created }] }))).codes, [], created);
+  }
 });
 
 test("daily decision alone: yesterday's run is never today's, even if the query returned it", () => {
-  const late = run({ created: "2026-10-19T04:30:00Z" }); // Monday, delayed: under 26 h old at Tuesday 13:00
+  const late = run({ created: "2026-10-19T04:30:00Z" }); // Monday, delayed: under 28 h old at Tuesday 16:00
   const input = { workflows: { "dogear-stage.yml": "active", "dogear-promote.yml": "active" }, runs: [late],
     jobsById: { [late.id]: jobs("promote") }, lastCommitDate: "2026-10-15T00:00:00Z", now: TUE_DAILY, target: "production" };
   assert.deepEqual(codes(daily(input)), ["SCHEDULE_DROPPED"]);
-  const early = run({ created: "2026-10-20T05:00:01Z" }); // after the check time
+  const early = run({ created: "2026-10-20T08:00:01Z" }); // after the check time
   assert.deepEqual(codes(daily({ ...input, runs: [early], jobsById: { [early.id]: jobs("promote") } })), ["SCHEDULE_DROPPED"]);
   // Friday and Monday decisions apply their own windows too.
   const thursday = run({ created: "2026-10-22T15:59:00Z" });
@@ -695,17 +700,17 @@ test("daily decision alone: yesterday's run is never today's, even if the query 
   ["MONDAY_UNVERIFIED"]);
 });
 
-test("daily: today's run must have completed with success by 13:00", async () => {
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN] }))).codes, []);
+test("daily: today's run must have completed with success by 16:00", async () => {
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN] }))).codes, []);
   for (const c of ["failure", "cancelled", "timed_out", "action_required"]) {
-    assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [{ ...TUE_RUN, conclusion: c }] }))).codes,
+    assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [{ ...TUE_RUN, conclusion: c }] }))).codes,
       ["PROMOTE_RUN_FAILED"], c);
   }
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [{ ...TUE_RUN, status: "queued",
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [{ ...TUE_RUN, status: "queued",
     conclusion: null }] }))).codes, ["PROMOTE_RUN_PENDING"]); // Codex: a queued run is not present-and-healthy
   // Monday's two runs: the latest decides.
-  const MON_DAILY = at("2026-10-19T05:00:00Z");
-  assert.deepEqual((await invoke("0 5 * * *", MON_DAILY, dailyCase({ runs: [{ created: "2026-10-18T23:07:00Z",
+  const MON_DAILY = at("2026-10-19T08:00:00Z");
+  assert.deepEqual((await invoke("0 8 * * *", MON_DAILY, dailyCase({ runs: [{ created: "2026-10-18T23:07:00Z",
     conclusion: "failure" }, MON_RUN] }))).codes, []);
 });
 
@@ -713,18 +718,18 @@ test("daily: emergency stop, disabled workflows, wrong target, inactivity", asyn
   const r = run({ created: TUE_RUN.created });
   const stopped = fakeWorld({ promoteRuns: [r], jobsById: { [r.id]: jobs("promote", { target: "none" }) },
     lastCommit: "2026-10-15T00:00:00Z" });
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, stopped)).codes, ["EMERGENCY_STOP"]);
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ workflows: { "dogear-promote.yml": "disabled_inactivity" } }))).codes,
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, stopped)).codes, ["EMERGENCY_STOP"]);
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ workflows: { "dogear-promote.yml": "disabled_inactivity" } }))).codes,
     ["WORKFLOW_DISABLED"]);
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN],
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN],
     workflows: { "dogear-stage.yml": "disabled_manually" } }))).codes, ["WORKFLOW_DISABLED"]);
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [{ ...TUE_RUN, target: "staging" }] }))).codes,
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [{ ...TUE_RUN, target: "staging" }] }))).codes,
     ["SCHEDULE_DROPPED", "WRONG_TARGET"]);
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN,
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN,
     { created: "2026-10-20T01:00:00Z", target: "staging" }] }))).codes, ["WRONG_TARGET"]);
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN], lastCommit: "2026-08-30T00:00:00Z" }))).codes,
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN], lastCommit: "2026-08-30T00:00:00Z" }))).codes,
     ["INACTIVITY_SOON"]); // 51 days
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN], lastCommit: "2026-09-01T00:00:00Z" }))).codes,
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, dailyCase({ runs: [TUE_RUN], lastCommit: "2026-09-01T00:00:00Z" }))).codes,
     []); // 49 days
 });
 
@@ -751,12 +756,12 @@ test("fail loud: unreadable GitHub, a missing token, an error, an alert that can
     assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, world)).codes, ["WATCHDOG_CANNOT_READ"], String(code));
   }
   const malformed = adhoc(async () => new Response("not json", { status: 200 }));
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, malformed)).codes, ["WATCHDOG_CANNOT_READ"]);
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, malformed)).codes, ["WATCHDOG_CANNOT_READ"]);
   const timeout = adhoc(async () => { throw Object.assign(new Error("t"), { name: "AbortError" }); });
-  assert.deepEqual((await invoke("0 5 * * *", TUE_DAILY, timeout)).codes, ["WATCHDOG_CANNOT_READ"]);
+  assert.deepEqual((await invoke("0 8 * * *", TUE_DAILY, timeout)).codes, ["WATCHDOG_CANNOT_READ"]);
   assert.deepEqual((await invoke("0 12 * * FRI", FRI_FINAL, fridayWorld(), { GITHUB_READ_TOKEN: "" })).codes,
     ["WATCHDOG_CANNOT_READ"]);
-  const crashed = await invoke("0 5 * * *", TUE_DAILY, adhoc(async (u) => (String(u).includes("/jobs")
+  const crashed = await invoke("0 8 * * *", TUE_DAILY, adhoc(async (u) => (String(u).includes("/jobs")
     ? new Response(JSON.stringify({ jobs: [null] }))
     : new Response(JSON.stringify({ workflow_runs: [{ id: 1, created_at: null }] })))));
   assert.deepEqual(crashed.codes, ["WATCHDOG_ERROR"]);
@@ -777,7 +782,7 @@ test("fail loud: unreadable GitHub, a missing token, an error, an alert that can
 
 test("alerts and logs are public-safe: fixed templates, no planted text from GitHub or the logs", async () => {
   const cases = [["0 12 * * FRI", FRI_FINAL, fridayWorld({ result: "noop" })], ["0 12 * * FRI", FRI_FINAL, fakeWorld()],
-    ["0 5 * * *", TUE_DAILY, dailyCase({ runs: [{ ...TUE_RUN, conclusion: "failure" }] })],
+    ["0 8 * * *", TUE_DAILY, dailyCase({ runs: [{ ...TUE_RUN, conclusion: "failure" }] })],
     ["0 4 * * MON", MON_FINAL, mondayCase({ runs: [{ conclusion: "cancelled" }] })]];
   for (const [cron, when, world] of cases) {
     const out = await invoke(cron, when, world);
@@ -853,7 +858,7 @@ test("delivery: a dropped or substituted assignee is ASSIGNEE_DROPPED, logged wi
 test("delivery: a dropped assignee on one finding still delivers the others, then fails the invocation", async () => {
   // Daily with no run today and an old main: SCHEDULE_DROPPED and INACTIVITY_SOON, two findings.
   const world = fakeWorld({ promoteRuns: [], lastCommit: "2026-08-01T00:00:00Z", alerts: { drop: (n) => n === 1 } });
-  const out = await invoke("0 5 * * *", TUE_DAILY, world);
+  const out = await invoke("0 8 * * *", TUE_DAILY, world);
   assert.equal(world.issues.length, 2, "both findings were sent");
   assert.deepEqual(world.issues.map((i) => i.assignees), [["archievalmariano"], ["archievalmariano"]]);
   assert.ok(out.error, "the invocation fails");

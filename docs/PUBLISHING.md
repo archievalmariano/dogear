@@ -223,11 +223,13 @@ workflows, and the watchdog's checks (§4c), which only read and alert.
 | Daily 08:07 | `7 0 * * *` | `dogear-promote.yml`: catch-up (the current week only) |
 | Fri 14:00 / 20:00 | `0 6 * * FRI` / `0 12 * * FRI` | watchdog: Friday, first look / final |
 | Mon 09:00 / 12:00 | `0 1 * * MON` / `0 4 * * MON` | watchdog: Monday, first look / final |
-| Daily 13:00 | `0 5 * * *` | watchdog: today's run (the deadline) |
+| Daily 16:00 | `0 8 * * *` | watchdog: today's run (the deadline) |
 
 The UTC day-of-week matters: Monday 07:07 PHT is **Sunday** 23:07 UTC.
-GitHub starts scheduled runs late (4h21m to 5h17m for 6 of 7 runs, 22–26 Oct 2026), so
-Monday has three promote slots and the catch-up. The rollover guard reads the clock when a
+GitHub starts scheduled runs late (4h21m to 5h17m for 6 of 7 runs, 22–26 Oct 2026; the
+daily catch-up 4h21m to 5h23m, 22–28 Oct), so Monday has three promote slots and the
+catch-up, and the watchdog's daily deadline is 16:00, not 13:00 (at 13:00 it raised
+`SCHEDULE_DROPPED` on 28 Oct for a catch-up that started at 13:29). The rollover guard reads the clock when a
 run executes, so an early slot started before 06:00 is a green no-op and one started after
 publishes the saved proof; once published, every later run is a no-op. Publication itself
 stays serialised by the publish job's group (`dogear-publication-<target>`,
@@ -241,7 +243,7 @@ correct issue is already served:
 1. A redundant run that GitHub cancelled while it was pending is the newest run: Monday
    `MONDAY_UNVERIFIED`, or the daily `PROMOTE_RUN_FAILED`.
 2. A redundant run is still queued or running at the check: Monday 12:00
-   `MONDAY_NOT_PUBLISHED`, or the daily 13:00 `PROMOTE_RUN_PENDING`.
+   `MONDAY_NOT_PUBLISHED`, or the daily 16:00 `PROMOTE_RUN_PENDING`.
 
 On either, check `/current.json` against the saved proof before acting. A served,
 byte-identical issue means no action. The new slots make the first more likely (more runs);
@@ -375,8 +377,8 @@ no request method (tested). **Inert** until `WATCH_ENABLED` is `"true"` (a revie
   served with its recorded SHA-256, and the latest right-target promote run since Monday
   06:00 (scheduled or manual) succeeded. Otherwise `ISSUE_UNSERVED`,
   `MONDAY_UNVERIFIED`, `MONDAY_HELD`, `MONDAY_NOT_PUBLISHED` or `HOST_UNREADABLE`.
-- **Daily 13:00:** today's scheduled promote run (Manila day; 4 h 53 min of grace after
-  08:07) completed with `success` (`SCHEDULE_DROPPED`, `PROMOTE_RUN_FAILED`,
+- **Daily 16:00:** today's scheduled promote run (Manila day; 7 h 53 min of grace after
+  08:07, against observed delays of up to 5 h 23 min) completed with `success` (`SCHEDULE_DROPPED`, `PROMOTE_RUN_FAILED`,
   `PROMOTE_RUN_PENDING`, `EMERGENCY_STOP`); stage and promote are `active`
   (`WORKFLOW_DISABLED`); `main`'s last commit is under 50 days old (`INACTIVITY_SOON`).
 - **Its own failures:** `WATCHDOG_CANNOT_READ` (GitHub unreadable, rate-limited, a result

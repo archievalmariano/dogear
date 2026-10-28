@@ -17,7 +17,10 @@ export const CHECKS = Object.freeze({
   "0 12 * * FRI": { check: "friday", final: true }, // Fri 20:00 Manila: final
   "0 1 * * MON": { check: "monday", final: false }, // Mon 09:00 Manila: first look
   "0 4 * * MON": { check: "monday", final: true }, // Mon 12:00 Manila: final
-  "0 5 * * *": { check: "daily", final: true }, // daily 13:00 Manila: today's run, deadline
+  // GitHub starts the 08:07 catch-up 4h21m to 5h23m late (22–28 Oct 2026), so the daily
+  // deadline is 16:00 Manila: 7h53m after the cron. At 13:00 it raised SCHEDULE_DROPPED for a
+  // run that started at 13:29.
+  "0 8 * * *": { check: "daily", final: true }, // daily 16:00 Manila: today's run, deadline
 });
 export const DECLARED_CRONS = Object.freeze(Object.keys(CHECKS));
 const TARGETS = ["staging", "production"];
